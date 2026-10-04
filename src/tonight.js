@@ -13,19 +13,22 @@ const STATIONS = [
 ];
 const PLANETS = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn"];
 
-// Approximate dates, peak rates and radiants, from published meteor shower calendars (for example the International
-// Meteor Organization). Rates are zenithal hourly rates under a perfect sky, so real counts are lower. Check a current
-// calendar before relying on the dates. [month, day] pairs; a range that ends before it starts runs over New Year.
+// Copied by hand from Table 5, "Working List of Visual Meteor Showers", in the International Meteor Organization 2027
+// Meteor Shower Calendar (https://www.imo.net/ShCal27s.pdf, read on 4 Oct 2026). The IMO says the maximum dates are
+// accurate only for 2027, so in another year a peak can be a day or so off. Where the IMO prints a rate such as "110+"
+// the number is used without the plus. Rates are zenithal hourly rates under a perfect sky, so real counts are lower.
+// Only ten of the table's 39 rows are carried. [month, day] pairs; a range that ends before it starts runs over New Year.
+export const SHOWERS_SOURCE = { name: "IMO Working List of Visual Meteor Showers, 2027 calendar", url: "https://www.imo.net/ShCal27s.pdf", read: "2026-10-04" };
 export const SHOWERS = [
-  { name: "Quadrantids", start: [12, 28], end: [1, 12], peak: [1, 3], zhr: 80, ra: 230, dec: 49 },
-  { name: "Lyrids", start: [4, 14], end: [4, 30], peak: [4, 22], zhr: 18, ra: 271, dec: 34 },
+  { name: "Quadrantids", start: [12, 28], end: [1, 12], peak: [1, 4], zhr: 80, ra: 230, dec: 49 },
+  { name: "Lyrids", start: [4, 14], end: [4, 30], peak: [4, 23], zhr: 18, ra: 271, dec: 34 },
   { name: "Eta Aquariids", start: [4, 19], end: [5, 28], peak: [5, 6], zhr: 50, ra: 338, dec: -1 },
-  { name: "Delta Aquariids", start: [7, 12], end: [8, 23], peak: [7, 30], zhr: 25, ra: 340, dec: -16 },
-  { name: "Perseids", start: [7, 17], end: [8, 24], peak: [8, 12], zhr: 100, ra: 48, dec: 58 },
-  { name: "Draconids", start: [10, 6], end: [10, 10], peak: [10, 8], zhr: 10, ra: 262, dec: 54 },
-  { name: "Southern Taurids", start: [9, 10], end: [11, 20], peak: [10, 10], zhr: 5, ra: 32, dec: 9 },
-  { name: "Orionids", start: [10, 2], end: [11, 7], peak: [10, 21], zhr: 20, ra: 95, dec: 16 },
-  { name: "Leonids", start: [11, 6], end: [11, 30], peak: [11, 17], zhr: 15, ra: 152, dec: 22 },
+  { name: "Southern Delta Aquariids", start: [7, 12], end: [8, 23], peak: [7, 31], zhr: 25, ra: 340, dec: -16 },
+  { name: "Perseids", start: [7, 17], end: [8, 24], peak: [8, 13], zhr: 110, ra: 48, dec: 58 },
+  { name: "Draconids", start: [10, 6], end: [10, 10], peak: [10, 9], zhr: 5, ra: 263, dec: 56 },
+  { name: "Southern Taurids", start: [9, 20], end: [11, 20], peak: [11, 6], zhr: 7, ra: 52, dec: 15 },
+  { name: "Orionids", start: [10, 2], end: [11, 7], peak: [10, 22], zhr: 20, ra: 95, dec: 16 },
+  { name: "Leonids", start: [11, 6], end: [11, 30], peak: [11, 18], zhr: 15, ra: 152, dec: 22 },
   { name: "Geminids", start: [12, 4], end: [12, 20], peak: [12, 14], zhr: 150, ra: 112, dec: 33 },
 ];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -244,7 +247,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
     const moonNote = moonFrac > 0.6 ? ` The Moon is ${Math.round(moonFrac * 100)}% lit, which hides the fainter meteors.` : "";
     out.items.push({
       id: `shower-${sh.name}`, kind: "shower", tag: "SHOWER", title: `${sh.name} meteor shower`, time: bestT,
-      detail: `Peaks around ${sh.peak[1]} ${MONTHS[sh.peak[0] - 1]}, up to about ${sh.zhr} an hour under a perfect sky (fewer in practice). The radiant is highest at ${fmtHm(bestT, tz)}, ${Math.round(bestAlt)}° up.${moonNote} Dates are approximate.`,
+      detail: `Peaks around ${sh.peak[1]} ${MONTHS[sh.peak[0] - 1]}, up to about ${sh.zhr} an hour under a perfect sky (fewer in practice). The radiant is highest at ${fmtHm(bestT, tz)}, ${Math.round(bestAlt)}° up.${moonNote} Source: ${SHOWERS_SOURCE.name}; peak dates can shift by a day between years.`,
       interest: 35 + sh.zhr / 5 - (moonFrac > 0.6 ? 10 : 0), sky: { alt: bestAlt, az: raDecToAltAz(sh.ra, sh.dec, place.lat, place.lon, bestT).az },
     });
   }

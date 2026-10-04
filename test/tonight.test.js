@@ -105,14 +105,25 @@ test("meteor showers by date", () => {
 
 test("meteor showers are only listed close to their peak", () => {
   const near = (iso) => N.showersNearPeak(new Date(iso)).map((s) => s.name);
-  assert.deepEqual(near("2026-10-04T12:00:00Z"), [], "Orionids and Southern Taurids are active on 4 Oct but 17 and 6 days from peak");
+  assert.deepEqual(near("2026-10-04T12:00:00Z"), [], "Orionids and Southern Taurids are active on 4 Oct but 18 and 33 days from peak");
   assert.ok(near("2026-10-20T12:00:00Z").includes("Orionids"));
-  assert.ok(near("2026-10-24T12:00:00Z").includes("Orionids"), "3 days after the peak still counts");
-  assert.ok(!near("2026-10-25T12:00:00Z").includes("Orionids"), "4 days after does not");
-  assert.ok(near("2026-12-31T12:00:00Z").includes("Quadrantids") && near("2027-01-05T12:00:00Z").includes("Quadrantids"), "peak across New Year");
-  assert.ok(!near("2027-01-10T12:00:00Z").includes("Quadrantids"));
-  assert.equal(N.daysFromPeak(new Date("2026-08-12T23:59:00Z"), N.SHOWERS.find((s) => s.name === "Perseids")), 0);
+  assert.ok(near("2026-10-25T12:00:00Z").includes("Orionids"), "3 days after the peak still counts");
+  assert.ok(!near("2026-10-26T12:00:00Z").includes("Orionids"), "4 days after does not");
+  assert.ok(near("2027-01-01T12:00:00Z").includes("Quadrantids") && near("2027-01-05T12:00:00Z").includes("Quadrantids"), "peak across New Year");
+  assert.ok(!near("2026-12-30T12:00:00Z").includes("Quadrantids") && !near("2027-01-10T12:00:00Z").includes("Quadrantids"));
+  assert.equal(N.daysFromPeak(new Date("2026-08-13T23:59:00Z"), N.SHOWERS.find((s) => s.name === "Perseids")), 0);
   for (const iso of ["2026-10-04", "2026-10-20", "2026-12-14"]) for (const s of N.showersNearPeak(new Date(iso + "T12:00:00Z"))) assert.ok(N.showersOn(new Date(iso + "T12:00:00Z")).includes(s), "near peak implies active");
+});
+
+test("shower table carries the IMO 2027 Table 5 values it was copied from", () => {
+  assert.match(N.SHOWERS_SOURCE.url, /imo\.net\/ShCal27s\.pdf$/);
+  const row = (name) => N.SHOWERS.find((s) => s.name === name);
+  // spot checks against the printed table: peak [month, day], rate, radiant ra and dec
+  assert.deepEqual([row("Southern Taurids").start, row("Southern Taurids").peak, row("Southern Taurids").zhr, row("Southern Taurids").ra, row("Southern Taurids").dec], [[9, 20], [11, 6], 7, 52, 15]);
+  assert.deepEqual([row("Draconids").peak, row("Draconids").zhr, row("Draconids").ra, row("Draconids").dec], [[10, 9], 5, 263, 56]);
+  assert.deepEqual([row("Perseids").peak, row("Perseids").zhr], [[8, 13], 110]);
+  assert.deepEqual([row("Orionids").peak, row("Orionids").zhr], [[10, 22], 20]);
+  assert.equal(N.SHOWERS.length, 10);
 });
 
 test("verdict follows the cloud: cloudy is poor, clear is good, and the reason is stated", () => {

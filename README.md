@@ -65,7 +65,7 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 - The data is a snapshot taken on 4 Oct 2026. Within 36 hours of the snapshot the clock is real time; after that it counts forward from the snapshot.
 - Satellite positions on the globe use a fast two-body orbit with J2 drift, good to tens or a few hundred kilometres over a day or two. About 200 objects (the ISS, bright objects, launches of the last 30 days) use exact SGP4 for passes and strings; everything else falls back to the fast model, and its cards say so. SGP4 itself is only as good as the age of the element set, which each card shows.
 - Tonight's cloud figure is a forecast from MET Norway sampled in the snapshot, so it is stale after the snapshot day. The verdict is a simple score, not a measured seeing report.
-- A meteor shower is listed only within 3 days of its peak. That limit is an editorial choice, not a published threshold. The table of dates, rates and radiants is approximate.
+- A meteor shower is listed only within 3 days of its peak. That limit is an editorial choice, not a published threshold. The table of dates, rates and radiants was copied by hand from Table 5 of the IMO 2027 meteor shower calendar (ten of its 39 rows). The IMO says the maximum dates are accurate only for 2027, so another year can be a day or so off.
 - A Starlink "string" is a group from one launch in one orbital plane within 120 degrees of each other, visible when at least 3 are above the horizon and in sunlight. These thresholds are our own.
 - Seismic waves use constant speeds (P 8.0 km/s, S 4.5 km/s) along straight lines. This is a teaching model.
 - Aircraft and satellite 3D models are generic and not to scale. The Moon is drawn 3.5 times larger so its phase is visible.
@@ -78,7 +78,7 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 - Launch site coordinates in `src/core.js` (`LAUNCH_SITES`) were written from public knowledge, not from a data feed.
 - The aircraft type name table in `src/info.js` covers common types only. Check it against an official list.
 - OpenFlights airline names can be out of date (for example a callsign prefix showing an old airline name).
-- The meteor shower table in `src/tonight.js` (dates, peaks, rates, radiants) against a current published calendar, and the 3 day near-peak rule.
+- The meteor shower table in `src/tonight.js` against the IMO calendar for the current year (the IMO 2026 calendar could not be opened when it was checked), and the 3 day near-peak rule, which is an editorial choice.
 - The Starlink string thresholds and the visible-pass wording against what people actually see.
 - The limiting-magnitude and "sunlit and dark enough" rules behind pass visibility.
 - Licence of the Moon texture (taken from the three.js examples).
