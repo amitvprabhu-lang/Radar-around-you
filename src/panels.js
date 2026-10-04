@@ -5,6 +5,7 @@ import * as SG from "./sgp4.js";
 import { trainItems, visiblePart, whenText } from "./tonight.js";
 import { drawCard, quakeSpec, passSpec, itemSpec, tonightSpec, CARD_W, CARD_H } from "./share.js";
 import { agoText, STATE_LABEL } from "./live.js";
+import { fmtDay } from "./tonight.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
 const MMI_ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
@@ -286,6 +287,31 @@ export function createPanels(ctx) {
     return kids;
   }
 
+  // Every card says where its information comes from, with a link where the source has a page for it.
+  function sourceLine(sel) {
+    let text, href = null, label = "Source page";
+    if (sel.kind === "sat") {
+      text = `Source: CelesTrak (orbit data fetched ${fmtUtc(new Date(D.meta.taken))}, and the satellite catalogue). The age of this satellite's own element set is shown above. Positions are computed on your device.`;
+      href = "https://celestrak.org/";
+    } else if (sel.kind === "quake") {
+      const st = sel.q.status;
+      text = `Source: USGS, ${st === "reviewed" ? "reviewed by an analyst" : st === "automatic" ? "automatic and not yet reviewed, so it may change" : "status not given"}.`;
+      href = sel.q.url || null; label = "USGS event page";
+    } else if (sel.kind === "plane") {
+      const t = place().planes && place().planes.time;
+      text = `Source: adsb.lol aircraft position${t ? ` observed ${fmtUtc(new Date(t))}` : ""} (ODbL 1.0); airline names from OpenFlights.`;
+      href = "https://www.adsb.lol/";
+    } else if (sel.kind === "event") {
+      text = "Source: GDACS. Its results are model output and should be confirmed with official bulletins.";
+      href = sel.e.url || null; label = "GDACS report";
+    } else if (sel.kind === "star") {
+      text = "Source: Hipparcos star catalogue (ESA). Positions are computed on your device.";
+    } else {
+      text = "Computed on your device with the astronomy-engine library, whose positions we checked against NASA JPL Horizons and the US Naval Observatory.";
+    }
+    return h("p", { class: "srcline" }, text, href ? " " : null, href ? h("a", { href, target: "_blank", rel: "noopener noreferrer", text: label }) : null);
+  }
+
   function renderCard() {
     const el = $("card");
     S.live = [];
@@ -297,6 +323,7 @@ export function createPanels(ctx) {
     else if (sel.kind === "plane") kids = planeCard(sel);
     else if (sel.kind === "event") kids = eventCard(sel);
     else kids = bodyCard(sel);
+    kids.push(sourceLine(sel));
     el.replaceChildren(...kids);
     el.classList.toggle("collapsed", !!S.cardCollapsed);
     el.hidden = false;
@@ -519,6 +546,42 @@ export function createPanels(ctx) {
       h("p", { class: "note", text: "On a phone you can also press and hold the picture to save it." }));
   }
 
+  // ------------------------------------------------------------------ sky calendar
+  const CAL_FILTERS = [["all", "All"], ["moon", "Moon"], ["eclipse", "Eclipses"], ["planet", "Planets"], ["shower", "Showers"], ["season", "Seasons"]];
+  function calendarRow(e) {
+    const zone = e.allDay ? "UTC" : tz();
+    const when = e.allDay ? fmtDay(e.time, zone) : `${fmtDay(e.time, zone)}, ${fmtTime(e.time, zone)}`;
+    const remind = C.googleCalendarUrl({ title: e.title, start: e.time, end: new Date(e.time.getTime() + 3600000), details: `${e.detail} From Radar Around You.`, location: place().name });
+    const cls = { moon: "moon", eclipse: "eclipse", planet: "planet", shower: "shower", season: "season" }[e.kind] || "";
+    return h("div", { class: "titem", "data-kind": e.kind },
+      h("span", { class: `tchip ${cls}`, text: e.tag }),
+      h("div", { class: "grow" }, h("div", { class: "ttime mono", text: when }), h("b", { text: e.title }), h("p", { class: "tdetail", text: e.detail }),
+        h("div", { class: "actions tight" }, link("Remind me", remind, "bell", "small"))));
+  }
+  function openCalendar() {
+    const cal = ctx.calendar();
+    const list = h("div", { class: "callist" });
+    const chips = h("div", { class: "scroller", style: { margin: "0 0 10px", padding: 0 } });
+    const render = () => {
+      const f = S.calFilter || "all";
+      chips.replaceChildren(...CAL_FILTERS.map(([k, label]) => h("button", { class: "chip glass", "aria-pressed": String(f === k), onclick: () => { S.calFilter = k; render(); } }, label)));
+      const rows = cal.events.filter((e) => f === "all" || e.kind === f);
+      const kids = [];
+      let month = "";
+      for (const e of rows) {
+        const m = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: e.allDay ? "UTC" : tz() }).format(e.time);
+        if (m !== month) { month = m; kids.push(h("h3", { text: m })); }
+        kids.push(calendarRow(e));
+      }
+      if (!rows.length) kids.push(h("p", { text: "Nothing of this kind in the next three months." }));
+      list.replaceChildren(...kids);
+    };
+    render();
+    openSheet("calendar", h("h2", { text: `Sky calendar for ${place().name}` }),
+      h("p", { text: `The next ${Math.round((cal.to - cal.from) / 86400000)} days, with times in ${tz()}.` }), chips, list,
+      h("p", { class: "note", text: "Worked out on your device with the astronomy-engine library. Moon phases, equinoxes, solstices and solar eclipses were checked against the US Naval Observatory's published tables. Meteor shower dates come from the IMO 2027 calendar and can be a day off in other years. A close pairing means two naked-eye planets under 3 degrees apart and clear of the Sun, a limit we chose." }));
+  }
+
   // ------------------------------------------------------------------ data status
   function stateTime(iso) {
     return iso ? fmtUtc(new Date(iso)) : "not stated";
@@ -590,5 +653,5 @@ export function createPanels(ctx) {
         h("li", { text: "Phone-sensor look-around has not been tested on a real phone in this preview." })));
   }
 
-  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
+  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
 }

@@ -281,6 +281,45 @@ async function suite(label, viewport, mobile) {
   check(L("about sheet reports data health"), /Data health/.test(about2) && /element sets read/.test(about2) && /median element set/.test(about2), about2.slice(0, 80));
   await p.keyboard.press("Escape");
 
+  // ---- L. sky calendar
+  await R(p, () => window.__radar.panels.closeSheet());
+  const tileTexts = await p.locator("#stats .stat").allTextContents();
+  check(L("the stats strip has a next-event tile with a date and a name"), tileTexts.some((t) => /^\d{1,2} [A-Z][a-z]{2}.+/.test(t)), tileTexts.join(" | "));
+  await p.locator("#stats .stat").nth(1).click();
+  await p.waitForSelector("#sheet .callist .titem", { timeout: 15000 });
+  const calText = await p.textContent("#sheet");
+  check(L("the next-event tile opens the sky calendar"), /Sky calendar for /.test(calText) && /Moon phases, equinoxes, solstices and solar eclipses were checked against the US Naval Observatory/.test(calText), calText.slice(0, 100));
+  const rows = await p.locator("#sheet .callist .titem").count();
+  check(L("the calendar lists many events grouped under month headings"), rows >= 10 && (await p.locator("#sheet .callist h3").count()) >= 3, String(rows));
+  check(L("six filters, all selected at first"), (await p.locator("#sheet .chip").count()) === 6 && (await p.getAttribute("#sheet .chip >> nth=0", "aria-pressed")) === "true");
+  check(L("every event has a reminder link into a calendar"), (await p.locator("#sheet .callist a[href^='https://calendar.google.com/']").count()) === rows);
+  await shot(p, `${label}-calendar`);
+  await p.locator("#sheet .chip", { hasText: "Showers" }).click();
+  const showerKinds = await R(p, () => [...document.querySelectorAll("#sheet .callist .titem")].map((e) => e.dataset.kind));
+  check(L("the Showers filter shows only meteor showers, including the Orionids"), showerKinds.length >= 3 && showerKinds.every((k) => k === "shower") && /Orionids/.test(await p.textContent("#sheet")), showerKinds.join());
+  await p.locator("#sheet .chip", { hasText: "Eclipses" }).click();
+  const ecl = await R(p, () => ({ n: document.querySelectorAll("#sheet .callist .titem").length, msg: /Nothing of this kind/.test(document.querySelector("#sheet .callist").textContent) }));
+  check(L("the Eclipses filter shows eclipses or says there are none"), ecl.n > 0 ? true : ecl.msg, JSON.stringify(ecl));
+  await p.locator("#sheet .chip", { hasText: "Moon" }).click();
+  check(L("the Moon filter lists phases with a Full Moon"), /Full Moon/.test(await p.textContent("#sheet .callist")));
+  await p.keyboard.press("Escape");
+  const srcKinds = {
+    satellite: () => { const r = window.__radar; r.actions.focusItem({ kind: "sat", idx: r.app.D.later.ids.indexOf(25544) }); },
+    quake: () => { const r = window.__radar; r.actions.focusItem({ kind: "quake", q: r.app.D.quakes.events[0] }); },
+    hazard: () => { const r = window.__radar; r.actions.focusItem({ kind: "event", e: r.app.D.events[0] }); },
+    moon: () => window.__radar.actions.focusItem({ kind: "moon" }),
+    planet: () => window.__radar.actions.focusItem({ kind: "planet", name: "Jupiter" }),
+    star: () => window.__radar.actions.focusItem({ kind: "star", i: 0, name: "Sirius" }),
+  };
+  for (const [k, fn] of Object.entries(srcKinds)) {
+    await R(p, () => window.__radar.actions.closeCard());
+    await R(p, fn);
+    await p.waitForTimeout(1200);
+    const src = await R(p, () => { const e = document.querySelector("#card .srcline"); return e ? e.textContent : ""; });
+    check(L(`the ${k} card names its source`), /Source:|Computed on your device/.test(src), src.slice(0, 80));
+  }
+  await R(p, () => window.__radar.actions.closeCard());
+
   // ---- J. about
   await R(p, () => window.__radar.actions.closeCard());
   await p.click(".brand"); await p.waitForTimeout(300);

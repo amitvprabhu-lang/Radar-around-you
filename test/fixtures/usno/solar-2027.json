@@ -1,0 +1,18 @@
+{
+  "apiversion": "4.0.1", 
+  "eclipses_in_year": [
+    {
+      "day": 6, 
+      "event": "Annular Solar Eclipse of 6 February 2027", 
+      "month": 2, 
+      "year": 2027
+    }, 
+    {
+      "day": 2, 
+      "event": "Total Solar Eclipse of 2 August 2027", 
+      "month": 8, 
+      "year": 2027
+    }
+  ], 
+  "year": 2027
+}

@@ -12,6 +12,7 @@ import { tonightPlan } from "./plan.js";
 import { buildTonight } from "./tonight.js";
 import { loadPrecise } from "./sgp4.js";
 import { loadFeedData } from "./data.js";
+import { skyCalendar, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
@@ -74,8 +75,17 @@ async function main() {
     D, S, clock, actions,
     currentReplay: () => (S.view === "under" ? under.replay : orbit.replay),
     tonight: (force) => tonightModel(force),
+    calendar: () => calendarModel(),
   });
   const { toast } = panels;
+  // the sky calendar for the place: 90 days from the start of today, recomputed when the place or the day changes
+  let calCache = { key: "", value: null };
+  function calendarModel() {
+    const day = Math.floor(nowDate().getTime() / 86400000);
+    const key = `${S.place.id}:${day}`;
+    if (calCache.key !== key) calCache = { key, value: skyCalendar({ lat: S.place.lat, lon: S.place.lon, from: new Date(day * 86400000), days: 90 }) };
+    return calCache.value;
+  }
   // live feed state, declared early because the first draw of the stats strip already asks for it (see "live feeds" below)
   let liveCtl = null, sumCache = { at: 0, value: null };
 
@@ -164,6 +174,7 @@ async function main() {
     toast(`Showing the sky at ${fmtTime(skyDate(), S.place.tz)}`, { sub: "Use the Tonight slider at the bottom to move through time.", plain: true, ms: 5200 });
   };
   actions.openTonight = () => panels.openTonight();
+  actions.openCalendar = () => panels.openCalendar();
 
   const flyDistFor = (altKm) => (altKm < 3000 ? 2.5 : altKm < 20000 ? 4 : 7);
   actions.focusItem = (item) => {
@@ -256,8 +267,10 @@ async function main() {
     const kp = I.kpAt(D.meta.kp, nowDate().getTime());
     const above = sky.info.above || 0;
     const recent = D.quakes.events.filter((q) => nowDate().getTime() - Date.parse(q.time) < 24 * 3600e3).length;
+    const nextEvent = highlight(calendarModel().events, nowDate());
     const stats = [
       dataTile(),
+      ...(nextEvent ? [["next", new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: nextEvent.allDay ? "UTC" : S.place.tz }).format(nextEvent.time), nextEvent.short || nextEvent.title, () => panels.openCalendar()]] : []),
       ["inorbit", num(D.meta.count), "objects in orbit", () => panels.openSearch()],
       ["above", num(above), `above ${S.place.name} now`, () => setView("sky")],
       ["quakes", num(recent), "quakes in 24 h", () => panels.openFeed()],
@@ -591,11 +604,13 @@ async function main() {
     const t = fmtTime(d, S.place.tz);
     const rate = RATES[S.rateIdx];
     const el = $("clockText");
-    const txt = rate === 1 ? (clock.state.simulated ? `SNAPSHOT ${t}` : `LIVE ${t}`) : `x${rate} ${t}`;
+    // "LIVE" means live data is in use, not just a real-time clock: a page showing the bundled snapshot says so
+    const liveData = !!(D.live && Object.keys(D.live.used).length);
+    const txt = rate === 1 ? (clock.state.simulated || !liveData ? `SNAPSHOT ${t}` : `LIVE ${t}`) : `x${rate} ${t}`;
     if (el.textContent !== txt) el.textContent = txt;
     const sum = liveSummary();
     const dot = el.previousElementSibling;
-    dot.classList.toggle("sim", rate !== 1 || clock.state.simulated || (!!sum && (sum.overall === "stale" || sum.overall === "failing")));
+    dot.classList.toggle("sim", rate !== 1 || clock.state.simulated || !liveData || (!!sum && (sum.overall === "stale" || sum.overall === "failing")));
     dot.classList.toggle("bad", !!sum && sum.overall === "halted");
   }
 
