@@ -28,13 +28,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Check the contact address is configured
+        id: setup
+        run: |
+          if [ -z "$CONTACT_EMAIL" ]; then
+            echo "The CONTACT_EMAIL repository secret is not set, so nothing was collected. Set it under Settings, Secrets and variables, Actions."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+
       - uses: actions/checkout@v6
+        if: steps.setup.outputs.ready == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.setup.outputs.ready == 'true'
         with:
           python-version: "3.x"
 
       - name: Restore the collector's memory from the data branch
+        if: steps.setup.outputs.ready == 'true'
         run: |
           mkdir live
           if git ls-remote --exit-code --heads origin data > /dev/null 2>&1; then
@@ -44,12 +59,14 @@ jobs:
 
       - name: Collect
         id: collect
+        if: steps.setup.outputs.ready == 'true'
         continue-on-error: true
         run: python3 -m pipeline.run --data live --baseline public
         env:
           CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
 
       - name: Publish to the data branch
+        if: steps.setup.outputs.ready == 'true'
         run: |
           cd live
           git init -q
