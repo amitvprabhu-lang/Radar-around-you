@@ -302,7 +302,7 @@ export function createPanels(ctx) {
     const b = c.stars.brightest;
     const midText = () => { const a = sky.altAzOf(sel, skyNow()); return a ? (a.alt > 0 ? `${Math.round(a.alt)}° up, ${C.compassPoint(a.az)}` : "below the horizon") : "n/a"; };
     const named = [...L.starInfo.values()].filter((x) => x.con === c.abbr).sort((x, y) => x.mag - y.mag);
-    const kids = [head([tag("Constellation", "live")], c.name, `${c.english} · ${c.abbr}`)];
+    const kids = [head([tag("Constellation", "live")], c.name, `${c.english} · ${c.abbr} · best seen in ${best.month}`)];
     kids.push(h("dl", { class: "facts" },
       kv("Pronounced", c.pron || "Not given", { mono: true, wide: true }),
       kv("Genitive, used in star names", c.genitive, { mono: true }),
@@ -378,7 +378,7 @@ export function createPanels(ctx) {
     const con = L && L.constellations && L.constellations.byAbbr.get(constellationAt(ra, dec));
     const title = sel.name || (info && info.name) || (L ? `HIP ${L.starIds[i]}` : "Star");
     const bayer = bayerName(info, con);
-    const sub = [bayer, con ? con.english.replace(/^the /, "the ") : null].filter(Boolean).join(" · ") || (con ? con.name : "");
+    const sub = [bayer, con ? con.english : null, `magnitude ${mag.toFixed(1)}`].filter(Boolean).join(" · ");
     const kids = [head([tag("Star", "live"), info ? tag("IAU name") : null], title, sub)];
     const nowText = () => { const a = sky.altAzOf({ kind: "star", i }, skyNow()); return a ? (a.alt > 0 ? `${Math.round(a.alt)}° up, ${C.compassPoint(a.az)}` : "below the horizon") : "n/a"; };
     const rank = magnitudeRank(D.stars.mag, i);
