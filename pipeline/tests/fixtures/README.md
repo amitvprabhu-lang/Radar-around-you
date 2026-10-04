@@ -14,3 +14,4 @@ the sources actually send.
 | planes_pune_80.json | adsb.lol v2/point near Pune | whole answer (26 aircraft) |
 | gp_active_300.json, gp_stations_6.json, gp_visual_30.json, gp_debris_groups.json | CelesTrak GP JSON | stations, visual, a random 260 of the active list, 10 per debris group |
 | catalogue_sample.json | CelesTrak SATCAT records and name tables, built with pipeline/catalogue.py | the objects above only |
+| geonames_cities_sample.txt | https://download.geonames.org/export/dump/cities15000.zip (cities15000.txt) | 10 rows: eight larger cities by name, plus the first three rows of the file (GeoNames data, CC BY 4.0) |
