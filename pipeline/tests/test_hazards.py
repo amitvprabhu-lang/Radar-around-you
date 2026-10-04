@@ -77,6 +77,11 @@ class AlertsTest(unittest.TestCase):
         self.assertEqual(w["until"], "2026-10-05T03:00:00Z")
         self.assertIn("poleward of 65 degrees Geomagnetic Latitude", w["impact"])
 
+    def test_an_extended_warning_names_the_serial_it_replaces(self):
+        w = next(i for i in self.items if i["id"] == "WARK04-5425")
+        self.assertEqual(w["supersedes"], 5424)
+        self.assertIsNone(next(i for i in self.items if i["id"] == "WARK06-671")["supersedes"])
+
     def test_alert_has_the_time_the_threshold_was_reached(self):
         a = next(i for i in self.items if i["id"] == "ALTK05-2052")
         self.assertEqual((a["kind"], a["kp"], a["reached"]), ("alert", 5, "2026-10-04T18:39:00Z"))

@@ -108,7 +108,7 @@ def space_alerts(body, now):
         g = re.search(r"Category G(\d)", head)
         item = {"id": f"{code}-{serial}", "code": code, "kind": KIND[code[:3]], "serial": serial, "issued": iso(issued), "headline": head,
                 "cancel": head.startswith("CANCEL"), "extended": head.startswith("EXTENDED"), "kp": int(kp.group(1)) if kp else None,
-                "g": int(g.group(1)) if g else None, "from": None, "until": None, "reached": None, "impact": None}
+                "g": int(g.group(1)) if g else None, "supersedes": None, "from": None, "until": None, "reached": None, "impact": None}
         for key, names in (("from", ("Valid From", "Now Valid From")), ("until", ("Valid To", "Now Valid Until")), ("reached", ("Threshold Reached",))):
             for n in names:
                 v = _field(msg, n)
@@ -118,6 +118,9 @@ def space_alerts(body, now):
                     except ValueError:
                         pass
                     break
+        ext = re.search(r"^(?:Extension to|Continuation of) Serial Number:\s*(\d+)", msg, flags=re.M)
+        if ext:
+            item["supersedes"] = int(ext.group(1))  # an extended warning replaces the earlier one it names
         imp = _field(msg, "Potential Impacts")
         if imp:
             item["impact"] = imp
