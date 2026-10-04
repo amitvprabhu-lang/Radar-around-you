@@ -23,7 +23,7 @@ export async function openPage(browser, htmlFile, { viewport = { width: 390, hei
   const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${body}</body></html>`;
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, ignoreHTTPSErrors: true, serviceWorkers: "block" });
   const p = await ctx.newPage();
-  p.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errors.push(`[${label}] ${m.type()}: ${m.text().slice(0, 300)}`); });
+  p.on("console", (m) => { if (/Service Worker registration blocked by Playwright/.test(m.text())) return; /* the tests block workers on purpose; the worker has its own unit tests */ if (m.type() === "error" || m.type() === "warning") errors.push(`[${label}] ${m.type()}: ${m.text().slice(0, 300)}`); });
   p.on("pageerror", (e) => errors.push(`[${label}] pageerror: ${e.message}`));
   p.on("requestfailed", (r) => errors.push(`[${label}] request failed: ${r.url().slice(0, 100)} ${r.failure()?.errorText}`));
   await p.route("https://radar.test/**", (route) => {
