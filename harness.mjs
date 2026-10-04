@@ -21,7 +21,7 @@ export async function launch() {
 export async function openPage(browser, htmlFile, { viewport = { width: 390, height: 780 }, mobile = true, label = "page", errors = [], stats = null, live = null } = {}) {
   const body = fs.readFileSync(dir + htmlFile, "utf8");
   const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${body}</body></html>`;
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, ignoreHTTPSErrors: true });
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, ignoreHTTPSErrors: true, serviceWorkers: "block" });
   const p = await ctx.newPage();
   p.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errors.push(`[${label}] ${m.type()}: ${m.text().slice(0, 300)}`); });
   p.on("pageerror", (e) => errors.push(`[${label}] pageerror: ${e.message}`));

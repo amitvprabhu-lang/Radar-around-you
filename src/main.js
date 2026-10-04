@@ -873,6 +873,9 @@ async function main() {
   window.addEventListener("hashchange", () => applyHash(location.hash));
   applyHash(location.hash);
 
+  // installable and usable offline: the worker is optional, so a browser that refuses it (or a page not served over https) simply runs as before
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+
   // hooks for tests and debugging
   window.__radar = { wake, applyHash, S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize, liveCtl: () => liveCtl, liveSummary };
   window.__radarStarted = true;
