@@ -126,6 +126,7 @@ export function createWatch(ctx, ui) {
       const body = content.closest(".body");
       if (body) body.scrollTop = 0;
       S.watchTab = id;
+      actions.syncHash && actions.syncHash();
     }
     openSheet("watch", h("h2", { text: "Storms, fire and aurora" }), h("div", { class: "scroller", role: "tablist", style: { margin: "10px 0 6px", padding: 0 } }, ...buttons), content);
     show(tab);

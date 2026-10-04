@@ -47,6 +47,8 @@
   /* around you, aurora, storms and fires */
   .placeinput { width: 100%; height: 44px; margin: 6px 0 10px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line-2); background: rgba(255, 255, 255, .05); color: var(--text); font: 400 15px var(--f-body); }
   .placeinput:focus { outline: 2px solid color-mix(in srgb, var(--ion) 60%, transparent); outline-offset: 1px; }
+  #nightveil { position: fixed; inset: 0; z-index: 9999; pointer-events: none; display: none; background: rgb(255, 24, 0); mix-blend-mode: multiply; }
+  html.night #nightveil { display: block; }
   button.item { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
   .item.near { border-left: 3px solid var(--line-2); align-items: flex-start; }
   .item.near.alert { border-left-color: var(--alert); } .item.near.watch { border-left-color: var(--signal); } .item.near.info { border-left-color: var(--sky); }
@@ -278,6 +280,7 @@
 </style>
 
 <div id="app" data-view="globe">
+  <div id="nightveil" aria-hidden="true"></div>
   <canvas id="gl" tabindex="0" aria-label="Interactive 3D view. Drag to look around, pinch or scroll to zoom."></canvas>
   <div id="labels" aria-hidden="true"></div>
 

@@ -48,6 +48,7 @@ export function createPanels(ctx) {
     el.replaceChildren(h("div", { class: "body glass", onclick: (e) => e.stopPropagation() }, ...content));
     el.hidden = false;
     el.onclick = closeSheet;
+    actions.sheetOpened && actions.sheetOpened(name);
     return el;
   }
 

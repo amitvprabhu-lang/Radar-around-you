@@ -1,0 +1,52 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { parseHash, buildHash, parsePlaceToken, VIEWS, SHEETS, WATCH_TABS } from "../src/links.js";
+
+test("every view, sheet and watch tab parses from its own name", () => {
+  for (const v of VIEWS) assert.equal(parseHash("#" + v).view, v);
+  for (const s of SHEETS) assert.equal(parseHash("#" + s).sheet, s);
+  for (const w of WATCH_TABS) assert.equal(parseHash("#" + w).watch, w);
+  assert.deepEqual(parseHash(""), { view: null, sheet: null, watch: null, place: null });
+  assert.deepEqual(parseHash("#"), { view: null, sheet: null, watch: null, place: null });
+  assert.deepEqual(parseHash(undefined), { view: null, sheet: null, watch: null, place: null });
+});
+
+test("a place and a screen can be combined", () => {
+  assert.deepEqual(parseHash("#place=pune&sky"), { view: "sky", sheet: null, watch: null, place: { kind: "city", id: "pune" } });
+  assert.deepEqual(parseHash("#place=g3413829&aurora"), { view: null, sheet: null, watch: "aurora", place: { kind: "geonames", id: "g3413829" } });
+  assert.deepEqual(parseHash("#aurora&place=new-york").place, { kind: "city", id: "new-york" });
+});
+
+test("a position fix keeps its sign and decimals and is range checked", () => {
+  assert.deepEqual(parsePlaceToken("pos_-12.05_-77.04"), { kind: "fix", lat: -12.05, lon: -77.04 });
+  assert.deepEqual(parsePlaceToken("pos_0_0"), { kind: "fix", lat: 0, lon: 0 });
+  assert.equal(parsePlaceToken("pos_91_10"), null);
+  assert.equal(parsePlaceToken("pos_10_181"), null);
+  assert.equal(parsePlaceToken("pos_1.23456_2"), null, "more than four decimals is not one of our links");
+});
+
+test("anything else is ignored, never trusted", () => {
+  for (const bad of ["#place=<script>", "#place=../../etc", "#place=g", "#place=G123", "#place=%E0%A4%A", "#place=" + "a".repeat(100), "#javascript:alert(1)", "#sky=1", "#place", "#unknown&also-unknown", "#" + "x".repeat(300)]) {
+    const r = parseHash(bad);
+    assert.equal(r.place, null, bad);
+    if (!bad.startsWith("#sky=")) assert.equal(r.view, null, bad);
+  }
+  assert.equal(parseHash("#sky=1").view, null, "a bare name with a value is not a view");
+});
+
+test("the hash for a state round-trips and the default state is empty", () => {
+  assert.equal(buildHash({}), "");
+  assert.equal(buildHash({ view: "globe", placeId: "pune", defaultPlaceId: "pune" }), "");
+  assert.equal(buildHash({ view: "sky" }), "#sky");
+  assert.equal(buildHash({ view: "sky", placeId: "g3413829", defaultPlaceId: "pune" }), "#place=g3413829&sky");
+  assert.equal(buildHash({ view: "globe", sheet: "watch", watchTab: "storms" }), "#storms");
+  assert.equal(buildHash({ view: "sky", sheet: "calendar" }), "#calendar", "an open sheet wins over the view behind it");
+  assert.equal(buildHash({ sheet: "share" }), "", "the share sheet is not linkable");
+  for (const state of [{ view: "under" }, { sheet: "tonight" }, { sheet: "watch", watchTab: "fires", placeId: "pos_-12.05_-77.04" }, { view: "sky", placeId: "london" }]) {
+    const p = parseHash(buildHash(state));
+    if (state.view && state.view !== "globe" && !state.sheet) assert.equal(p.view, state.view);
+    if (state.sheet === "watch") assert.equal(p.watch, state.watchTab);
+    else if (state.sheet) assert.equal(p.sheet, state.sheet);
+    if (state.placeId) assert.ok(p.place);
+  }
+});

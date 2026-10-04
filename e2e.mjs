@@ -208,6 +208,59 @@ async function suite(label, viewport, mobile) {
   await R(p, () => window.__radar.panels.closeSheet());
   await R(p, () => window.__radar.actions.setPlace("tokyo")); await p.waitForTimeout(800);
 
+  // ---- H3. deep links
+  const go = async (hash) => { await R(p, (h) => { location.hash = h; }, hash); await p.waitForTimeout(1400); };
+  const st = () => R(p, () => ({ view: window.__radar.S.view, sheet: window.__radar.S.sheet, place: window.__radar.S.place.id, hash: location.hash }));
+  await go("#sky");
+  check(L("a #sky link opens the sky view"), (await st()).view === "sky", JSON.stringify(await st()));
+  await go("#place=london&calendar");
+  let ds = await st();
+  check(L("a link can set the place and open a screen together"), ds.place === "london" && ds.sheet === "calendar", JSON.stringify(ds));
+  await go("#place=g3413829&aurora");
+  ds = await st();
+  check(L("a GeoNames place link loads the place list, sets the place and opens the aurora screen"), ds.place === "g3413829" && ds.sheet === "watch" && /Reykjav/.test(await p.textContent("#placeChip")), JSON.stringify(ds));
+  await go("#place=pos_-12.05_-77.04&under");
+  ds = await st();
+  check(L("a position link sets an exact place and the Under view"), ds.place === "pos_-12.05_-77.04" && ds.view === "under" && ds.sheet === null, JSON.stringify(ds));
+  const lat = await R(p, () => window.__radar.S.place.lat);
+  check(L("and that place has the position and zone from the link"), Math.abs(lat + 12.05) < 0.001 && (await R(p, () => window.__radar.S.place.tz)) === "America/Lima");
+  await R(p, () => window.__radar.panels.openAbout()); await p.waitForTimeout(300);
+  check(L("opening a sheet updates the address so it can be shared"), (await st()).hash.endsWith("&about") || (await st()).hash === "#about" || /about/.test((await st()).hash), (await st()).hash);
+  await R(p, () => window.__radar.panels.closeSheet()); await p.waitForTimeout(300);
+  await go("#place=<script>alert(1)</script>&nonsense");
+  check(L("a malformed link is ignored without errors"), (await st()).place === "pos_-12.05_-77.04");
+  await R(p, () => window.__radar.actions.setPlace("tokyo")); await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(600);
+  await R(p, () => window.__radar.actions.setPlace(window.__radar.app.D.cities.find((c) => c.tz === Intl.DateTimeFormat().resolvedOptions().timeZone)?.id || window.__radar.app.D.cities[0].id)); await p.waitForTimeout(600);
+  check(L("back on the default place and the globe the address is clean"), (await st()).hash === "", (await st()).hash);
+  await R(p, () => window.__radar.actions.setPlace("tokyo")); await p.waitForTimeout(500);
+
+  // ---- H4. night use: red light and keeping the screen on
+  const channels = async () => {
+    const b64 = (await p.screenshot()).toString("base64");
+    return p.evaluate(async (data) => { const img = new Image(); img.src = "data:image/png;base64," + data; await img.decode(); const c = document.createElement("canvas"); c.width = img.width; c.height = img.height; const g = c.getContext("2d"); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data; let r = 0, gr = 0, b = 0; for (let i = 0; i < d.length; i += 4) { if (d[i] > r) r = d[i]; if (d[i + 1] > gr) gr = d[i + 1]; if (d[i + 2] > b) b = d[i + 2]; } return { r, g: gr, b }; }, b64);
+  };
+  await p.context().grantPermissions(["screen-wake-lock"], { origin: "https://radar.test" }).catch(() => {});
+  await R(p, () => window.__radar.setView("sky")); await p.waitForTimeout(1500);
+  const normal = await channels();
+  check(L("without red light the screen has green and blue light"), normal.g > 100 && normal.b > 100, JSON.stringify(normal));
+  const chipNames = await p.locator("#skyChips .chip").allTextContents();
+  check(L("the sky view offers a Red light chip, and Keep screen on only where the browser supports it"), chipNames.includes("Red light") && chipNames.includes("Keep screen on") === (await R(p, () => window.__radar.wake.supported)), chipNames.join());
+  await p.click('#skyChips .chip:has-text("Red light")'); await p.waitForTimeout(500);
+  const red = await channels();
+  check(L("with red light on, almost no green and no blue light reaches the eye"), red.b <= 2 && red.g <= 30 && red.r > 40, JSON.stringify(red));
+  await shot(p, "red-light");
+  check(L("red light is remembered"), (await R(p, () => localStorage.getItem("radar2.night"))) === "true");
+  await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(600);
+  check(L("leaving the sky view turns the red light off, so it cannot trap anyone"), (await R(p, () => document.documentElement.classList.contains("night"))) === false);
+  await R(p, () => window.__radar.setView("sky")); await p.waitForTimeout(600);
+  check(L("coming back to the sky view restores it"), (await R(p, () => document.documentElement.classList.contains("night"))) === true);
+  await p.click('#skyChips .chip:has-text("Red light")'); await p.waitForTimeout(300);
+  const wk = await R(p, () => window.__radar.wake.state());
+  check(L("in the sky view the screen lock is wanted, and any browser refusal is recorded without an error"), wk.wanted === true && (wk.supported === false || wk.active === true || typeof wk.error === "string"), JSON.stringify(wk));
+  await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(500);
+  check(L("leaving the sky view stops asking for the screen lock"), (await R(p, () => window.__radar.wake.state().wanted)) === false);
+  await R(p, () => window.__radar.setView("globe"));
+
   // ---- I. feed and arrivals
   await p.click('.tab[data-go="feed"]'); await p.waitForTimeout(500);
   const feed = await p.textContent("#sheet");

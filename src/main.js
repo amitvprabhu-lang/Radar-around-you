@@ -12,7 +12,9 @@ import { tonightPlan } from "./plan.js";
 import { buildTonight } from "./tonight.js";
 import { loadPrecise } from "./sgp4.js";
 import { loadFeedData, loadPlaces } from "./data.js";
-import { validCustomPlace, placeFromPosition } from "./places.js";
+import { validCustomPlace, placeFromPosition, placeFromRecord } from "./places.js";
+import { parseHash, buildHash } from "./links.js";
+import { createWakeLock } from "./wake.js";
 import { skyCalendar, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
@@ -37,6 +39,8 @@ const SKY_OPTIONS = [
   { key: "satellites", label: "Satellites", color: "var(--ion)" },
   { key: "showAll", label: "Unlit too", color: "var(--ember)" },
   { key: "labels", label: "Names", color: "#dfe8ff" },
+  { key: "keepAwake", label: "Keep screen on", color: "var(--ion)" },
+  { key: "nightVision", label: "Red light", color: "var(--alert)" },
 ];
 const RATES = [1, 60, 600, 3600];
 
@@ -71,6 +75,16 @@ async function main() {
     arrivals: [], feedCount: 0, precise: new Map(), trains: [], _tonight: null, tonightKey: "",
   };
   const nowDate = () => clock.now();
+
+  // night use: the screen stays on while the sky view is open (where the browser allows it), and a red light mode keeps eyes dark-adapted.
+  // Both apply only in the sky view, so neither can trap someone who has left it.
+  const wake = createWakeLock();
+  sky.opts.keepAwake = safeStore.get("radar2.keepAwake", true) !== false;
+  sky.opts.nightVision = safeStore.get("radar2.night", false) === true;
+  const applyNightAndWake = () => {
+    document.documentElement.classList.toggle("night", S.view === "sky" && !!sky.opts.nightVision);
+    wake.want(S.view === "sky" && !!sky.opts.keepAwake);
+  };
   const skyDate = () => new Date(nowDate().getTime() + S.skyOffsetMin * 60000);
 
   // ------------------------------------------------------------------ actions used by the panels
@@ -109,7 +123,17 @@ async function main() {
     orbit.clearSelection(); sky.select(null, nowDate());
     panels.renderCard(); updateChrome();
   };
-  actions.sheetClosed = () => { syncTabs(); };
+  // deep links: the hash always describes the current screen and place, and a pasted or edited hash moves the app there
+  const defaultPlaceId = (D.cities.find((c) => c.tz === tzGuess) || D.cities[0]).id;
+  function syncHash() {
+    try {
+      const want = buildHash({ view: S.view, sheet: S.sheet, watchTab: S.watchTab, placeId: S.place.id, defaultPlaceId });
+      if (location.hash !== want && !(want === "" && location.hash === "")) history.replaceState(null, "", location.pathname + location.search + want);
+    } catch { /* some hosts do not allow changing the address */ }
+  }
+  actions.syncHash = syncHash;
+  actions.sheetOpened = syncHash;
+  actions.sheetClosed = () => { syncTabs(); syncHash(); };
   actions.setReplay = (o) => { (S.view === "under" ? under : orbit).setReplay(o); };
   actions.share = () => shareImage();
 
@@ -148,6 +172,7 @@ async function main() {
     if (S.view === "globe") orbit.flyTo(S.place.lat, S.place.lon, orbit.heroDist(), 2200);
     if (S.view === "under") enterUnder();
     panels.renderCard();
+    syncHash();
     toast(`Looking from ${c.name}`, { plain: true, ms: 2200 });
   };
   // the device's position becomes the place itself. It is named for a nearby place when there is one and stays on this device.
@@ -316,12 +341,15 @@ async function main() {
   }
   function renderSkyChips() {
     const wrap = $("skyChips");
-    if (wrap) wrap.replaceChildren(...chipButtons(SKY_OPTIONS, sky.opts));
+    if (wrap) wrap.replaceChildren(...chipButtons(SKY_OPTIONS.filter((o) => o.key !== "keepAwake" || wake.supported), sky.opts));
   }
   function toggleLayer(key) {
     if (S.view === "sky") {
       sky.opts[key] = !sky.opts[key];
       if (key === "constellations") S.layers.constellations = sky.opts[key];
+      if (key === "keepAwake") safeStore.set("radar2.keepAwake", !!sky.opts.keepAwake);
+      if (key === "nightVision") safeStore.set("radar2.night", !!sky.opts.nightVision);
+      applyNightAndWake();
     } else {
       S.layers[key] = !S.layers[key];
       orbit.setLayers(S.layers);
@@ -446,7 +474,7 @@ async function main() {
       if (v === "globe" && S.selected) orbit.select(S.selected.kind === "sat" || S.selected.kind === "quake" || S.selected.kind === "event" ? S.selected : null);
       renderSkyHud();
     }
-    renderLayerChips(); renderStats(true); panels.renderCard(); updateChrome(); syncTabs();
+    renderLayerChips(); renderStats(true); panels.renderCard(); updateChrome(); syncTabs(); syncHash(); applyNightAndWake();
     labelEls.forEach((el) => el.remove()); labelEls.clear();
     resize();
   }
@@ -822,8 +850,31 @@ async function main() {
     }, 4200);
   }
 
+  // go where a link points: the place first (it closes sheets), then the view, then the sheet
+  async function applyHash(text) {
+    const t = parseHash(text);
+    if (t.place) {
+      const want = t.place;
+      try {
+        if (want.kind === "city") { if (cityById(want.id) && S.place.id !== want.id) actions.setPlace(want.id); }
+        else if (want.kind === "geonames") {
+          if (S.place.id !== want.id) { const idx = await actions.ensurePlaces(); const rec = idx.list.find((r) => r.id === want.id); if (rec) actions.setPlace(placeFromRecord(rec)); }
+        } else if (want.kind === "fix") {
+          const id = `pos_${want.lat.toFixed(2)}_${want.lon.toFixed(2)}`;
+          if (S.place.id !== id) { let idx = null; try { idx = await actions.ensurePlaces(); } catch { /* device zone is used */ } actions.setPlace(placeFromPosition(idx, want.lat, want.lon, tzGuess)); }
+        }
+      } catch { toast("Could not open the place in that link", { sub: "The place list could not be loaded.", plain: true }); }
+    }
+    if (t.view && t.view !== S.view) setView(t.view);
+    const sheets = { feed: () => panels.openFeed(), calendar: () => panels.openCalendar(), tonight: () => panels.openTonight(), trains: () => panels.openTrains(), status: () => panels.openStatus(), about: () => panels.openAbout(), places: () => panels.openPlaces(), near: () => panels.openNear() };
+    if (t.watch) panels.openWatch(t.watch);
+    else if (t.sheet && sheets[t.sheet]) sheets[t.sheet]();
+  }
+  window.addEventListener("hashchange", () => applyHash(location.hash));
+  applyHash(location.hash);
+
   // hooks for tests and debugging
-  window.__radar = { S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize, liveCtl: () => liveCtl, liveSummary };
+  window.__radar = { wake, applyHash, S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize, liveCtl: () => liveCtl, liveSummary };
   window.__radarStarted = true;
 }
 
