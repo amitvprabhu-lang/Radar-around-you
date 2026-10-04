@@ -11,7 +11,8 @@
     "test:pipeline": "python3 -m unittest discover -s pipeline/tests -t .",
     "pipeline": "python3 -m pipeline.run",
     "build:snapshot": "LIVE_BASE= node build.mjs src/main.js template.html dist/radar-snapshot.html",
-    "e2e:live": "npm run build && node e2e-live.mjs"
+    "e2e:live": "npm run build && node e2e-live.mjs",
+    "site": "node site/build.mjs"
   },
   "type": "module",
   "dependencies": {

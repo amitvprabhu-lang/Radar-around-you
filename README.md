@@ -29,12 +29,13 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 185 unit tests for the app, no browser needed
+npm test                # 210 unit tests for the app, no browser needed
 npm run test:pipeline   # 125 tests for the data pipeline (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
-npm run e2e             # 258 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:live        # 76 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
+npm run site            # the content site into dist/site: 111 pages, the app as index.html, sitemap.xml, robots.txt (run npm run build first)
+npm run e2e             # 262 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:live        # 84 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
 ```
@@ -84,6 +85,19 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 
 **Not tested here.** The build sandbox's connection to CelesTrak is reset mid-request, so a live download of element sets and the daily catalogue build have not been run against the real service. The satellite path was tested at full size with the real 7 MB download served through the real runner, and the CelesTrak behaviour (one request, no retry, halt on any refusal) is tested with a fake network. The first scheduled run will be the first real one.
 
+## Content site (search pages)
+
+`npm run site` writes `dist/site/`: the app as `index.html` (with a description, canonical link, structured data and a plain-text list of links for visitors without JavaScript), the data files next to it, `sitemap.xml`, `robots.txt` and 110 static pages:
+
+- Reference pages worked out with astronomy-engine: Moon phases, equinoxes and solstices, eclipses, planet events, meteor showers (2026 and 2027).
+- Six city sky guides (Pune, New York, London, Tromso, Tokyo, Sydney): sunrise, sunset and hours of full darkness each month, which constellations never rise or never set, eclipses and meteor shower radiants for that city.
+- The 88 constellations and the 331 stars that have IAU names, from the same IAU files the app uses. Borders between constellations are found by walking the IAU boundaries.
+- Six guides (aurora, hurricanes, earthquakes, fires, asteroids, satellites) and a "How we know" page. Each factual sentence comes from `docs/hazard-sources.md` or `docs/feature-sources.md`, which record where it was read and what could not be confirmed. The G1 to G5 and Saffir-Simpson tables are printed from `src/scales.js`.
+
+The build stops if the Moon phases, seasons, solar eclipses or solstice sunrise and sunset times stop agreeing with the US Naval Observatory tables saved in `test/fixtures/usno`, and a page only quotes a comparison result that ran in that build. Set `SITE_URL` to the real address before building; until then canonical links and the sitemap use `https://amitvprabhu-lang.github.io/Radar-around-you`, which is a guess at where GitHub Pages would serve this repository. `test/site.test.js` checks unique titles and descriptions, every internal link and anchor, the sitemap, the house style and the constellation facts.
+
+Not done or not verifiable here: how Google treats these pages (this needs weeks and Search Console), whether the `WebApplication` structured data passes Google's Rich Results Test, a social preview image (none exists), and the licence of the IAU boundary text files.
+
 ## Layout
 
 ```
@@ -97,6 +111,7 @@ pipeline/   the collector: config.py (feed registry), net.py, validate.py, pack.
 test/       unit tests, checked against satellite.js, astronomy-engine and the real packed data
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
+site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
 e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts

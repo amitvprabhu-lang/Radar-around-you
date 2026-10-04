@@ -788,6 +788,7 @@ async function main() {
     S.trains = findTrains(D, S.precise, nowDate());
     panels.buildSearchIndex();
     S.searchReady = true;
+    if (pendingCon) { const code = pendingCon; pendingCon = null; openConstellationLink(code); }
     setTimeout(updateTonightBtn, 60);
     if (S.searchOpen && S.searchRender) S.searchRender();
     announceArrivals();
@@ -867,6 +868,15 @@ async function main() {
     }, 4200);
   }
 
+  // a link to a constellation: the code is matched, ignoring case, against the 88; if the constellation data is still loading it waits
+  let pendingCon = null;
+  function openConstellationLink(code) {
+    const list = D.later && D.later.constellations;
+    if (!list) { pendingCon = code; return; }
+    const abbr = [...list.byAbbr.keys()].find((k) => k.toLowerCase() === code);
+    if (abbr) actions.openConstellation(abbr);
+  }
+
   // go where a link points: the place first (it closes sheets), then the view, then the sheet
   async function applyHash(text) {
     const t = parseHash(text);
@@ -886,6 +896,7 @@ async function main() {
     const sheets = { feed: () => panels.openFeed(), calendar: () => panels.openCalendar(), tonight: () => panels.openTonight(), trains: () => panels.openTrains(), status: () => panels.openStatus(), about: () => panels.openAbout(), places: () => panels.openPlaces(), near: () => panels.openNear(), constellations: () => panels.openConstellations(), asteroids: () => panels.openAsteroids() };
     if (t.watch) panels.openWatch(t.watch);
     else if (t.sheet && sheets[t.sheet]) sheets[t.sheet]();
+    if (t.con) openConstellationLink(t.con);
   }
   window.addEventListener("hashchange", () => applyHash(location.hash));
   applyHash(location.hash);

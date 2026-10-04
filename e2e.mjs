@@ -229,6 +229,11 @@ async function suite(label, viewport, mobile) {
   await R(p, () => window.__radar.panels.closeSheet()); await p.waitForTimeout(300);
   await go("#place=<script>alert(1)</script>&nonsense");
   check(L("a malformed link is ignored without errors"), (await st()).place === "pos_-12.05_-77.04");
+  await go("#sky&con=cru");
+  ds = await R(p, () => ({ view: window.__radar.S.view, kind: window.__radar.S.selected && window.__radar.S.selected.kind, abbr: window.__radar.S.selected && window.__radar.S.selected.abbr }));
+  check(L("a #sky&con=cru link opens the Crux card in the sky view (the code is matched ignoring case)"), ds.view === "sky" && ds.kind === "constellation" && ds.abbr === "Cru" && /Crux/.test(await p.textContent("#card")), JSON.stringify(ds));
+  await go("#sky&con=zzz");
+  check(L("an unknown constellation code is ignored"), (await R(p, () => window.__radar.S.selected && window.__radar.S.selected.abbr)) === "Cru");
   await R(p, () => window.__radar.actions.setPlace("tokyo")); await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(600);
   await R(p, () => window.__radar.actions.setPlace(window.__radar.app.D.cities.find((c) => c.tz === Intl.DateTimeFormat().resolvedOptions().timeZone)?.id || window.__radar.app.D.cities[0].id)); await p.waitForTimeout(600);
   check(L("back on the default place and the globe the address is clean"), (await st()).hash === "", (await st()).hash);

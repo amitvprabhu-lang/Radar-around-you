@@ -6,14 +6,14 @@ test("every view, sheet and watch tab parses from its own name", () => {
   for (const v of VIEWS) assert.equal(parseHash("#" + v).view, v);
   for (const s of SHEETS) assert.equal(parseHash("#" + s).sheet, s);
   for (const w of WATCH_TABS) assert.equal(parseHash("#" + w).watch, w);
-  assert.deepEqual(parseHash(""), { view: null, sheet: null, watch: null, place: null });
-  assert.deepEqual(parseHash("#"), { view: null, sheet: null, watch: null, place: null });
-  assert.deepEqual(parseHash(undefined), { view: null, sheet: null, watch: null, place: null });
+  assert.deepEqual(parseHash(""), { view: null, sheet: null, watch: null, place: null, con: null });
+  assert.deepEqual(parseHash("#"), { view: null, sheet: null, watch: null, place: null, con: null });
+  assert.deepEqual(parseHash(undefined), { view: null, sheet: null, watch: null, place: null, con: null });
 });
 
 test("a place and a screen can be combined", () => {
-  assert.deepEqual(parseHash("#place=pune&sky"), { view: "sky", sheet: null, watch: null, place: { kind: "city", id: "pune" } });
-  assert.deepEqual(parseHash("#place=g3413829&aurora"), { view: null, sheet: null, watch: "aurora", place: { kind: "geonames", id: "g3413829" } });
+  assert.deepEqual(parseHash("#place=pune&sky"), { view: "sky", sheet: null, watch: null, place: { kind: "city", id: "pune" }, con: null });
+  assert.deepEqual(parseHash("#place=g3413829&aurora"), { view: null, sheet: null, watch: "aurora", place: { kind: "geonames", id: "g3413829" }, con: null });
   assert.deepEqual(parseHash("#aurora&place=new-york").place, { kind: "city", id: "new-york" });
 });
 
@@ -49,4 +49,11 @@ test("the hash for a state round-trips and the default state is empty", () => {
     else if (state.sheet) assert.equal(p.sheet, state.sheet);
     if (state.placeId) assert.ok(p.place);
   }
+});
+
+test("a constellation link takes exactly three letters and nothing else", () => {
+  assert.equal(parseHash("#sky&con=Cru").con, "cru");
+  assert.equal(parseHash("#con=UMi").con, "umi");
+  assert.equal(parseHash("#sky&con=cru").view, "sky");
+  for (const bad of ["#con=", "#con=cr", "#con=crux", "#con=c1u", "#con=<s>", "#con=cru%20", "#con", "#con=../x"]) assert.equal(parseHash(bad).con, null, bad);
 });

@@ -1,5 +1,6 @@
 // Deep links: every screen and place can be reached from a URL hash, so a link can be shared or bookmarked.
 //   #sky   #aurora   #storms   #fires   #near   #calendar   #tonight   #place=pune&sky   #place=g3413829&aurora   #place=pos_-12.05_-77.04
+//   #sky&con=cru   (a constellation by its three-letter IAU abbreviation, any case; the app checks it against the 88)
 // Parsing is strict: only known names are accepted and a place must match one of three exact shapes, so a pasted link can
 // never inject anything but a view, a sheet and a place.
 export const VIEWS = ["globe", "sky", "under"];
@@ -8,6 +9,7 @@ export const WATCH_TABS = ["aurora", "storms", "fires"];
 
 const CITY = /^[a-z][a-z0-9-]{1,30}$/;
 const GEONAMES = /^g\d{1,9}$/;
+const CON = /^[A-Za-z]{3}$/;
 const FIX = /^pos_(-?\d{1,2}(?:\.\d{1,4})?)_(-?\d{1,3}(?:\.\d{1,4})?)$/;
 
 export function parsePlaceToken(token) {
@@ -23,12 +25,13 @@ export function parsePlaceToken(token) {
 }
 
 export function parseHash(hash) {
-  const out = { view: null, sheet: null, watch: null, place: null };
+  const out = { view: null, sheet: null, watch: null, place: null, con: null };
   const text = String(hash || "").replace(/^#/, "");
   if (!text || text.length > 200) return out;
   for (const part of text.split("&")) {
     const [k, v] = part.split("=");
     if (k === "place" && v !== undefined) { const p = parsePlaceToken(decodeURIComponent_(v)); if (p) out.place = p; }
+    else if (k === "con" && v !== undefined && CON.test(v)) out.con = v.toLowerCase();
     else if (v === undefined && VIEWS.includes(k)) out.view = k;
     else if (v === undefined && SHEETS.includes(k)) out.sheet = k;
     else if (v === undefined && WATCH_TABS.includes(k)) out.watch = k;
