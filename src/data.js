@@ -3,6 +3,7 @@
 import { decodeSwarm } from "./core.js";
 import { LIVE_BASE, loadManifest, resolveSources, overlayCities } from "./live.js";
 import { decodeFires } from "./connect.js";
+import { decodePlaces } from "./places.js";
 
 const BASE = "";
 
@@ -99,6 +100,11 @@ export async function loadFeedData(id, source) {
     return { grid: new Uint8Array(grid), meta };
   }
   throw new Error(`no loader for feed ${id}`);
+}
+
+// The place search index (about 34,000 places, 1.9 MB, 0.9 MB compressed). Loaded only when someone searches for a place.
+export async function loadPlaces() {
+  return decodePlaces(await json("places.json"));
 }
 
 // Stage one: what the first picture needs. onProgress(fraction, label)

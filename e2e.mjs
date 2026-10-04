@@ -177,6 +177,37 @@ async function suite(label, viewport, mobile) {
   check(L("switching place updates the chip and the sky"), (await p.textContent("#placeChip")).includes("Tokyo") && (await R(p, () => window.__radar.S.place.id === "tokyo")));
   check(L("Tokyo sky has aircraft"), (await R(p, () => window.__radar.sky.planesNow.length)) > 3);
 
+  // ---- H2. any place on Earth
+  await p.click("#placeChip"); await p.waitForTimeout(500);
+  await p.fill("#sheet input.placeinput", "reykjav");
+  await p.waitForSelector('#sheet button.item:has-text("Reykjav")', { timeout: 30000 });
+  check(L("the places sheet finds a place that is not one of the six cities"), true);
+  await p.click('#sheet button.item:has-text("Reykjav")'); await p.waitForTimeout(1500);
+  const rv = await R(p, () => ({ chip: document.getElementById("placeChip").textContent, place: window.__radar.S.place, saved: localStorage.getItem("radar2.place"), custom: localStorage.getItem("radar2.customPlace") }));
+  check(L("choosing it sets the place with its own time zone and saves it"), /Reykjav/.test(rv.chip) && rv.chip.includes("Iceland") && rv.place.custom === true && rv.place.tz === "Atlantic/Reykjavik" && JSON.parse(rv.saved) === rv.place.id && JSON.parse(rv.custom).name === rv.place.name, JSON.stringify(rv));
+  await R(p, () => window.__radar.setView("sky")); await p.waitForTimeout(1500);
+  check(L("the sky view works for it"), await R(p, () => Number.isFinite(window.__radar.sky.info.limitMag) && window.__radar.sky.info.above >= 0));
+  await R(p, () => window.__radar.actions.openTonight()); await p.waitForSelector("#sheet h2", { timeout: 20000 }); await p.waitForTimeout(1500);
+  const tn = await p.textContent("#sheet");
+  check(L("Tonight says plainly that no cloud forecast exists for it"), /Cloud forecast not available for this place/.test(tn) && /Hourly cloud forecasts are published for the six cities/.test(tn), tn.slice(0, 160));
+  await R(p, () => window.__radar.panels.closeSheet()); await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(500);
+  await R(p, () => window.__radar.panels.openSearch()); await p.waitForTimeout(300);
+  await p.fill("#searchPanel input", "nairobi");
+  await p.waitForSelector('#searchPanel .result:has-text("Nairobi")', { timeout: 30000 });
+  await p.click('#searchPanel .result:has-text("Nairobi")'); await p.waitForTimeout(1200);
+  check(L("the main search also finds and sets any place"), (await p.textContent("#placeChip")).includes("Nairobi") && (await R(p, () => window.__radar.S.place.tz)) === "Africa/Nairobi");
+  await p.context().grantPermissions(["geolocation"], { origin: "https://radar.test" });
+  await p.context().setGeolocation({ latitude: -12.0464, longitude: -77.0428 });
+  await p.click("#placeChip"); await p.waitForTimeout(500);
+  await p.click('#sheet button:has-text("Use my location")'); await p.waitForTimeout(3500);
+  const lm = await R(p, () => ({ chip: document.getElementById("placeChip").textContent, p: window.__radar.S.place }));
+  check(L("Use my location sets the exact position, named for the place near it, in its zone"), /Lima/.test(lm.chip) && lm.p.positionFix === true && lm.p.tz === "America/Lima" && Math.abs(lm.p.lat + 12.0464) < 0.001 && Math.abs(lm.p.lon + 77.0428) < 0.001, JSON.stringify(lm));
+  await p.click("#placeChip"); await p.waitForTimeout(400);
+  check(L("the places sheet credits GeoNames"), /GeoNames \(geonames\.org\), CC BY 4\.0/.test(await p.textContent("#sheet")));
+  await shot(p, "places-sheet");
+  await R(p, () => window.__radar.panels.closeSheet());
+  await R(p, () => window.__radar.actions.setPlace("tokyo")); await p.waitForTimeout(800);
+
   // ---- I. feed and arrivals
   await p.click('.tab[data-go="feed"]'); await p.waitForTimeout(500);
   const feed = await p.textContent("#sheet");

@@ -6,6 +6,7 @@ import { trainItems, visiblePart, whenText } from "./tonight.js";
 import { drawCard, quakeSpec, passSpec, itemSpec, tonightSpec, CARD_W, CARD_H } from "./share.js";
 import { agoText, STATE_LABEL } from "./live.js";
 import { createWatch } from "./watch.js";
+import { searchPlaces, placeFromRecord, countryName, PLACES_CREDIT } from "./places.js";
 import { fmtDay } from "./tonight.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
@@ -354,7 +355,7 @@ export function createPanels(ctx) {
   }
   function runSearch(q) {
     if (!search) buildSearchIndex();
-    const out = { sat: [], quake: [], place: [], plane: [] };
+    const out = { sat: [], quake: [], place: [], plane: [], geo: [] };
     const query = q.trim();
     if (!query) return out;
     const mag = C.parseMagnitudeQuery(query);
@@ -365,6 +366,13 @@ export function createPanels(ctx) {
       if (r.kind === "sat" && out.sat.length < 6) out.sat.push(r);
       else if (r.kind === "quake" && out.quake.length < 6 && !out.quake.find((x) => x.q.id === r.q.id)) out.quake.push(r);
       else if (r.kind === "place" && out.place.length < 3) out.place.push(r);
+    }
+    // any place on Earth, once the index is loaded; a place within 30 km of one of the six cities is skipped as a duplicate of it
+    if (S.placesIndex) {
+      for (const rec of searchPlaces(S.placesIndex, query, 6)) {
+        if (D.cities.some((c) => C.haversineKm(Number(c.lat), Number(c.lon), rec.lat, rec.lon) < 30)) continue;
+        if (out.geo.length < 4) out.geo.push({ kind: "geo", rec });
+      }
     }
     const nq = C.normalizeText(query);
     if (nq.length >= 2) {
@@ -378,6 +386,14 @@ export function createPanels(ctx) {
     return out;
   }
 
+  // a place from the GeoNames index, as a row in search results or in the places sheet
+  function geoRow(rec, cls) {
+    const where = countryName(rec.cc);
+    const pop = rec.pop >= 1e6 ? `${(rec.pop / 1e6).toFixed(1)} million people` : rec.pop > 0 ? `${num(Math.round(rec.pop / 100) * 100)} people` : "";
+    return h("button", { class: cls, onclick: () => actions.setPlace(placeFromRecord(rec)) },
+      cls === "result" ? h("span", { class: "ico", text: "PIN" }) : h("span", { class: "mag sat", text: rec.name.slice(0, 3).toUpperCase() }),
+      h("div", { class: "grow" }, h("b", { text: rec.name }), h("span", { class: cls === "result" ? "" : "s", text: `${where}${pop ? " · " + pop : ""}` })));
+  }
   function resultRow(r) {
     if (r.kind === "sat") {
       const info = D.later ? I.satelliteInfo(D, r.idx, nowDate(), null) : null;
@@ -392,6 +408,7 @@ export function createPanels(ctx) {
       const info = I.planeInfo(D, r.rec);
       return h("button", { class: "result", onclick: () => actions.focusItem({ kind: "plane", hex: r.hex, rec: r.rec }) }, h("span", { class: "ico", text: "AIR" }), h("div", null, h("b", { text: `${info.call} · ${info.typeName}` }), h("span", { text: `${info.airline || "Airline not known"} · ${kmText(info.slantKm)} away` })));
     }
+    if (r.kind === "geo") return geoRow(r.rec, "result");
     return h("button", { class: "result", onclick: () => actions.setPlace(r.c.id) }, h("span", { class: "ico", text: "PIN" }), h("div", null, h("b", { text: r.c.name }), h("span", { text: `Look from ${r.c.name}, ${r.c.country}` })));
   }
 
@@ -399,7 +416,7 @@ export function createPanels(ctx) {
     if (!search) buildSearchIndex();
     const panel = $("searchPanel");
     const results = h("div", { class: "results", "aria-live": "polite" });
-    const input = h("input", { type: "search", placeholder: "Try ISS, Starlink 1008, M5.9 or a flight number", "aria-label": "Search", autocomplete: "off", spellcheck: "false", enterkeyhint: "search" });
+    const input = h("input", { type: "search", placeholder: "Try ISS, Starlink 1008, M5.9 or any place", "aria-label": "Search", autocomplete: "off", spellcheck: "false", enterkeyhint: "search" });
     const render = () => {
       const q = input.value;
       results.replaceChildren();
@@ -412,8 +429,8 @@ export function createPanels(ctx) {
       if (q.trim().toLowerCase() === "moon") { results.append(h("button", { class: "result", onclick: () => actions.focusItem({ kind: "moon" }) }, h("span", { class: "ico", text: "MOON" }), h("div", null, h("b", { text: "The Moon" }), h("span", { text: "Show it in your sky" })))); }
       const o = runSearch(q);
       const sec = (title, arr) => { if (arr.length) results.append(h("h4", { text: title }), ...arr.map(resultRow)); };
-      sec("Satellites and objects", o.sat); sec("Earthquakes this week", o.quake); sec(`Aircraft near ${place().name}`, o.plane); sec("Places", o.place);
-      if (!o.sat.length && !o.quake.length && !o.plane.length && !o.place.length && !(q.trim().toLowerCase() === "moon")) results.append(h("p", { class: "note", style: { margin: "14px 4px" }, text: S.searchReady ? "Nothing matches that. Try a satellite name, a NORAD number, a place name or a magnitude like M5.9." : "Satellite names are still loading, try again in a moment." }));
+      sec("Satellites and objects", o.sat); sec("Earthquakes this week", o.quake); sec(`Aircraft near ${place().name}`, o.plane); sec("Places", [...o.place, ...o.geo]);
+      if (!o.sat.length && !o.quake.length && !o.plane.length && !o.place.length && !o.geo.length && !(q.trim().toLowerCase() === "moon")) results.append(h("p", { class: "note", style: { margin: "14px 4px" }, text: S.searchReady ? "Nothing matches that. Try a satellite name, a NORAD number, a place name or a magnitude like M5.9." : "Satellite names are still loading, try again in a moment." }));
     };
     let timer = 0;
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 70); });
@@ -425,16 +442,39 @@ export function createPanels(ctx) {
     setTimeout(() => input.focus(), 50);
     S.searchInput = input;
     S.searchRender = render;
+    // the place index loads on first use; results for places appear as soon as it arrives
+    actions.ensurePlaces().then(() => { if (S.searchOpen && S.searchInput && S.searchInput.value.trim()) render(); }).catch(() => {});
   }
   function closeSearch() { $("searchPanel").hidden = true; $("searchPanel").replaceChildren(); S.searchOpen = false; }
 
   // ------------------------------------------------------------------ places sheet
   function openPlaces() {
+    const results = h("div", { class: "list" });
+    const input = h("input", { type: "search", placeholder: "Search any town or city", "aria-label": "Search for a place", autocomplete: "off", spellcheck: "false", enterkeyhint: "search", class: "placeinput" });
+    const showResults = () => {
+      const q = input.value.trim();
+      results.replaceChildren();
+      if (q.length < 2) return;
+      if (!S.placesIndex) { results.append(h("p", { class: "note", text: "Loading the place list (about 1 MB)..." })); return; }
+      const found = searchPlaces(S.placesIndex, q, 8);
+      if (!found.length) results.append(h("p", { class: "note", text: "No town or city of about 15,000 people or more matches that. Try a bigger place nearby, or use your location." }));
+      for (const rec of found) results.append(geoRow(rec, "item"));
+    };
+    let timer = 0;
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(showResults, 80); });
+    input.addEventListener("focus", () => { actions.ensurePlaces().then(showResults).catch(() => results.replaceChildren(h("p", { class: "note warn", text: "The place list could not be loaded, so only the six cities below can be chosen." }))); }, { once: true });
+    const cur = place().custom ? h("div", { class: "item" }, h("span", { class: "mag sat", text: place().name.slice(0, 3).toUpperCase() }), h("div", { class: "grow" }, h("b", { text: place().name }), h("span", { class: "s", text: `${place().country} · ${place().positionFix ? "your device's position" : "your chosen place"}` })), tag("current", "live")) : null;
     const list = h("div", { class: "list" }, ...D.cities.map((c) => h("button", { class: "item", onclick: () => { closeSheet(); actions.setPlace(c.id); } },
       h("span", { class: "mag sat", text: c.name.slice(0, 3).toUpperCase() }), h("div", null, h("b", { text: c.name }), h("span", { class: "s", text: `${c.country} · ${c.planes.aircraft.length} aircraft in the snapshot` })),
       c.id === S.place.id ? tag("current", "live") : null)));
-    openSheet("places", h("h2", { text: "Where are you looking from?" }), h("p", { text: "Six places have a full data snapshot in this prototype. In the real app any place on Earth works." }), list,
-      h("div", { class: "actions" }, btn("Use my location", "pin", () => { closeSheet(); actions.useMyLocation(); })));
+    openSheet("places", h("h2", { text: "Where are you looking from?" }),
+      h("p", { text: "Search any town or city on Earth. The sky, calendar, Tonight and the storm, fire and aurora screens all work for any place." }),
+      input, results, cur,
+      h("div", { class: "actions" }, btn("Use my location", "pin", () => { closeSheet(); actions.useMyLocation(); })),
+      h("h3", { text: "Six cities with a full data set" }),
+      h("p", { class: "note", text: "Only these have a live cloud forecast and aircraft overhead, because those come from sources that cannot be asked for every place." }),
+      list,
+      h("p", { class: "note", text: PLACES_CREDIT + "." }));
   }
 
   // ------------------------------------------------------------------ feed
@@ -644,7 +684,8 @@ export function createPanels(ctx) {
         h("li", { text: "Satellites and orbits: CelesTrak (GP data and the satellite catalogue)." }),
         h("li", { text: "Earthquakes, shaking maps, PAGER: USGS. Hazards: GDACS." }),
         h("li", { text: "Aurora and Kp: NOAA Space Weather Prediction Center. Clouds: NASA GIBS imagery from 3 Oct 2026, so the cloud layer is a day old and has visible swath seams." }),
-        h("li", { text: "Aircraft and routes: adsb.lol. Airlines: OpenFlights. Cloud forecasts: MET Norway. Stars: Hipparcos-based catalogue. Earth imagery: NASA Blue Marble." })),
+        h("li", { text: "Aircraft and routes: adsb.lol. Airlines: OpenFlights. Cloud forecasts: MET Norway. Stars: Hipparcos-based catalogue. Earth imagery: NASA Blue Marble." }),
+        h("li", { text: "Storms: NOAA National Hurricane Center. Fires: NASA FIRMS (LANCE). Solar wind and geomagnetic alerts: NOAA Space Weather Prediction Center. " + PLACES_CREDIT + "." })),
       h("h3", { text: "Data health" }),
       h("p", { text: `${num(m.health.recordsRead)} element sets read, ${num(m.health.kept)} kept. Duplicates dropped: ${m.health.duplicatesDropped}. Rejected as invalid: ${Object.values(m.health.invalidDropped).reduce((a, b) => a + b, 0)}. At the snapshot the median element set was ${m.health.ageHours.median} hours old and 90% were under ${m.health.ageHours.p90} hours. ${num(m.health.staleOver3d)} objects had data over 3 days old and ${num(m.health.staleOver7d)} over 7 days (each satellite card shows its own data age). Exact SGP4 orbits are used for ${m.preciseCount} objects: the stations, the brightest objects and everything launched in the last 30 days.` }),
       h("h3", { text: "Honest limits" }),

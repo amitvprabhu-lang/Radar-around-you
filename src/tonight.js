@@ -164,7 +164,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
   });
   out.conditions.push({
     id: "cloud", kind: "weather", title: out.cloud.known ? (out.cloud.min === out.cloud.max ? `Cloud: ${out.cloud.min}% all night` : `Cloud: ${out.cloud.min}% to ${out.cloud.max}% overnight`) : "Cloud forecast not available for this place",
-    detail: out.cloud.known ? `About ${cloudAvg}% on average. Forecast from MET Norway, hourly.` : "In the full app this comes from a forecast for any place.",
+    detail: out.cloud.known ? `About ${cloudAvg}% on average. Forecast from MET Norway, hourly.` : "Hourly cloud forecasts are published for the six cities with a full data set only, so none is shown for this place.",
   });
   const moonLine = moonUpAtStart ? (moonSet ? `Up until ${whenText(moonSet, now, tz)}, then it is moon-free` : "Up all night") : moonRise ? `Rises at ${whenText(moonRise, now, tz)}, so it is moon-free before that` : "Not up tonight";
   out.conditions.push({ id: "moon", kind: "moon", title: `Moon ${Math.round(moonFrac * 100)}% lit`, detail: moonLine + "." });

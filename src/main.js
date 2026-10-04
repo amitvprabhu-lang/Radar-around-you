@@ -11,7 +11,8 @@ import * as I from "./info.js";
 import { tonightPlan } from "./plan.js";
 import { buildTonight } from "./tonight.js";
 import { loadPrecise } from "./sgp4.js";
-import { loadFeedData } from "./data.js";
+import { loadFeedData, loadPlaces } from "./data.js";
+import { validCustomPlace, placeFromPosition } from "./places.js";
 import { skyCalendar, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
@@ -60,7 +61,9 @@ async function main() {
   const tzGuess = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ""; } })();
   const savedPlace = safeStore.get("radar2.place", null);
   const cityById = (id) => D.cities.find((c) => c.id === id);
-  const startCity = cityById(savedPlace) || D.cities.find((c) => c.tz === tzGuess) || D.cities[0];
+  // a place found by search or by the device's position is saved whole, and trusted only if every field is sane
+  const savedCustom = safeStore.get("radar2.customPlace", null);
+  const startCity = cityById(savedPlace) || (validCustomPlace(savedCustom) && savedCustom.id === savedPlace ? savedCustom : null) || D.cities.find((c) => c.tz === tzGuess) || D.cities[0];
   const asPlace = (c) => ({ ...c, lat: Number(c.lat), lon: Number(c.lon) });
   const S = {
     view: "globe", place: asPlace(startCity), selected: null, live: [], layers: { sats: true, starlink: true, debris: true, quakes: true, hazards: true, fires: true, aurora: true, clouds: true, coast: true, constellations: false },
@@ -126,11 +129,18 @@ async function main() {
   };
   actions.guide = (item) => { S.guide = item; if (S.view !== "sky") setView("sky"); renderGuide(); };
   actions.showUnder = (q) => { S.underQuake = q; setView("under"); };
-  actions.setPlace = (id) => {
-    const c = cityById(id);
+  // the place search index loads once, on demand
+  let placesLoad = null;
+  actions.ensurePlaces = () => {
+    if (!placesLoad) placesLoad = loadPlaces().then((idx) => { S.placesIndex = idx; return idx; }).catch((e) => { placesLoad = null; throw e; });
+    return placesLoad;
+  };
+  actions.setPlace = (arg) => {
+    const c = typeof arg === "string" ? cityById(arg) : validCustomPlace(arg) ? arg : null;
     if (!c) return;
     S.place = asPlace(c);
-    safeStore.set("radar2.place", id);
+    safeStore.set("radar2.place", c.id);
+    if (c.custom) safeStore.set("radar2.customPlace", c);
     sky.setPlace(S.place); orbit.setObserver(S.place);
     panels.closeSearch(); panels.closeSheet();
     S.guide = null; renderGuide();
@@ -140,13 +150,16 @@ async function main() {
     panels.renderCard();
     toast(`Looking from ${c.name}`, { plain: true, ms: 2200 });
   };
+  // the device's position becomes the place itself. It is named for a nearby place when there is one and stays on this device.
   actions.useMyLocation = () => {
     if (!navigator.geolocation) { toast("Location is not available in this browser", { plain: true }); return; }
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const near = D.cities.map((c) => ({ c, d: C.haversineKm(pos.coords.latitude, pos.coords.longitude, Number(c.lat), Number(c.lon)) })).sort((a, b) => a.d - b.d)[0];
-      toast(`Your location is ${num(near.d)} km from ${near.c.name}`, { sub: `This prototype only has full data for six cities, so it shows ${near.c.name}. The real app would use your exact position.`, plain: true, ms: 7000 });
-      actions.setPlace(near.c.id);
-    }, () => toast("Location was not shared", { sub: "The preview may block it. Pick a place from the list instead.", plain: true }), { timeout: 8000 });
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      let idx = null;
+      try { idx = await actions.ensurePlaces(); } catch { /* the name and zone then come from the device */ }
+      const p = placeFromPosition(idx, pos.coords.latitude, pos.coords.longitude, tzGuess);
+      actions.setPlace(p);
+      toast(`Looking from ${p.name}`, { sub: "Your exact position. It is saved only on this device.", plain: true, ms: 5200 });
+    }, () => toast("Location was not shared", { sub: "Pick a place from the list or search for one instead.", plain: true }), { timeout: 10000 });
   };
 
   actions.openShare = (spec) => panels.openShare(spec);
