@@ -44,6 +44,30 @@
   .statepill.halted { background: rgba(255, 107, 122, .15); color: var(--alert); }
   .statepill.none { background: rgba(255, 209, 102, .15); color: var(--signal); }
   .note.warn { color: var(--signal); }
+  /* around you, aurora, storms and fires */
+  button.item { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+  .item.near { border-left: 3px solid var(--line-2); align-items: flex-start; }
+  .item.near.alert { border-left-color: var(--alert); } .item.near.watch { border-left-color: var(--signal); } .item.near.info { border-left-color: var(--sky); }
+  .item.near.here { background: rgba(125, 255, 168, .07); border-color: color-mix(in srgb, var(--aurora) 45%, transparent); }
+  .item.near .grow { min-width: 0; } .item.near .s { display: block; margin-top: 3px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+  .kpbox { display: flex; align-items: center; gap: 16px; margin: 12px 0 8px; padding: 14px; border-radius: 16px; border: 1px solid var(--line); background: rgba(125, 255, 168, .05); }
+  .kpnum { display: grid; text-align: center; flex: none; } .kpnum b { font: 700 40px/1 var(--f-display); color: var(--aurora); } .kpnum span { font: 400 11px var(--f-mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .kpbar { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; } .kpbar i { height: 12px; border-radius: 3px; background: rgba(160, 185, 255, .14); }
+  .kpbar i.on { background: var(--aurora); box-shadow: 0 0 8px rgba(125, 255, 168, .5); } .kpbar i.on.g { background: var(--signal); box-shadow: 0 0 8px rgba(255, 209, 102, .5); }
+  .kpnote { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+  .wchart { margin: 10px 0 0; } .wchart figcaption { font: 400 11px var(--f-mono); color: var(--dim); letter-spacing: .04em; margin-bottom: 4px; }
+  .wchart svg { width: 100%; height: 70px; display: block; border-radius: 10px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); }
+  .wchart .line { fill: none; stroke: var(--aurora); stroke-width: 1.6; vector-effect: non-scaling-stroke; } .wchart .zero { stroke: var(--line-2); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+  .wchart .fillneg { fill: rgba(255, 107, 122, .18); stroke: none; }
+  .stormcard { margin: 14px 0 0; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+  .stormhead { display: flex; align-items: flex-start; gap: 10px; } .stormhead b { display: block; font: 600 16px var(--f-display); } .stormhead .s { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .stormmap { width: 100%; height: auto; display: block; margin: 10px 0 0; border-radius: 12px; border: 1px solid var(--line); }
+  .stormmap .sea { fill: #08111f; } .stormmap .coast { fill: none; stroke: rgba(160, 185, 255, .42); stroke-width: .8; }
+  .stormmap .cone { fill: rgba(111, 180, 255, .16); stroke: rgba(111, 180, 255, .55); stroke-width: .8; } .stormmap .track { fill: none; stroke: var(--text); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  .stormmap .grid { stroke: rgba(160, 185, 255, .14); stroke-width: .6; } .stormmap .glabel { font: 400 7px var(--f-mono); fill: var(--dim); }
+  .stormmap .flabel { font: 500 8px var(--f-mono); fill: var(--muted); } .stormmap .flabel.you { fill: var(--aurora); font-weight: 600; }
+  .stormmap .now { stroke: #fff; stroke-width: 1.6; } .stormmap .you { fill: var(--aurora); stroke: #04060c; stroke-width: 1.2; } .stormmap .fpt { stroke: #04060c; stroke-width: .8; }
+
   .mono.small { font-size: 12px; color: var(--muted); }
   @keyframes blink { 50% { opacity: .35; } }
 

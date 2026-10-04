@@ -227,6 +227,89 @@
    "failures": 0,
    "nextTryAt": null,
    "halted": null
+  },
+  "storms": {
+   "label": "Tropical storms (Atlantic and Pacific)",
+   "source": "NOAA National Hurricane Center",
+   "docUrl": "https://www.nhc.noaa.gov/gis/",
+   "says": "The GIS page lists the feeds. Response headers measured 2026-10-04: cache-control max-age=300. Advisories come about every six hours. Its KML says the official forecast track in KML format is an experimental product.",
+   "licence": "NWS disclaimer page: public domain with the three conditions quoted for the space weather feed.",
+   "credit": "Storms: NOAA National Hurricane Center",
+   "refreshSec": 900,
+   "staleAfterSec": 28800,
+   "status": "ok",
+   "checkedAt": "2026-10-04T19:44:40Z",
+   "fetchedAt": "2026-10-04T19:44:40Z",
+   "sourceTime": "2026-10-04T15:00:00Z",
+   "count": 2,
+   "version": "20261004T194440Z",
+   "files": {
+    "storms.json": "storms/20261004T194440Z/storms.json"
+   },
+   "sizes": {
+    "storms.json": 9264
+   },
+   "note": "Rachel, Nolo",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T19:58:40Z",
+   "halted": null
+  },
+  "fires": {
+   "label": "Active fire detections",
+   "source": "NASA FIRMS (LANCE)",
+   "docUrl": "https://www.earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data",
+   "says": "The LANCE page says near real-time users usually need data \"within three hours\"; the FIRMS pages themselves returned no text when read, so the latency for fire files is not confirmed from a primary page. Measured 2026-10-04: the 24 hour files were last modified within an hour of the request.",
+   "licence": "LANCE page: \"NASA supports full and open sharing of data\"; third parties are asked to acknowledge LANCE (text in the credit below); the information is provided \"as is\".",
+   "credit": "Fires: NASA FIRMS (LANCE), VIIRS 375 m",
+   "refreshSec": 3600,
+   "staleAfterSec": 14400,
+   "status": "ok",
+   "checkedAt": "2026-10-04T19:44:48Z",
+   "fetchedAt": "2026-10-04T19:44:48Z",
+   "sourceTime": "2026-10-04T17:15:00Z",
+   "count": 16857,
+   "version": "20261004T194448Z",
+   "files": {
+    "fires.bin": "fires/20261004T194448Z/fires.bin",
+    "fires.json": "fires/20261004T194448Z/fires.json"
+   },
+   "sizes": {
+    "fires.bin": 202284,
+    "fires.json": 387
+   },
+   "note": "191619 detections in 16857 cells",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T20:43:48Z",
+   "halted": null
+  },
+  "spaceweather": {
+   "label": "Solar wind and geomagnetic alerts",
+   "source": "NOAA Space Weather Prediction Center",
+   "docUrl": "https://www.swpc.noaa.gov/content/data-access",
+   "says": "Rows are one minute apart. Response headers measured 2026-10-04 on rtsw_mag_1m.json and alerts.json: cache-control max-age=60. The page read does not state a refresh interval.",
+   "licence": "NWS disclaimer page (weather.gov/disclaimer): NWS web page information is \"in the public domain, unless specifically noted otherwise\" and may be used if you do not claim it is your own, imply NOAA/NWS endorsement, or modify it and present it as official.",
+   "credit": "Solar wind and alerts: NOAA Space Weather Prediction Center",
+   "refreshSec": 600,
+   "staleAfterSec": 3600,
+   "status": "ok",
+   "checkedAt": "2026-10-04T19:44:40Z",
+   "fetchedAt": "2026-10-04T19:44:40Z",
+   "sourceTime": "2026-10-04T19:40:00Z",
+   "count": 72,
+   "version": "20261004T194440Z",
+   "files": {
+    "spaceweather.json": "spaceweather/20261004T194440Z/spaceweather.json"
+   },
+   "sizes": {
+    "spaceweather.json": 9066
+   },
+   "note": "9 geomagnetic messages in the last 72 h",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T19:53:40Z",
+   "halted": null
   }
  },
  "static": [

@@ -5,6 +5,7 @@ import * as SG from "./sgp4.js";
 import { trainItems, visiblePart, whenText } from "./tonight.js";
 import { drawCard, quakeSpec, passSpec, itemSpec, tonightSpec, CARD_W, CARD_H } from "./share.js";
 import { agoText, STATE_LABEL } from "./live.js";
+import { createWatch } from "./watch.js";
 import { fmtDay } from "./tonight.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
@@ -655,5 +656,7 @@ export function createPanels(ctx) {
         h("li", { text: "Phone-sensor look-around has not been tested on a real phone in this preview." })));
   }
 
-  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
+  const watch = createWatch(ctx, { openSheet, closeSheet, tag, btn, link });
+
+  return { openNear: watch.openNear, openWatch: watch.openWatch, connectionList: watch.connectionList, replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
 }

@@ -76,6 +76,7 @@ async function main() {
     currentReplay: () => (S.view === "under" ? under.replay : orbit.replay),
     tonight: (force) => tonightModel(force),
     calendar: () => calendarModel(),
+    auroraChance: () => { const a = sky.info.aurora; return a ? a.chance : null; },
   });
   const { toast } = panels;
   // the sky calendar for the place: 90 days from the start of today, recomputed when the place or the day changes
@@ -175,6 +176,7 @@ async function main() {
   };
   actions.openTonight = () => panels.openTonight();
   actions.openCalendar = () => panels.openCalendar();
+  actions.flyTo = (lat, lon) => { if (S.view !== "globe") setView("globe"); orbit.flyTo(lat, lon, orbit.heroDist(), 2200); };
 
   const flyDistFor = (altKm) => (altKm < 3000 ? 2.5 : altKm < 20000 ? 4 : 7);
   actions.focusItem = (item) => {
@@ -260,6 +262,15 @@ async function main() {
     if (sum.overall === "halted") return ["data", "Paused", "a source asked us to wait", open];
     return ["data", "Stale", `${bad} feed${bad === 1 ? "" : "s"} out of date`, open];
   }
+  // storms, fires and "near you" exist only when the live feeds are connected, so these tiles appear only then
+  function hazardTiles() {
+    const hz = D.hazards || {};
+    const out = [];
+    if (hz.storms || hz.fires || hz.space) { const n = panels.connectionList(hz).length; out.push(["near", String(n), `near ${S.place.name}`, () => panels.openNear()]); }
+    if (hz.storms) out.push(["storms", String(hz.storms.storms.length), hz.storms.storms.length === 1 ? "active storm" : "active storms", () => panels.openWatch("storms")]);
+    if (hz.fires) { const d = hz.fires.summary.detections; out.push(["fires", d >= 10000 ? `${Math.round(d / 1000)}k` : num(d), "fire detections, 24 h", () => panels.openWatch("fires")]); }
+    return out;
+  }
   function renderStats(force = false) {
     const el = $("stats");
     if (S.view !== "globe") { el.hidden = true; return; }
@@ -276,7 +287,8 @@ async function main() {
       ["quakes", num(recent), "quakes in 24 h", () => panels.openFeed()],
       ["new", num(D.meta.newIdx.length), "launched in 30 days", () => panels.openFeed()],
       ["strings", num(S.trains.length), S.trains.length === 1 ? "Starlink string" : "Starlink strings", () => panels.openTrains()],
-      ["kp", kp ? kp.kp.toFixed(1) : "n/a", "Kp, space weather", () => panels.openFeed()],
+      ["kp", kp ? kp.kp.toFixed(1) : "n/a", "Kp, space weather", () => panels.openWatch("aurora")],
+      ...hazardTiles(),
     ];
     const key = stats.map((s) => s[1]).join("|");
     if (!force && S.statsKey === key) return;
@@ -761,6 +773,9 @@ async function main() {
     aurora({ grid, meta }) { D.aurora.set(grid); D.meta.aurora = meta; orbit.refreshAurora(); sky.refreshAurora(); refreshDerived(); },
     clouds(data) { applyCities(data, null); },
     planes(data) { applyCities(null, data); },
+    storms(data) { D.hazards.storms = data; refreshDerived(); },
+    fires(data) { D.hazards.fires = data; refreshDerived(); },
+    spaceweather(data) { D.hazards.space = data; refreshDerived(); },
   };
   function startLive() {
     liveCtl = createLive({

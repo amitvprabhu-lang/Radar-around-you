@@ -131,6 +131,7 @@ def space_alerts(body, now):
 
 # ---------------------------------------------------------------- NHC active storms
 NHC_BASINS = {"al": "Atlantic", "ep": "Eastern Pacific", "cp": "Central Pacific"}
+NHC_BINS = {"AT": "Atlantic", "EP": "Eastern Pacific", "CP": "Central Pacific"}  # binNumber says where the storm is now; the id keeps the basin it formed in
 NHC_CLASS = {"TD": "Tropical depression", "TS": "Tropical storm", "HU": "Hurricane", "STD": "Subtropical depression", "STS": "Subtropical storm",
              "PTC": "Post-tropical cyclone", "PC": "Post-tropical cyclone", "TY": "Typhoon"}
 ZONE_HOURS = {"UTC": 0, "GMT": 0, "AST": -4, "ADT": -3, "EST": -5, "EDT": -4, "CST": -6, "CDT": -5, "MST": -7, "MDT": -6,
@@ -231,7 +232,7 @@ def nhc_storms(index_body, fetch_kmz, now):
             raise ValidationError(f"NHC storms: {sid} is outside the expected ranges")
         if pres is not None and not _num(pres, 800, 1050):
             raise ValidationError(f"NHC storms: {sid} pressure {pres} mb is outside the expected range")
-        rec = {"id": sid, "name": s["name"], "basin": NHC_BASINS[basin], "class": s["classification"], "classText": NHC_CLASS.get(s["classification"], s["classification"]),
+        rec = {"id": sid, "name": s["name"], "basin": NHC_BINS.get(str(s.get("binNumber", ""))[:2].upper(), NHC_BASINS[basin]), "class": s["classification"], "classText": NHC_CLASS.get(s["classification"], s["classification"]),
                "lat": lat, "lon": lon, "windKt": wind, "windKmh": round(wind * KT_TO_KMH), "pressureMb": pres, "moveDeg": s.get("movementDir"), "moveKt": s.get("movementSpeed"),
                "advisory": s["publicAdvisory"].get("advNum"), "issued": iso(issued), "updated": iso(updated), "url": (s.get("forecastGraphics") or {}).get("url") or s["publicAdvisory"].get("url"),
                "discussion": (s.get("forecastDiscussion") or {}).get("url"), "track": [], "cone": [], "extras": []}

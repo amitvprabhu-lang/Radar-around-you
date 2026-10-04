@@ -9,7 +9,7 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail }); if (!ok) console.log("FAIL", name, detail); };
 const browser = await launch();
 const R = (p, fn, arg) => p.evaluate(fn, arg);
-const shot = (p, name) => p.screenshot({ path: `${dir}shots/live-${name}.png` });
+const shot = async (p, name) => { await p.waitForTimeout(1300); return p.screenshot({ path: `${dir}shots/live-${name}.png` }); };
 const iso = (offsetMs = 0) => isoNow(Date.now() + offsetMs);
 
 function newLive(taken = iso(-60000)) {
@@ -53,7 +53,7 @@ const closeSheet = (p) => R(p, () => window.__radar.panels.closeSheet());
   const taken = live.files.get("live/manifest.json").feeds.satellites.fetchedAt;
   const p = await open("live", live);
   const st = await R(p, () => ({ used: Object.keys(window.__radar.app.D.live.used).sort(), fell: window.__radar.app.D.live.fellBack, taken: window.__radar.app.D.meta.taken, q: window.__radar.app.D.quakes.generated, kp: window.__radar.app.D.meta.kp[0].kp, simulated: window.__radar.app.clock.state.simulated }));
-  check("live: every feed came from the live folder", st.used.join() === "aurora,clouds,events,kp,planes,quakes,satellites" && st.fell.length === 0, JSON.stringify(st));
+  check("live: every feed came from the live folder", st.used.join() === "aurora,clouds,events,fires,kp,planes,quakes,satellites,spaceweather,storms" && st.fell.length === 0, JSON.stringify(st));
   check("live: the satellite group's fetch time drives the clock, which is real time", st.taken === taken && st.simulated === false, `${st.taken} ${st.simulated}`);
   check("live: quakes and Kp are the live ones", st.q === "LIVE" && st.kp === 6.33);
   check("live: the clock chip says LIVE", /^LIVE/.test(await p.textContent("#clockText")), await p.textContent("#clockText"));
@@ -66,7 +66,7 @@ const closeSheet = (p) => R(p, () => window.__radar.panels.closeSheet());
   await p.waitForSelector("#sheet h2");
   const sheet = await p.textContent("#sheet");
   check("live: the data tile opens the status sheet", /Data status/.test(sheet) && /Every feed is up to date/.test(sheet), sheet.slice(0, 120));
-  check("live: seven feeds are listed, all fresh", (await p.locator("#sheet .feedrow").count()) === 7 && (await p.locator("#sheet .statepill.fresh").count()) === 7);
+  check("live: ten feeds are listed, all fresh", (await p.locator("#sheet .feedrow").count()) === 10 && (await p.locator("#sheet .statepill.fresh").count()) === 10);
   check("live: each feed shows its source, its terms and its credit", /Test source/.test(sheet) && /Test licence/.test(sheet) && /Credits: Test credit/.test(sheet));
   check("live: reference data that is not live is listed", /Not live yet/.test(sheet) && /Fixed catalogue/.test(sheet));
   await shot(p, "status-phone");
@@ -188,6 +188,45 @@ const closeSheet = (p) => R(p, () => window.__radar.panels.closeSheet());
   await shot(p, "status-snapshot");
   const other = errors.filter((e) => !/fonts\.g|ERR_FAILED|status of 404/.test(e));
   check("snapshot: no console errors other than the missing live folder", other.length === 0, other.join(" | "));
+  await p.close();
+}
+
+// ---------------------------------------------------------------- 9. storms, fire and aurora screens
+for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, true], ["desktop", { width: 1280, height: 800 }, false]]) {
+  const errors = [];
+  const live = newLive();
+  const p = await open(`hz-${label}`, live, { errors, viewport, mobile });
+  const sheetText = () => p.textContent("#sheet");
+  const noOverflow = () => R(p, () => { const b = document.querySelector("#sheet .body"); return b.scrollWidth <= b.clientWidth + 1; });
+  check(`hazards ${label}: tiles for storms, fires and near you appear when the feeds are live`, (await tile(p, "active storms")) === "2" && /\d/.test(await tile(p, "fire detections")) && (await tile(p, "near")) !== null, `${await tile(p, "active storms")} ${await tile(p, "fire detections")}`);
+  await R(p, () => window.__radar.panels.openWatch("aurora")); await p.waitForSelector("#sheet .kpbox");
+  let t = await sheetText();
+  check(`hazards ${label}: aurora shows Kp, the G level in NOAA's words and the warning in force`, /6\.3/.test(t) && /G2, Moderate: NOAA says aurora has been seen as low as New York and Idaho/.test(t) && /Warning: Kp 6 expected \(G2, Moderate\)/.test(t), t.slice(0, 300));
+  check(`hazards ${label}: aurora shows the solar wind with a Bz direction and two charts`, /Speed/.test(t) && /pointing (south|north)/.test(t) && (await p.locator("#sheet .wchart svg").count()) === 2);
+  check(`hazards ${label}: the NOAA scale lists G1 to G5 and names its source`, (await p.locator("#sheet .item.near .mag").allTextContents()).filter((x) => /^G[1-5]$/.test(x)).length === 5 && /Source: NOAA Space Weather Scales/.test(t));
+  check(`hazards ${label}: the aurora screen does not overflow sideways`, await noOverflow());
+  await shot(p, `hz-${label}-aurora`);
+  await p.click('#sheet [data-tab="storms"]'); await p.waitForSelector("#sheet .stormcard");
+  t = await sheetText();
+  check(`hazards ${label}: storms shows both NHC storms with Saffir-Simpson categories`, /Hurricane Rachel, category 2/.test(t) && /Hurricane Nolo, category 3/.test(t), t.slice(0, 200));
+  check(`hazards ${label}: each storm has a map with a cone and a forecast track`, (await p.locator("#sheet svg.stormmap").count()) === 2 && (await p.locator("#sheet svg.stormmap path.cone").count()) >= 2 && (await p.locator("#sheet svg.stormmap path.track").count()) === 2);
+  check(`hazards ${label}: the cone's own caveat and the scale source are quoted`, /60 to 70 percent/.test(t) && /Source: NHC Saffir-Simpson Hurricane Wind Scale/.test(t) && /Source: NOAA National Hurricane Center/.test(t));
+  check(`hazards ${label}: wind is shown in knots, km/h and mph as NHC gives them`, /90 kt, 167 km\/h, 105 mph/.test(t));
+  check(`hazards ${label}: the storms screen does not overflow sideways`, await noOverflow());
+  await shot(p, `hz-${label}-storms`);
+  await p.click('#sheet [data-tab="fires"]'); await p.waitForSelector("#sheet .facts");
+  t = await sheetText();
+  const want = await R(p, () => window.__radar.app.D.hazards.fires.summary.detections);
+  check(`hazards ${label}: fires shows the detection count from the feed, near-place rings and clusters`, t.includes(want.toLocaleString("en-GB")) && /within 25 km/.test(t) && (await p.locator("#sheet button.item").count()) === 10, `${want}`);
+  check(`hazards ${label}: fires says a detection is not a confirmed wildfire and gives the NASA acknowledgement`, /not a confirmed wildfire/.test(t) && /We acknowledge the use of data and\/or imagery from NASA's Land, Atmosphere Near real-time Capability/.test(t));
+  check(`hazards ${label}: the fires screen does not overflow sideways`, await noOverflow());
+  await shot(p, `hz-${label}-fires`);
+  await R(p, () => window.__radar.panels.openNear()); await p.waitForSelector("#sheet h2");
+  t = await sheetText();
+  check(`hazards ${label}: the Around you screen explains it makes no causal claims`, /Around /.test(t) && /Nothing here says one event caused another/.test(t));
+  await shot(p, `hz-${label}-near`);
+  const other = errors.filter((e) => !/fonts\.g|ERR_FAILED|status of 404/.test(e));
+  check(`hazards ${label}: no console errors`, other.length === 0, other.join(" | "));
   await p.close();
 }
 

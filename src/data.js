@@ -2,6 +2,7 @@
 // Files are loaded in two stages: the first stage is what the first picture needs, the second loads while the visitor looks around.
 import { decodeSwarm } from "./core.js";
 import { LIVE_BASE, loadManifest, resolveSources, overlayCities } from "./live.js";
+import { decodeFires } from "./connect.js";
 
 const BASE = "";
 
@@ -87,6 +88,12 @@ export async function loadFeedData(id, source) {
   if (id === "kp") return json(p["kp.json"]);
   if (id === "clouds") return json(p["clouds.json"]);
   if (id === "planes") return json(p["planes.json"]);
+  if (id === "storms") return json(p["storms.json"]);
+  if (id === "spaceweather") return json(p["spaceweather.json"]);
+  if (id === "fires") {
+    const [buf, summary] = await Promise.all([bytes(p["fires.bin"]), json(p["fires.json"])]);
+    return decodeFires(buf, summary);
+  }
   if (id === "aurora") {
     const [grid, meta] = await Promise.all([bytes(p["aurora.bin"]), json(p["aurora.json"])]);
     return { grid: new Uint8Array(grid), meta };
@@ -117,7 +124,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
   let done = 0;
   const tick = (f, label) => { done += sizes[f] || 20000; onProgress(Math.min(0.99, done / total), label); };
   const track = (f, label, p) => p.then((r) => { tick(f, label); return r; });
-  const [sat, starsBuf, lines, aur, quakes, events, baseCities, coastBuf, kpRows, clouds, planes] = await Promise.all([
+  const [sat, starsBuf, lines, aur, quakes, events, baseCities, coastBuf, kpRows, clouds, planes, storms, fires, space] = await Promise.all([
     track("swarm.bin", "Placing satellites", tryLive("satellites",
       async (p) => { const [buf, satmeta] = await Promise.all([bytes(p["swarm.bin"]), json(p["satmeta.json"])]); return { buf, satmeta }; },
       async () => ({ buf: await bytes("swarm.bin"), satmeta: null }))),
@@ -133,6 +140,9 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
     tryLive("kp", (p) => json(p["kp.json"]), async () => null),
     tryLive("clouds", (p) => json(p["clouds.json"]), async () => null),
     tryLive("planes", (p) => json(p["planes.json"]), async () => null),
+    tryLive("storms", (p) => json(p["storms.json"]), async () => null),
+    tryLive("fires", (p) => loadFeedData("fires", { paths: p }), async () => null),
+    tryLive("spaceweather", (p) => json(p["spaceweather.json"]), async () => null),
   ]);
   const meta = { ...baseMeta, ...(sat.satmeta || {}) };
   if (kpRows) meta.kp = kpRows;
@@ -145,6 +155,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
     lines,
     aurora: new Uint8Array(aur.buf),
     quakes, events, cities: baseCities,
+    hazards: { storms, fires, space },
     coast: decodeCoast(coastBuf),
     live: { manifest, sources: src, used, fellBack, baselineTakenMs: Date.parse(baseMeta.taken) },
     onTexture: (f) => tick(f, "Painting the Earth"),

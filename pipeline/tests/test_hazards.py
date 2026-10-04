@@ -145,6 +145,7 @@ class StormsTest(unittest.TestCase):
         self.assertEqual(names, ["Rachel", "Nolo"])
         r = d["storms"][0]
         self.assertEqual((r["classText"], r["windKt"], r["windKmh"], r["pressureMb"], r["basin"]), ("Hurricane", 90, 167, 965, "Eastern Pacific"))
+        self.assertEqual(d["storms"][1]["basin"], "Central Pacific")  # id ep152026 but binNumber CP2, near the dateline
         self.assertEqual(r["issued"], "2026-10-04T15:00:00Z")
         self.assertGreater(len(r["track"]), 5)
 
@@ -190,6 +191,11 @@ class FiresTest(unittest.TestCase):
         self.assertEqual(s["rows"], 800)
         self.assertEqual(s["detections"] + s["lowConfidenceLeftOut"], 800)
         self.assertEqual(set(s["bySatellite"]), {"N", "N20"})
+
+    def test_each_satellite_code_comes_from_its_own_file(self):
+        # the app names the codes N, N20 and N21 as Suomi NPP, NOAA-20 and NOAA-21 on this basis
+        self.assertEqual(self.build("firms_snpp_500.csv")[1]["bySatellite"], {"N": 500 - self.build("firms_snpp_500.csv")[1]["lowConfidenceLeftOut"]})
+        self.assertEqual(set(self.build("firms_noaa20_300.csv")[1]["bySatellite"]), {"N20"})
 
     def test_a_known_detection_lands_in_the_right_cell(self):
         blob, s = self.build("firms_noaa20_300.csv")
