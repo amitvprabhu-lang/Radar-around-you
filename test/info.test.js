@@ -128,3 +128,17 @@ test("tonight planner scores dark clear hours highest and daylight zero", () => 
   assert.equal(cloudAtHour(place.clouds, new Date("2000-01-01")), null, "no forecast far outside the window");
   assert.equal(cloudAtHour(null, new Date()), null);
 });
+
+test("hazard severity: a storm's GDACS wind is not shown as its current wind", async () => {
+  const { hazardSeverity } = await import("../src/info.js");
+  const tc = hazardSeverity({ type: "TC", severity: "Hurricane/Typhoon > 74 mph (maximum wind speed of 250 km/h)" });
+  assert.equal(tc.value, "250 km/h");
+  assert.match(tc.label, /Highest wind GDACS lists/);
+  assert.match(tc.note, /right now can be lower/);
+  const wf = hazardSeverity({ type: "WF", severity: "Green impact for forestfire in 9279 ha" });
+  assert.deepEqual([wf.label, wf.value], ["Burned area GDACS lists", "9279 ha"]);
+  assert.equal(hazardSeverity({ type: "FL", severity: "Magnitude 0 " }), null);
+  assert.equal(hazardSeverity({ type: "EQ", severity: "Magnitude 4.6M, Depth:52.773km" }).value, "Magnitude 4.6M, Depth:52.773km");
+  assert.equal(hazardSeverity({ type: "TC", severity: "" }), null);
+  assert.equal(hazardSeverity({ type: "TC", severity: "Something new" }).value, "Something new");
+});

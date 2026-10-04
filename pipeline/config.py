@@ -50,6 +50,24 @@ FEEDS = {f.id: f for f in [
          "The refresh interval is not stated on the page; response headers: cache-control max-age=60.",
          "Not stated on the pages read.",
          "Kp: NOAA Space Weather Prediction Center", 1800, 10800),
+    Feed("spaceweather", "Solar wind and geomagnetic alerts", "NOAA Space Weather Prediction Center",
+         "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+         "https://www.swpc.noaa.gov/content/data-access",
+         "Rows are one minute apart. Response headers measured 2026-10-04 on rtsw_mag_1m.json and alerts.json: cache-control max-age=60. The page read does not state a refresh interval.",
+         "NWS disclaimer page (weather.gov/disclaimer): NWS web page information is \"in the public domain, unless specifically noted otherwise\" and may be used if you do not claim it is your own, imply NOAA/NWS endorsement, or modify it and present it as official.",
+         "Solar wind and alerts: NOAA Space Weather Prediction Center", 600, 3600),
+    Feed("storms", "Tropical storms (Atlantic and Pacific)", "NOAA National Hurricane Center",
+         "https://www.nhc.noaa.gov/CurrentStorms.json",
+         "https://www.nhc.noaa.gov/gis/",
+         "The GIS page lists the feeds. Response headers measured 2026-10-04: cache-control max-age=300. Advisories come about every six hours. Its KML says the official forecast track in KML format is an experimental product.",
+         "NWS disclaimer page: public domain with the three conditions quoted for the space weather feed.",
+         "Storms: NOAA National Hurricane Center", 900, 28800),
+    Feed("fires", "Active fire detections", "NASA FIRMS (LANCE)",
+         "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+         "https://www.earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data",
+         "The LANCE page says near real-time users usually need data \"within three hours\"; the FIRMS pages themselves returned no text when read, so the latency for fire files is not confirmed from a primary page. Measured 2026-10-04: the 24 hour files were last modified within an hour of the request.",
+         "LANCE page: \"NASA supports full and open sharing of data\"; third parties are asked to acknowledge LANCE (text in the credit below); the information is provided \"as is\".",
+         "Fires: NASA FIRMS (LANCE), VIIRS 375 m", 3600, 14400),
     Feed("clouds", "Cloud forecast", "MET Norway",
          "https://api.met.no/weatherapi/locationforecast/2.0/compact",
          "https://api.met.no/doc/TermsOfService",
@@ -90,6 +108,16 @@ GDACS_TYPES = "EQ;TC;FL;VO;DR;WF"
 GDACS_RECENT_DAYS = 7      # an ended event stays listed for this long after its end date
 GDACS_PAGE_SIZE = 100      # the API's own maximum page size
 PLANES_RADIUS_NM = 150
+FIRES_FILES = [  # the three VIIRS satellites FIRMS publishes global 24 hour files for
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv",
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv",
+    "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv",
+]
+SWPC_URLS = {
+    "wind": "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+    "mag": "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
+    "alerts": "https://services.swpc.noaa.gov/products/alerts.json",
+}
 HALT_COOL_OFF_S = 21600    # after a policy halt, wait this long before one probe; a human is told on every halted run
 KEEP_VERSIONS = 3
 CITIES_FALLBACK_NOTE = "A city that fails keeps its last good data."

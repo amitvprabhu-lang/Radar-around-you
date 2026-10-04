@@ -156,3 +156,21 @@ export function moonPhaseName(phaseDeg) {
   if (p < 281.25) return "Last quarter";
   return "Waning crescent";
 }
+
+// GDACS gives one severity string per event, not per moment. For a storm it is the strongest wind in its record (NHC's
+// own current wind for the same storm was lower on 2026-10-04), so the card must not present it as the current wind.
+// Flood events carry "Magnitude 0", which means nothing to a reader, so it is left out.
+export function hazardSeverity(e) {
+  const raw = String((e && e.severity) || "").trim();
+  if (!raw) return null;
+  if (e.type === "TC") {
+    const m = raw.match(/maximum wind speed of (\d+)\s*km\/h/i);
+    return m ? { label: "Highest wind GDACS lists for this storm", value: `${m[1]} km/h`, note: "GDACS gives one figure for the whole storm, so its strength right now can be lower." } : { label: "Severity (GDACS)", value: raw, note: "" };
+  }
+  if (e.type === "WF") {
+    const m = raw.match(/in\s+([\d,.]+)\s*ha/i);
+    return m ? { label: "Burned area GDACS lists", value: `${m[1]} ha`, note: "A hectare is 10,000 square metres, about 1.4 football pitches." } : { label: "Severity (GDACS)", value: raw, note: "" };
+  }
+  if (e.type === "FL" && /^magnitude\s*0\s*$/i.test(raw)) return null;
+  return { label: "Severity (GDACS)", value: raw, note: "" };
+}

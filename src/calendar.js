@@ -31,7 +31,7 @@ function moonAltitude(date, obs) {
   return Astro.Horizon(date, obs, eq.ra, eq.dec, "normal").altitude;
 }
 
-function moonEvents(from, end) {
+export function moonEvents(from, end) {
   const out = [];
   let mq = Astro.SearchMoonQuarter(from);
   while (mq.time.date < end) {
@@ -42,7 +42,7 @@ function moonEvents(from, end) {
   return out;
 }
 
-function lunarEclipses(from, end, obs) {
+export function lunarEclipses(from, end, obs) {
   const out = [];
   let e = Astro.SearchLunarEclipse(from);
   while (e.peak.date < end) {
@@ -59,7 +59,7 @@ function lunarEclipses(from, end, obs) {
   return out;
 }
 
-function solarEclipses(from, end, obs) {
+export function solarEclipses(from, end, obs) {
   const out = [];
   let g = Astro.SearchGlobalSolarEclipse(from);
   while (g.peak.date < end) {
@@ -84,7 +84,7 @@ function solarEclipses(from, end, obs) {
   return out;
 }
 
-function planetEvents(from, end) {
+export function planetEvents(from, end) {
   const out = [];
   for (const name of OPPOSITION_BODIES) {
     let t = Astro.SearchRelativeLongitude(name, 0, from);
@@ -146,7 +146,7 @@ function refineMinimum(f, lo, hi) {
   return { t, v: f(t) };
 }
 
-function seasonEvents(from, end) {
+export function seasonEvents(from, end) {
   const out = [];
   const names = [["mar_equinox", "March equinox", "Day and night are about equal everywhere."], ["jun_solstice", "June solstice", "The longest day in the north and the shortest in the south."],
     ["sep_equinox", "September equinox", "Day and night are about equal everywhere."], ["dec_solstice", "December solstice", "The shortest day in the north and the longest in the south."]];
@@ -161,7 +161,7 @@ function seasonEvents(from, end) {
 }
 
 // Meteor showers: the IMO peak date for each year in range. The date has no time of day, so it is shown as a date only.
-function showerEvents(from, end, lat) {
+export function showerEvents(from, end, lat) {
   const out = [];
   for (let y = from.getUTCFullYear(); y <= end.getUTCFullYear(); y++) {
     for (const s of SHOWERS) {

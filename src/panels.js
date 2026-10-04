@@ -249,13 +249,15 @@ export function createPanels(ctx) {
     const e = sel.e;
     const names = { TC: "Tropical cyclone", FL: "Flood", WF: "Wildfire", VO: "Volcano", EQ: "Earthquake", DR: "Drought" };
     const dist = C.haversineKm(place().lat, place().lon, e.lat, e.lon);
-    const kids = [head([tag(names[e.type] || e.type, "warn"), tag(`Alert ${e.alert}`)], e.name, `${e.country || ""}${e.severity ? " · " + e.severity : ""}`)];
+    const sev = I.hazardSeverity(e);
+    const kids = [head([tag(names[e.type] || e.type, "warn"), tag(`Alert ${e.alert}`)], e.name, e.country || "")];
     kids.push(h("dl", { class: "facts" },
+      sev ? kv(sev.label, sev.value, { mono: true }) : null,
       kv("Started", e.from ? fmtDateTime(new Date(e.from + "Z"), tz()) : "Not available"),
       kv("Last update", e.to ? fmtDateTime(new Date(e.to + "Z"), tz()) : "Not available"),
       kv(`Distance from ${place().name}`, `${num(dist)} km ${C.compassPoint(C.bearingDeg(place().lat, place().lon, e.lat, e.lon))}`, { mono: true }),
       kv("Position", latLonText(e.lat, e.lon), { mono: true })));
-    kids.push(h("p", { class: "note", text: "Source: GDACS (UN and European Commission). Alert colours are GDACS's own." }));
+    kids.push(h("p", { class: "note", text: `${sev && sev.note ? sev.note + " " : ""}Source: GDACS (UN and European Commission). Alert colours are GDACS's own.` }));
     kids.push(h("div", { class: "actions" }, link("Open the GDACS report", e.url, "link", "primary"), btn("Share", "share", () => actions.share())));
     return kids;
   }

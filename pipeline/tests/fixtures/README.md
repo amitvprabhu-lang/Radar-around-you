@@ -15,3 +15,9 @@ the sources actually send.
 | gp_active_300.json, gp_stations_6.json, gp_visual_30.json, gp_debris_groups.json | CelesTrak GP JSON | stations, visual, a random 260 of the active list, 10 per debris group |
 | catalogue_sample.json | CelesTrak SATCAT records and name tables, built with pipeline/catalogue.py | the objects above only |
 | geonames_cities_sample.txt | https://download.geonames.org/export/dump/cities15000.zip (cities15000.txt) | 10 rows: eight larger cities by name, plus the first three rows of the file (GeoNames data, CC BY 4.0) |
+| swpc_wind_active_420.json, swpc_mag_active_420.json | https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json and rtsw_mag_1m.json | the newest 420 rows from the spacecraft flagged active plus the 30 newest from the others, kept in the source's order (newest first) |
+| swpc_alerts_sample.json | https://services.swpc.noaa.gov/products/alerts.json | 40 of the 72 messages: the geomagnetic warnings, alerts and watches, one electron and one proton message |
+| nhc_current_storms.json | https://www.nhc.noaa.gov/CurrentStorms.json | whole file (two storms) |
+| nhc_ep182026_030_track.kmz, nhc_ep182026_030_cone.kmz | the forecastTrack and trackCone kmzFile links inside nhc_current_storms.json for Rachel, advisory 30 | whole files |
+| firms_snpp_500.csv, firms_noaa20_300.csv | https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv and noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv | the header and the first 500 and 300 rows |
+| nhc_ep152026_track.kmz, nhc_ep152026_cone.kmz | the forecastTrack and trackCone kmzFile links for Nolo, advisory 56 (a storm that crosses the dateline) | whole files |

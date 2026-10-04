@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 
 from . import catalogue as CAT
-from . import config, pack, validate
+from . import config, hazards, pack, validate
 from .runner import FeedFailure, Result, Unchanged, dumps, iso, parse
 
 F = config.FEEDS
@@ -186,5 +186,56 @@ def satellites(ctx):
     return Result(files, meta["count"], newest, f"{rep['precise']} exact orbits, {rep['new']} launched in the last 30 days, median element age {h['ageHours']['median']} h")
 
 
+# ---------------------------------------------------------------- aurora, storm and fire feeds
+def spaceweather(ctx):
+    got = {}
+    for key, url in config.SWPC_URLS.items():
+        got[key] = ctx.get("spaceweather", url, key=key).body
+    try:
+        wind = hazards.solar_wind(got["wind"], got["mag"], ctx.now)
+        alerts = hazards.space_alerts(got["alerts"], ctx.now)
+    except validate.ValidationError as e:
+        raise FeedFailure(str(e))
+    data = dict(wind, alerts=alerts)
+    return Result({"spaceweather.json": dumps(data)}, len(wind["points"]), wind["updated"], f"{len(alerts)} geomagnetic messages in the last {hazards.ALERT_KEEP_H} h")
+
+
+def storms(ctx):
+    index = ctx.get("storms", F["storms"].url, key="index")
+
+    def fetch_kmz(url):
+        try:
+            return ctx.get("storms", url, key=url).body
+        except FeedFailure as e:  # one missing track must not drop the storm itself
+            raise validate.ValidationError(f"storm track: {e}")
+    try:
+        data = hazards.nhc_storms(index.body, fetch_kmz, ctx.now)
+    except validate.ValidationError as e:
+        raise FeedFailure(str(e))
+    newest = max((s["updated"] for s in data["storms"]), default=iso(ctx.now))
+    names = ", ".join(s["name"] for s in data["storms"]) or "none active"
+    return Result({"storms.json": dumps(data)}, len(data["storms"]), newest, names)
+
+
+def fires(ctx):
+    bodies, failed = [], []
+    for i, url in enumerate(config.FIRES_FILES):
+        if i:
+            ctx.sleep(1)
+        try:
+            bodies.append(ctx.get("fires", url, key=url.rsplit("/", 1)[-1]).body)
+        except FeedFailure as e:
+            failed.append(f"{url.rsplit('/', 1)[-1]}: {e}")
+    if not bodies:
+        raise FeedFailure("fires: no file could be fetched (" + "; ".join(failed) + ")")
+    try:
+        blob, summary = hazards.fires(bodies, ctx.now)
+    except validate.ValidationError as e:
+        raise FeedFailure(str(e))
+    note = f"{summary['detections']} detections in {summary['cells']} cells" + (f"; not fetched: {len(failed)} file(s)" if failed else "")
+    return Result({"fires.bin": blob, "fires.json": dumps(summary)}, summary["cells"], summary["newest"], note)
+
+
 BUILDERS = {"catalogue": catalogue, "satellites": satellites, "quakes": quakes, "events": events,
-            "aurora": aurora, "kp": kp, "clouds": clouds, "planes": planes}
+            "aurora": aurora, "kp": kp, "clouds": clouds, "planes": planes,
+            "spaceweather": spaceweather, "storms": storms, "fires": fires}
