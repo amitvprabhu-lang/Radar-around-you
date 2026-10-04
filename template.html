@@ -42,6 +42,10 @@
   .chip { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 18px; font: 500 13px/1 var(--f-body); white-space: nowrap; color: var(--text); }
   .chip svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .place { align-self: flex-start; }
+  .chips-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tonight { color: var(--signal); border-color: rgba(255, 209, 102, .35); }
+  .tonight[data-level="excellent"], .tonight[data-level="good"] { color: var(--ion); border-color: rgba(98, 230, 195, .4); }
+  .tonight[data-level="poor"] { color: var(--muted); }
   .place small { color: var(--muted); font-weight: 400; }
   .chip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--c, var(--ion)) 55%, transparent); color: var(--c, var(--ion)); background: color-mix(in srgb, var(--c, var(--ion)) 14%, var(--panel-solid)); }
   .chip[aria-pressed="false"] { color: var(--muted); }
@@ -174,6 +178,28 @@
   .item span.s { display: block; color: var(--muted); font-size: 12.5px; }
   .item .btn { margin-left: auto; }
 
+  /* ---- tonight, strings and share ---- */
+  .verdict { display: flex; gap: 16px; align-items: center; margin: 10px 0 14px; }
+  .ring { --c: var(--ion); width: 84px; height: 84px; border-radius: 50%; flex: none; display: grid; place-items: center; background: conic-gradient(var(--c) calc(var(--p) * 1%), rgba(255, 255, 255, .1) 0); position: relative; }
+  .ring::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: #0b101e; }
+  .ring span { position: relative; font: 700 26px/1 var(--f-display); }
+  .ring.good { --c: #8be37a; } .ring.fair { --c: var(--signal); } .ring.poor { --c: var(--ember); }
+  .vhead { margin: 2px 0 4px !important; font: 700 21px/1.2 var(--f-display) !important; color: var(--text) !important; text-transform: none !important; letter-spacing: -.01em !important; }
+  .conds { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
+  .cond { padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+  .cond b { display: block; font-size: 14px; } .cond span { display: block; color: var(--muted); font-size: 13px; }
+  .tlist { display: flex; flex-direction: column; gap: 10px; }
+  .titem { display: flex; gap: 12px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+  .tchip { flex: none; align-self: flex-start; min-width: 62px; text-align: center; padding: 5px 6px; border-radius: 9px; font: 500 11px/1 var(--f-mono); letter-spacing: .04em; background: rgba(255, 255, 255, .08); color: var(--muted); }
+  .tchip.pass { background: rgba(98, 230, 195, .14); color: var(--ion); } .tchip.train { background: rgba(111, 180, 255, .16); color: var(--sky); }
+  .tchip.aurora { background: rgba(125, 255, 168, .14); color: var(--aurora); } .tchip.planet { background: rgba(255, 209, 102, .14); color: var(--signal); } .tchip.shower { background: rgba(169, 140, 255, .16); color: var(--violet); }
+  .ttime { color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  .tdetail { margin: 3px 0 0 !important; font-size: 13.5px !important; }
+  .actions.tight { margin-top: 10px; gap: 6px; }
+  .sharebox { display: grid; place-items: center; margin: 10px 0; }
+  .sharecanvas { width: min(100%, 360px); height: auto; border-radius: 14px; border: 1px solid var(--line-2); }
+  .sharetext { margin: 8px 0; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); font-size: 14px; color: var(--text); user-select: text; -webkit-user-select: text; }
+
   /* ---- toasts ---- */
   #toasts { position: absolute; left: 16px; right: 16px; top: calc(176px + var(--safe-t)); z-index: 30; display: flex; flex-direction: column; gap: 8px; pointer-events: none; align-items: center; }
   .toast { pointer-events: auto; max-width: 440px; width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; font-size: 13.5px; animation: drop .35s cubic-bezier(.2, .9, .2, 1.2); border: 1px solid rgba(255, 209, 102, .35); background: rgba(14, 16, 26, .92); }
@@ -225,7 +251,7 @@
   </header>
 
   <div class="subtop">
-    <button id="placeChip" class="chip glass place" aria-label="Change place"></button>
+    <div class="chips-row"><button id="placeChip" class="chip glass place" aria-label="Change place"></button><button id="tonightBtn" class="chip glass tonight" aria-label="Plan for tonight: what you can see from here"><span>Tonight</span></button></div>
     <div id="stats" class="scroller" role="list"></div>
   </div>
 

@@ -26,8 +26,8 @@
  {
   "file": "details.bin",
   "raw": 154528,
-  "gzip": 11680,
-  "brotli": 9025
+  "gzip": 23065,
+  "brotli": 16932
  },
  {
   "file": "events.json",
@@ -55,15 +55,21 @@
  },
  {
   "file": "meta.json",
-  "raw": 7688,
-  "gzip": 3467,
-  "brotli": 2702
+  "raw": 7891,
+  "gzip": 3586,
+  "brotli": 2792
  },
  {
   "file": "names.txt",
   "raw": 279792,
   "gzip": 55070,
   "brotli": 36158
+ },
+ {
+  "file": "precise.json",
+  "raw": 25130,
+  "gzip": 9063,
+  "brotli": 7187
  },
  {
   "file": "quakes.json",

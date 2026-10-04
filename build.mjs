@@ -8,7 +8,17 @@ const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const entry = args[0] || "src/main.js";
 const template = args[1] || "template.html";
 const out = args[2] || (b64 ? "dist/radar-b64.html" : "dist/radar.html");
+// satellite.js 7 also ships a WebAssembly variant that cannot be bundled for the browser. The app only uses its plain
+// JavaScript SGP4, so anything under wasm/ is replaced with an empty module.
+const stubWasm = {
+  name: "stub-satellite-wasm",
+  setup(b) {
+    b.onResolve({ filter: /(^|\/)wasm(-build)?\// }, () => ({ path: "wasm-stub", namespace: "stub" }));
+    b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: "export {};", loader: "js" }));
+  },
+};
 const result = await esbuild.build({
+  plugins: [stubWasm],
   entryPoints: [entry], bundle: true, minify: true, format: "iife", target: "es2020", write: false, legalComments: "none", charset: "utf8",
   define: { "process.env.NODE_ENV": '"production"', __B64__: b64 ? "true" : "false" },
 });

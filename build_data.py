@@ -5,6 +5,7 @@ adsb.lol, OpenFlights). Nothing here is invented: each value is copied, rounded 
 Run order: build_snapshot.py (earlier), then this script.
 """
 import base64, glob, gzip, html, json, math, os, re, struct
+import statistics
 from datetime import datetime, timezone
 
 R, R2, OUT = "raw/", "raw2/", "public/"
@@ -97,20 +98,65 @@ def purpose_of(nid):
     return 0
 
 
-# the swarm: every active satellite plus the major debris fields, with names and NORAD ids
-gp = []
-seen = set()
-for rec in load(R + "celestrak_active.json"):
-    if rec["NORAD_CAT_ID"] not in seen:
-        seen.add(rec["NORAD_CAT_ID"]); gp.append(rec)
+# the swarm: every active satellite plus the major debris fields, with names and NORAD ids.
+# Every record goes through the same gate: required fields present, values in range, epoch sane.
+# Duplicate object numbers keep the record with the newest epoch.
+REQUIRED = ["NORAD_CAT_ID", "OBJECT_NAME", "EPOCH", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE",
+            "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BSTAR", "MEAN_MOTION_DOT", "MEAN_MOTION_DDOT"]
+dropped = {}
+duplicates = 0
+records_read = 0
+
+
+def parse_epoch_ms(rec):
+    return datetime.fromisoformat(rec["EPOCH"]).replace(tzinfo=timezone.utc).timestamp() * 1000
+
+
+def rejection(rec):
+    """Return the reason a record is unusable, or None."""
+    if any(k not in rec or rec[k] is None for k in REQUIRED):
+        return "missing field"
+    try:
+        ep = parse_epoch_ms(rec)
+    except Exception:
+        return "unreadable epoch"
+    if not (0 <= rec["ECCENTRICITY"] < 0.99):
+        return "eccentricity out of range"
+    if not (0.05 < rec["MEAN_MOTION"] < 20):
+        return "mean motion out of range"
+    if not (0 <= rec["INCLINATION"] <= 180):
+        return "inclination out of range"
+    for k in ("RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY"):
+        if not (0 <= rec[k] <= 360):
+            return "angle out of range"
+    if ep > REF_MS + 86400000:
+        return "epoch in the future"
+    if REF_MS - ep > 90 * 86400000:
+        return "element set older than 90 days"
+    return None
+
+
+best = {}
+sources = [load(R + "celestrak_active.json")]
 for p in sorted(glob.glob(R + "deb_*.json")):
     try:
-        for rec in load(p):
-            if rec["NORAD_CAT_ID"] not in seen:
-                seen.add(rec["NORAD_CAT_ID"]); gp.append(rec)
+        sources.append(load(p))
     except Exception:
         pass
-gp = [r for r in gp if r["ECCENTRICITY"] < 0.99 and r["MEAN_MOTION"] > 0]
+for src in sources:
+    for rec in src:
+        records_read += 1
+        why = rejection(rec)
+        if why:
+            dropped[why] = dropped.get(why, 0) + 1
+            continue
+        k = rec["NORAD_CAT_ID"]
+        if k in best:
+            duplicates += 1
+            if parse_epoch_ms(rec) <= parse_epoch_ms(best[k]):
+                continue
+        best[k] = rec
+gp = list(best.values())
 print("swarm objects", len(gp))
 
 owners_used = sorted({satcat[r["NORAD_CAT_ID"]]["OWNER"] for r in gp if r["NORAD_CAT_ID"] in satcat})
@@ -130,7 +176,7 @@ def launch_day(iso):
     return max(1, round((t - datetime(1957, 10, 4, tzinfo=timezone.utc)).total_seconds() / 86400) + 1)
 
 
-f32 = bytearray(); u16 = bytearray(); ids = bytearray(); det = bytearray(); names = []
+f32 = bytearray(); u16 = bytearray(); ids = bytearray(); det = bytearray(); names = []; ages = []
 q = lambda v, top: max(0, min(65535, round(v / top * 65535)))
 kinds = {}
 for rec in gp:
@@ -139,6 +185,9 @@ for rec in gp:
     name = rec["OBJECT_NAME"].strip()
     epoch = datetime.fromisoformat(rec["EPOCH"]).replace(tzinfo=timezone.utc).timestamp() * 1000
     n = rec["MEAN_MOTION"] * 2 * math.pi / 1440
+    age_h = max(0.0, (REF_MS - epoch) / 3600000)
+    ages.append(age_h)
+    age_byte = min(255, round(age_h / 4))  # element-set age at the snapshot, in 4 hour steps
     f32 += struct.pack("<ff", (epoch - REF_MS) / 60000, n)
     t = 1 if ("STARLINK" in name) else 0  # only used for colouring in the shader; real category is in details
     if "STARLINK" in name: t = 1
@@ -158,9 +207,9 @@ for rec in gp:
         if otype == 1:
             purpose = 0
         det += struct.pack("<BBBBHBB", O_IDX.get(sc["OWNER"], 0), S_IDX.get(sc["LAUNCH_SITE"], 0), purpose, otype,
-                           launch_day(sc["LAUNCH_DATE"]), STATUS.get(sc["OPS_STATUS_CODE"], 0), 0)
+                           launch_day(sc["LAUNCH_DATE"]), STATUS.get(sc["OPS_STATUS_CODE"], 0), age_byte)
     else:
-        det += struct.pack("<BBBBHBB", 0, 0, purpose_of(nid), 3, 0, 0, 0)
+        det += struct.pack("<BBBBHBB", 0, 0, purpose_of(nid), 3, 0, 0, age_byte)
     kinds[t] = kinds.get(t, 0) + 1
 
 write("swarm.bin", bytes(f32) + bytes(u16))
@@ -170,6 +219,35 @@ write("names.txt", "\n".join(names).encode("utf-8"))
 new_cutoff = launch_day(datetime.fromtimestamp(REF_MS / 1000, timezone.utc).strftime("%Y-%m-%d")) - 30
 new_idx = [i for i in range(len(gp)) if struct.unpack_from("<H", det, i * 8 + 4)[0] >= new_cutoff]
 print("objects launched in the last 30 days:", len(new_idx), "kinds", kinds)
+
+# Full-precision element sets for the objects that get exact SGP4 positions in the app: the stations, the brightest
+# visual objects and everything launched in the last 30 days (that is where the Starlink trains are).
+gp_by_id = {r["NORAD_CAT_ID"]: r for r in gp}
+want = []
+for src_name in ("celestrak_stations.json", "celestrak_visual.json"):
+    for r in load(R + src_name):
+        if r["NORAD_CAT_ID"] in gp_by_id and r["NORAD_CAT_ID"] not in want:
+            want.append(r["NORAD_CAT_ID"])
+for i in new_idx:
+    nid = struct.unpack_from("<I", ids, i * 4)[0]
+    if nid not in want:
+        want.append(nid)
+cols = ["id", "epoch", "n", "e", "i", "raan", "argp", "ma", "bstar", "ndot", "nddot"]
+rows = [[r["NORAD_CAT_ID"], r["EPOCH"], r["MEAN_MOTION"], r["ECCENTRICITY"], r["INCLINATION"], r["RA_OF_ASC_NODE"], r["ARG_OF_PERICENTER"],
+         r["MEAN_ANOMALY"], r["BSTAR"], r["MEAN_MOTION_DOT"], r["MEAN_MOTION_DDOT"]] for r in (gp_by_id[k] for k in want)]
+jdump("precise.json", {"cols": cols, "rows": rows})
+print("precise element sets:", len(rows))
+
+def pct(l, p):
+    l = sorted(l)
+    return l[min(len(l) - 1, int(p * len(l)))]
+
+health = {
+    "recordsRead": records_read, "duplicatesDropped": duplicates, "invalidDropped": dropped, "kept": len(gp),
+    "ageHours": {"median": round(statistics.median(ages), 1), "p90": round(pct(ages, 0.9), 1), "p99": round(pct(ages, 0.99), 1), "max": round(max(ages), 1)},
+    "staleOver3d": sum(1 for a in ages if a > 72), "staleOver7d": sum(1 for a in ages if a > 168),
+}
+print("data health:", health)
 
 # ---------------------------------------------------------------- stars
 names_raw = load(R + "starnames.json")
@@ -247,7 +325,7 @@ meta = {
     "purposes": [p[0] for p in PURPOSES], "types": ["Satellite", "Rocket body", "Debris", "Unknown"],
     "newIdx": new_idx, "starCount": len(feats), "starNames": named,
     "aurora": {"observation": ov["Observation Time"], "forecast": ov["Forecast Time"]}, "kp": snap["kp"],
-    "cloudsDate": "2026-10-03",
+    "cloudsDate": "2026-10-03", "health": health, "preciseCount": len(rows),
 }
 jdump("meta.json", meta)
 

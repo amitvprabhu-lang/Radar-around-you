@@ -1,0 +1,18 @@
+import { launch, openPage, dir } from "../harness.mjs";
+const browser = await launch();
+const errors = [];
+const { p } = await openPage(browser, "dist/radar.html", { errors, label: "feat", viewport: { width: 390, height: 780 } });
+await p.goto("https://radar.test/", { waitUntil: "commit" });
+await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 }).catch(() => {});
+await p.waitForFunction(() => window.__radar.app.D.later && window.__radar.S.precise.size > 0, null, { timeout: 60000 });
+await p.waitForTimeout(2500);
+await p.evaluate(() => document.getElementById("toasts").replaceChildren());
+const shot = (n) => p.screenshot({ path: dir + `shots/feat-${n}.png` });
+await shot("1-home");
+await p.click("#tonightBtn"); await p.waitForTimeout(1200);
+await shot("2-tonight");
+await p.evaluate(() => { document.querySelector("#sheet .body").scrollTop = 600; });
+await p.waitForTimeout(300); await shot("3-tonight-list");
+console.log("errors:", errors.filter((e) => !/fonts\.g|ERR_FAILED/.test(e)));
+await browser.close();

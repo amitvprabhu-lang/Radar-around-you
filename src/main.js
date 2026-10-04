@@ -9,6 +9,9 @@ import { createPanels } from "./panels.js";
 import * as C from "./core.js";
 import * as I from "./info.js";
 import { tonightPlan } from "./plan.js";
+import { buildTonight } from "./tonight.js";
+import { loadPrecise } from "./sgp4.js";
+import { findTrains } from "./trains.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -58,7 +61,7 @@ async function main() {
   const S = {
     view: "globe", place: asPlace(startCity), selected: null, live: [], layers: { sats: true, starlink: true, debris: true, quakes: true, hazards: true, aurora: true, clouds: true, coast: true, constellations: false },
     skyOffsetMin: 0, guide: null, followIdx: -1, sheet: null, searchOpen: false, searchReady: false, downloads: null, underQuake: null, rateIdx: 0, sky: () => sky, orbit: () => orbit, under: () => under,
-    arrivals: [], feedCount: 0,
+    arrivals: [], feedCount: 0, precise: new Map(), trains: [], _tonight: null, tonightKey: "",
   };
   const nowDate = () => clock.now();
   const skyDate = () => new Date(nowDate().getTime() + S.skyOffsetMin * 60000);
@@ -68,6 +71,7 @@ async function main() {
   const panels = createPanels({
     D, S, clock, actions,
     currentReplay: () => (S.view === "under" ? under.replay : orbit.replay),
+    tonight: (force) => tonightModel(force),
   });
   const { toast } = panels;
 
@@ -114,7 +118,7 @@ async function main() {
     sky.setPlace(S.place); orbit.setObserver(S.place);
     panels.closeSearch(); panels.closeSheet();
     S.guide = null; renderGuide();
-    renderPlaceChip(); renderStats(true);
+    renderPlaceChip(); renderStats(true); S._tonight = null; setTimeout(updateTonightBtn, 30);
     if (S.view === "globe") orbit.flyTo(S.place.lat, S.place.lon, orbit.heroDist(), 2200);
     if (S.view === "under") enterUnder();
     panels.renderCard();
@@ -128,6 +132,34 @@ async function main() {
       actions.setPlace(near.c.id);
     }, () => toast("Location was not shared", { sub: "The preview may block it. Pick a place from the list instead.", plain: true }), { timeout: 8000 });
   };
+
+  actions.openShare = (spec) => panels.openShare(spec);
+  actions.saveCard = async (canvas, spec) => {
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+    if (S.downloads) {
+      try { await S.downloads.save({ filename: spec.filename, data: blob }); return true; }
+      catch (e) {
+        if (e && e.code === "declined") return "Not saved.";
+        if (e && (e.code === "unavailable" || e.code === "not_granted")) S.downloads = null; else return "Could not save the image.";
+      }
+    }
+    try {
+      const file = new File([blob], spec.filename, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: spec.text }); return true; }
+    } catch (e) { if (e && e.name === "AbortError") return "Cancelled."; }
+    return "Saving needs download permission, which this window does not have. On a phone, press and hold the picture.";
+  };
+  // "Show me": jump the sky to the time of an event, select the thing and turn to it
+  actions.showItem = (it) => {
+    const now = nowDate();
+    const when = it.atTime || it.time || now;
+    S.skyOffsetMin = C.clamp(Math.round((when - now) / 60000), 0, 1440);
+    if (S.view !== "sky") setView("sky"); else renderSkyHud();
+    if (it.target) select({ ...it.target });
+    if (it.sky) sky.lookAt(Math.max(5, it.sky.alt), it.sky.az, 900);
+    toast(`Showing the sky at ${fmtTime(skyDate(), S.place.tz)}`, { sub: "Use the Tonight slider at the bottom to move through time.", plain: true, ms: 5200 });
+  };
+  actions.openTonight = () => panels.openTonight();
 
   const flyDistFor = (altKm) => (altKm < 3000 ? 2.5 : altKm < 20000 ? 4 : 7);
   actions.focusItem = (item) => {
@@ -180,6 +212,23 @@ async function main() {
     updateChrome();
   }
 
+  // ------------------------------------------------------------------ the Tonight plan
+  function tonightModel(force = false) {
+    if (!D.later || !S.precise.size) return { verdict: { level: "fair", score: 0, headline: "Working it out", sentence: "Orbit data is still loading." }, items: [], conditions: [], highlights: [], trains: [] };
+    const key = S.place.id + ":" + Math.floor(nowDate().getTime() / 600000);
+    if (!force && S.tonightKey === key && S._tonight) return S._tonight;
+    S._tonight = buildTonight({ D, precise: S.precise, place: S.place, now: nowDate(), kp: I.kpAt(D.meta.kp, nowDate().getTime()) });
+    S.tonightKey = key;
+    return S._tonight;
+  }
+  function updateTonightBtn() {
+    const b = $("tonightBtn");
+    if (!b || !S.precise.size) return;
+    const t = tonightModel();
+    b.dataset.level = t.verdict.level;
+    b.replaceChildren(icon("eye"), "Tonight: " + t.verdict.level);
+  }
+
   // ------------------------------------------------------------------ chrome: stats, chips, hud
   function renderPlaceChip() {
     const c = S.place;
@@ -197,6 +246,7 @@ async function main() {
       ["above", num(above), `above ${S.place.name} now`, () => setView("sky")],
       ["quakes", num(recent), "quakes in 24 h", () => panels.openFeed()],
       ["new", num(D.meta.newIdx.length), "launched in 30 days", () => panels.openFeed()],
+      ["strings", num(S.trains.length), S.trains.length === 1 ? "Starlink string" : "Starlink strings", () => panels.openTrains()],
       ["kp", kp ? kp.kp.toFixed(1) : "n/a", "Kp, space weather", () => panels.openFeed()],
     ];
     const key = stats.map((s) => s[1]).join("|");
@@ -250,8 +300,8 @@ async function main() {
         const ok = await sky.sensor.enable();
         if (ok) sensorBtn.textContent = "Stop sensors"; else toast("Sensors are not available here", { sub: "On a phone, allow motion access. The preview window may block it. Drag to look instead.", plain: true });
       } }, "Sensors");
-      const slider = h("input", { type: "range", min: "0", max: "720", step: "10", value: String(S.skyOffsetMin), "aria-label": "Show the sky at a later time tonight" });
-      const sliderOut = h("output", { class: "mono", text: S.skyOffsetMin === 0 ? "Now" : "" });
+      const slider = h("input", { type: "range", min: "0", max: "1440", step: "10", value: String(S.skyOffsetMin), "aria-label": "Show the sky at a later time, up to a day ahead" });
+      const sliderOut = h("output", { class: "mono", text: S.skyOffsetMin === 0 ? "Now" : `+${durText(S.skyOffsetMin * 60)}` });
       const plan = h("p", { id: "planText" });
       const updateSlider = () => {
         S.skyOffsetMin = Number(slider.value);
@@ -507,6 +557,7 @@ async function main() {
   // ------------------------------------------------------------------ chrome wiring
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.go)));
   $("btnSearch").addEventListener("click", () => panels.openSearch());
+  $("tonightBtn").addEventListener("click", () => panels.openTonight());
   $("placeChip").addEventListener("click", () => panels.openPlaces());
   $("btnTime").addEventListener("click", () => {
     S.rateIdx = (S.rateIdx + 1) % RATES.length;
@@ -571,6 +622,7 @@ async function main() {
       updateClockText();
       if (S.view === "under") updateUnderPanel();
       if (S.view === "globe") renderStats();
+      if (S.precise.size && S.tonightKey !== S.place.id + ":" + Math.floor(nowDate().getTime() / 600000)) updateTonightBtn();
     }
     if (S.view === "sky") {
       updateGuide();
@@ -627,8 +679,12 @@ async function main() {
 
   startLater(app).then(() => {
     loadText.textContent = "Ready";
+    S.precise = loadPrecise(D.later.precise);
+    sky.precise = S.precise;
+    S.trains = findTrains(D, S.precise, nowDate());
     panels.buildSearchIndex();
     S.searchReady = true;
+    setTimeout(updateTonightBtn, 60);
     if (S.searchOpen && S.searchRender) S.searchRender();
     announceArrivals();
     renderStats(true);
@@ -650,7 +706,7 @@ async function main() {
   }
 
   // hooks for tests and debugging
-  window.__radar = { S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, resize };
+  window.__radar = { S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize };
   window.__radarStarted = true;
 }
 

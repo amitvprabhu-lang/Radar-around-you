@@ -192,6 +192,95 @@ async function suite(label, viewport, mobile) {
   check(L("new-launch card says it is new"), /NEW/.test(newCard), newCard.slice(0, 120));
   await shot(p, `${label}-arrival`);
 
+  // ---- K. exact orbits, Tonight, strings and share cards
+  check(L("exact orbits loaded for the stations, bright objects and new launches"), await R(p, () => window.__radar.S.precise.size > 150), String(await R(p, () => window.__radar.S.precise.size)));
+  check(L("a Starlink string is found among the recent launches"), (await R(p, () => window.__radar.S.trains.length)) >= 1);
+  check(L("Tonight button shows a verdict"), /Tonight: (excellent|good|fair|poor)/.test(await p.textContent("#tonightBtn")), await p.textContent("#tonightBtn"));
+  await R(p, () => window.__radar.actions.closeCard());
+  await p.click("#tonightBtn");
+  await p.waitForSelector("#sheet .verdict", { timeout: 15000 });
+  const tsheet = await p.textContent("#sheet");
+  check(L("Tonight sheet has a verdict, conditions and a list of things to look for"), /Tonight in /.test(tsheet) && /Dark (now|from)/.test(tsheet) && /Moon \d+% lit/.test(tsheet) && /What to look for/.test(tsheet), tsheet.slice(0, 160));
+  check(L("Tonight lists events with Show me buttons"), (await p.locator("#sheet .titem").count()) >= 1 && (await p.locator("#sheet .titem button", { hasText: "Show me" }).count()) >= 1);
+  check(L("Tonight shows Remind me links to a calendar"), (await p.locator("#sheet .titem a[href^='https://calendar.google.com/']").count()) >= 0);
+  await shot(p, `${label}-tonight`);
+  await p.locator("#sheet .titem button", { hasText: "Show me" }).first().click();
+  await p.waitForTimeout(1800);
+  const sm = await R(p, () => ({ view: window.__radar.S.view, off: window.__radar.S.skyOffsetMin, rate: window.__radar.S.rateIdx }));
+  check(L("Show me jumps to the sky at the time of the event"), sm.view === "sky" && sm.off >= 0 && sm.off <= 1440 && /Showing the sky at/.test(await p.textContent("#toasts")), JSON.stringify(sm));
+  check(L("the sky slider reaches a full day ahead"), (await p.getAttribute("#hud input[type=range]", "max")) === "1440");
+  await shot(p, `${label}-showme`);
+  {
+    const real = () => errors.filter((e) => !/fonts\.g|ERR_FAILED/.test(e));
+    const before = real().length;
+    await R(p, () => window.__radar.actions.closeCard());
+    await p.click("#tonightBtn"); await p.waitForSelector("#sheet .titem", { timeout: 15000 });
+    const total = await p.locator("#sheet .titem button", { hasText: "Show me" }).count();
+    let okAll = total > 0;
+    for (let i = 0; i < total; i++) {
+      if (!(await p.locator("#sheet .titem").count())) { await p.click("#tonightBtn"); await p.waitForSelector("#sheet .titem", { timeout: 15000 }); }
+      await p.locator("#sheet .titem button", { hasText: "Show me" }).nth(i).click();
+      await p.waitForTimeout(700);
+      if (!(await R(p, () => window.__radar.S.view === "sky"))) okAll = false;
+      await R(p, () => window.__radar.actions.closeCard());
+    }
+    check(L(`every Show me button in Tonight works without errors (${total} items)`), okAll && real().length === before, real().slice(before).join(" | "));
+  }
+  await R(p, () => window.__radar.actions.closeCard());
+  await p.click('.tab[data-go="globe"]'); await p.waitForTimeout(800);
+  await p.locator("#stats .stat", { hasText: "Starlink string" }).click();
+  await p.waitForSelector("#sheet h2", { timeout: 10000 });
+  const strings = await p.textContent("#sheet");
+  check(L("strings sheet explains and lists the recent string"), /Starlink strings/.test(strings) && /Launched 28 Sep/.test(strings) && /26 satellites/.test(strings), strings.slice(0, 200));
+  await p.waitForTimeout(700);
+  await shot(p, `${label}-strings`);
+  await p.keyboard.press("Escape");
+  // exact pass wording on a satellite card
+  await R(p, () => { const r = window.__radar; r.actions.focusItem({ kind: "sat", idx: r.app.D.later.ids.indexOf(25544) }); });
+  await p.waitForTimeout(2500);
+  const issCard = await p.textContent("#card");
+  check(L("ISS card shows exact orbit data age and SGP4 pass times"), /Orbit data age/.test(issCard) && /computed with SGP4/.test(issCard), issCard.slice(0, 120));
+  check(L("ISS card says when it can next be seen, or that it cannot in 10 days"), /Next visible pass|No visible pass in the next 10 days|visible/.test(issCard));
+  await shot(p, `${label}-iss-card`);
+  await R(p, () => window.__radar.actions.closeCard());
+  const trainSat = await R(p, () => { const r = window.__radar; return r.S.trains[0].centralIdx; });
+  await R(p, (idx) => window.__radar.actions.focusItem({ kind: "sat", idx }), trainSat);
+  await p.waitForTimeout(2200);
+  check(L("a satellite in the string says so"), /Part of a Starlink string/.test(await p.textContent("#card")));
+  await R(p, () => window.__radar.actions.closeCard());
+  // share cards
+  await p.click("#btnSearch"); await p.fill("#searchPanel input", "m5.9"); await p.waitForTimeout(350);
+  await p.click("#searchPanel .result >> nth=0"); await p.waitForTimeout(2500);
+  await p.locator("#card .btn", { hasText: "Share card" }).click();
+  await p.waitForSelector("#sheet canvas.sharecanvas", { timeout: 10000 });
+  const px = await R(p, () => {
+    const c = document.querySelector("#sheet canvas.sharecanvas"); const g = c.getContext("2d");
+    const d = g.getImageData(0, 0, c.width, c.height).data; let min = 255, max = 0, lit = 0;
+    for (let i = 0; i < d.length; i += 4 * 97) { const v = (d[i] + d[i + 1] + d[i + 2]) / 3; if (v < min) min = v; if (v > max) max = v; if (v > 80) lit++; }
+    return { w: c.width, h: c.height, min, max, lit };
+  });
+  check(L("quake share card is drawn at 1080 by 1350 with real content"), px.w === 1080 && px.h === 1350 && px.max > 200 && px.lit > 500, JSON.stringify(px));
+  check(L("quake share card text names the arrival time and the place"), /P waves reach/.test(await p.textContent("#sheet")) || /M5\.9 earthquake near/.test(await p.textContent("#sheet")));
+  await shot(p, `${label}-share-quake`);
+  await p.locator("#sheet .btn", { hasText: "Copy text" }).click(); await p.waitForTimeout(300);
+  check(L("copy text gives feedback"), /Text copied|Copying is blocked/.test(await p.textContent("#sheet")));
+  await p.locator("#sheet .btn", { hasText: "Save image" }).click();
+  await p.waitForFunction(() => { const st = document.querySelector("#sheet [role=status]"); return st && st.textContent && !/Copying is blocked|Text copied/.test(st.textContent); }, null, { timeout: 10000 }).catch(() => {});
+  const saveTxt = await p.textContent("#sheet");
+  check(L("save image gives feedback"), /Image saved|Saving needs download permission|Not saved|Cancelled|Could not save/.test(saveTxt), saveTxt.slice(-220));
+  await p.keyboard.press("Escape");
+  await R(p, () => window.__radar.actions.closeCard());
+  await p.click("#tonightBtn"); await p.waitForSelector("#sheet .verdict", { timeout: 15000 });
+  await p.locator("#sheet .btn", { hasText: "Share tonight" }).click();
+  await p.waitForSelector("#sheet canvas.sharecanvas", { timeout: 10000 });
+  check(L("tonight share card opens"), (await p.textContent("#sheet")).includes("Tonight in "));
+  await shot(p, `${label}-share-tonight`);
+  await p.keyboard.press("Escape");
+  await p.click(".brand"); await p.waitForTimeout(300);
+  const about2 = await p.textContent("#sheet");
+  check(L("about sheet reports data health"), /Data health/.test(about2) && /element sets read/.test(about2) && /median element set/.test(about2), about2.slice(0, 80));
+  await p.keyboard.press("Escape");
+
   // ---- J. about
   await R(p, () => window.__radar.actions.closeCard());
   await p.click(".brand"); await p.waitForTimeout(300);

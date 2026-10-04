@@ -10,6 +10,7 @@ import * as S from "./shaders.js";
 import { glowTexture, ribbonMaterial, dynLine } from "./engine.js";
 import { buildStarfield } from "./stars.js";
 import { airlinerModel, aircraftVariantFor, updateAircraftLights } from "./models.js";
+import * as SG from "./sgp4.js";
 
 const SKY_R = 50;
 const PLANE_R = 40;
@@ -206,6 +207,12 @@ export function createSky(ctx) {
     const ill = Astro.Illumination(Astro.Body.Moon, date);
     info.moon = { alt: hz.altitude, az: hz.azimuth, frac: ill.phase_fraction, phase: Astro.MoonPhase(date), mag: ill.mag };
   }
+  // The Moon and planets are recomputed when the clock moves more than 20 s forward or at all backward.
+  // Selecting calls this too, so a card opened before the first sky frame (for example "Show me") has data.
+  function ensureBodies(date) {
+    const t = date.getTime();
+    if (!info.moon || t - bodiesAt > 20000 || t < bodiesAt) { bodiesAt = t; computeBodies(date); }
+  }
 
   // The scan of all 19,000 objects is spread over several frames so it never causes a visible hitch.
   let job = null;
@@ -325,7 +332,7 @@ export function createSky(ctx) {
     uni.time.value = tSec;
     uni.pr.value = renderer.getPixelRatio();
     uni.sizeScale.value = clamp(renderer.domElement.clientWidth / 900, 0.8, 1.35);
-    if (date.getTime() - bodiesAt > 20000 || date.getTime() < bodiesAt) { bodiesAt = date.getTime(); computeBodies(date); }
+    ensureBodies(date);
     const sun = sunAltAz(place.lat, place.lon, date);
     info.sunAlt = sun.alt; info.sunAz = sun.az;
     const night = clamp((-sun.alt - 3) / 12, 0, 1);
@@ -597,22 +604,28 @@ export function createSky(ctx) {
   api.altAzOf = (item, date) => {
     if (!item) return null;
     if (item.kind === "plane") { const r = api.planesNow.find((x) => x.p.hex === item.hex); return r ? { alt: r.el, az: r.az } : null; }
-    if (item.kind === "sat") { const l = swarmLook(D.swarm[item.idx], date, place.lat, place.lon); return { alt: l.el, az: l.az, lit: l.sunlit }; }
+    if (item.kind === "sat") { const ps = preciseOf(item.idx); const l = (ps && SG.lookFrom(ps, date, place.lat, place.lon)) || swarmLook(D.swarm[item.idx], date, place.lat, place.lon); return { alt: l.el, az: l.az, lit: l.sunlit, exact: !!ps }; }
     if (item.kind === "moon") return info.moon ? { alt: info.moon.alt, az: info.moon.az } : null;
     if (item.kind === "planet") { const p = info.planets.find((x) => x.name === item.name); return p ? { alt: p.alt, az: p.az } : null; }
     if (item.kind === "star") { const h = raDecToAltAz(D.stars.ra[item.i], D.stars.dec[item.i], place.lat, place.lon, date); return { alt: h.alt, az: h.az }; }
     return null;
   };
 
+  // exact (SGP4) element sets, set by the app once they have loaded: Map of NORAD id to satellite
+  api.precise = new Map();
+  const preciseOf = (idx) => api.precise.get(D.later.ids[idx]);
   const sel = { item: null };
   api.sel = sel;
   api.select = (item, date) => {
+    if (place) ensureBodies(date);
     sel.item = item;
     satU.selIdx.value = item && item.kind === "sat" ? item.idx : -1;
     passLine.clear();
     if (item && item.kind === "sat") {
       const s = D.swarm[item.idx];
-      const passes = findPasses((d) => swarmLook(s, d, place.lat, place.lon), (d) => sunAltAz(place.lat, place.lon, d).alt, new Date(date.getTime() - 6 * 60000), 12, { stepSec: 20, minEl: 5 });
+      const ps = preciseOf(item.idx);
+      const passes = ps ? SG.passesFor(ps, place, new Date(date.getTime() - 6 * 60000), 12, { minEl: 5 })
+        : findPasses((d) => swarmLook(s, d, place.lat, place.lon), (d) => sunAltAz(place.lat, place.lon, d).alt, new Date(date.getTime() - 6 * 60000), 12, { stepSec: 20, minEl: 5 });
       sel.passes = passes;
       const next = passes.find((p) => p.set.getTime() > date.getTime());
       if (next) passLine.set(next.track.map((q) => altAzVec(q.el, q.az, SKY_R - 0.5)), (i, n) => 0.9);

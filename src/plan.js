@@ -14,16 +14,19 @@ export function cloudAtHour(clouds, date) {
   return best ? best.cloud : null;
 }
 
-export function tonightPlan(place, now, auroraChance = 0) {
+// One hour of the viewing score inputs for a place. Moon altitude and phase come from astronomy-engine.
+export function hourSample(place, t, auroraChance = 0, obs = null) {
+  const o = obs || new Astro.Observer(place.lat, place.lon, 0);
+  const eq = Astro.Equator(Astro.Body.Moon, t, o, true, true);
+  const hz = Astro.Horizon(t, o, eq.ra, eq.dec, "normal");
+  const cloud = cloudAtHour(place.clouds, t);
+  return { t, sunAlt: sunAltAz(place.lat, place.lon, t).alt, moonAlt: hz.altitude, moonFrac: Astro.Illumination(Astro.Body.Moon, t).phase_fraction, cloud: cloud ?? 50, cloudKnown: cloud != null, aurora: auroraChance };
+}
+
+export function tonightPlan(place, now, auroraChance = 0, hoursCount = 13) {
   const start = new Date(Math.ceil(now.getTime() / 3600000) * 3600000);
   const obs = new Astro.Observer(place.lat, place.lon, 0);
   const hours = [];
-  for (let i = 0; i < 13; i++) {
-    const t = new Date(start.getTime() + i * 3600000);
-    const eq = Astro.Equator(Astro.Body.Moon, t, obs, true, true);
-    const hz = Astro.Horizon(t, obs, eq.ra, eq.dec, "normal");
-    const cloud = cloudAtHour(place.clouds, t);
-    hours.push({ t, sunAlt: sunAltAz(place.lat, place.lon, t).alt, moonAlt: hz.altitude, moonFrac: Astro.Illumination(Astro.Body.Moon, t).phase_fraction, cloud: cloud ?? 50, cloudKnown: cloud != null, aurora: auroraChance });
-  }
+  for (let i = 0; i < hoursCount; i++) hours.push(hourSample(place, new Date(start.getTime() + i * 3600000), auroraChance, obs));
   return { ...bestWindow(hours), hours };
 }

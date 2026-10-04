@@ -10,14 +10,19 @@ This is a standalone project.
 - **Sky**: first-person 3D sky above a chosen place. Gradient sky from the Sun's altitude, Milky Way, constellations, Moon with phase, planets, satellites that flash when sunlit, 3D airliners with contrails and navigation lights, aurora curtains. Dark-sky toggle, "Tonight" time slider, best-time planner, Guide me arrow, phone-sensor look-around.
 - **Under**: the Earth cut open through an earthquake and you, with crust, mantle and core, and P and S waves travelling to you.
 - **Feed**: newest quakes, newest launches, aircraft above you, tonight and space weather, each with a Replay or Show action.
+- **Tonight** ("Will I see it tonight?"): one verdict for your place (cloud, Moon, dark window, aurora chance) and a timeline of what to look for: visible satellite and ISS passes, Starlink strings, planets, meteor showers near their peak. Each item has Show me (jumps the Sky view to that time and turns to it) and Remind me (a calendar link).
+- **Starlink strings**: satellites from one recent launch that are still in a line. Found by comparing exact SGP4 positions of every satellite from the same launch. The home screen shows how many there are; the sheet says when one can be seen from your place.
+- **Exact passes**: the ISS, other bright objects and everything launched in the last 30 days use SGP4 (about 200 objects, `public/precise.json`). Pass times on their cards come from SGP4. Everything else uses the fast swarm model.
+- **Share cards**: a 1080 by 1350 picture and a text version for an earthquake, a satellite pass, a Starlink string or Tonight. Saved through the viewer's download permission when the host gives it, else the phone's share sheet, else press and hold.
+- **Data health**: the pipeline drops duplicates (keeps the newest epoch), rejects invalid records, stores each object's element age, and reports counts in the About sheet.
 
 ## Commands
 
 ```
-npm ci            # install (three, astronomy-engine, esbuild, satellite.js for the tests)
-npm test          # 52 unit tests, no browser needed
+npm ci            # install (three, astronomy-engine, satellite.js, esbuild)
+npm test          # 82 unit tests, no browser needed
 npm run build     # bundles src/ into one page: dist/radar.html
-npm run e2e       # 112 browser checks on a phone-sized and a desktop-sized window (needs Playwright, see below)
+npm run e2e       # 150 browser checks on a phone-sized and a desktop-sized window (needs Playwright, see below)
 npm run data      # repacks raw/ and raw2/ into public/ (needs python3 with numpy, pillow, brotli)
 ```
 
@@ -28,7 +33,8 @@ The page loads its data from `public/` with relative URLs, so any static host wo
 ## Layout
 
 ```
-src/        the app: core.js (all the maths), data.js, boot.js, orbit.js, sky.js, under.js, models.js,
+src/        the app: core.js (all the maths), sgp4.js (exact orbits), trains.js (Starlink strings), tonight.js (the
+            Tonight plan), share.js (share cards), data.js, boot.js, orbit.js, sky.js, under.js, models.js,
             stars.js, shaders.js, info.js, plan.js, panels.js, dom.js, engine.js, main.js
 test/       unit tests, checked against satellite.js, astronomy-engine and the real packed data
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
@@ -43,7 +49,8 @@ v1/         the first prototype, kept for reference
 
 ## Measured on 4 Oct 2026 (re-measure before quoting)
 
-- Page (HTML, CSS and JavaScript): about 946 KB raw, about 240 KB with Brotli. three.js is about 726 KB of that after tree-shaking.
+- Page (HTML, CSS and JavaScript): about 1,005 KB raw, about 241 KB with Brotli. three.js is about 726 KB of that after tree-shaking. The growth since the first prototype is our new code plus satellite.js; I did not measure them separately.
+- `precise.json` (exact orbits): about 25 KB raw, about 7 KB with Brotli, fetched after the first picture.
 - First picture: about 1.3 MB with Brotli (page plus the satellite file and the 2k Earth textures).
 - Everything loaded after the first frame (names, details, shaking maps, routes): about 100 KB with Brotli.
 - A 4k Earth map (about 480 KB) is fetched only when someone zooms in on a device that is not in low-quality mode and not on data saver.
@@ -56,7 +63,10 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 ## Honest limits
 
 - The data is a snapshot taken on 4 Oct 2026. Within 36 hours of the snapshot the clock is real time; after that it counts forward from the snapshot.
-- Satellite positions use a fast two-body orbit with J2 drift, good to tens or a few hundred kilometres over a day or two. Pass times are approximate.
+- Satellite positions on the globe use a fast two-body orbit with J2 drift, good to tens or a few hundred kilometres over a day or two. About 200 objects (the ISS, bright objects, launches of the last 30 days) use exact SGP4 for passes and strings; everything else falls back to the fast model, and its cards say so. SGP4 itself is only as good as the age of the element set, which each card shows.
+- Tonight's cloud figure is a forecast from MET Norway sampled in the snapshot, so it is stale after the snapshot day. The verdict is a simple score, not a measured seeing report.
+- A meteor shower is listed only within 3 days of its peak. That limit is an editorial choice, not a published threshold. The table of dates, rates and radiants is approximate.
+- A Starlink "string" is a group from one launch in one orbital plane within 120 degrees of each other, visible when at least 3 are above the horizon and in sunlight. These thresholds are our own.
 - Seismic waves use constant speeds (P 8.0 km/s, S 4.5 km/s) along straight lines. This is a teaching model.
 - Aircraft and satellite 3D models are generic and not to scale. The Moon is drawn 3.5 times larger so its phase is visible.
 - Sky glow is estimated from NASA night-light imagery, not measured.
@@ -68,6 +78,9 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 - Launch site coordinates in `src/core.js` (`LAUNCH_SITES`) were written from public knowledge, not from a data feed.
 - The aircraft type name table in `src/info.js` covers common types only. Check it against an official list.
 - OpenFlights airline names can be out of date (for example a callsign prefix showing an old airline name).
+- The meteor shower table in `src/tonight.js` (dates, peaks, rates, radiants) against a current published calendar, and the 3 day near-peak rule.
+- The Starlink string thresholds and the visible-pass wording against what people actually see.
+- The limiting-magnitude and "sunlit and dark enough" rules behind pass visibility.
 - Licence of the Moon texture (taken from the three.js examples).
 - adsb.lol asks to be contacted for heavy use. MET Norway requires an identifying User-Agent.
 - Whether Cloudflare R2 needs a card on file even for the free tier, and whether GitHub Actions scheduled runs keep going on a quiet public repository.

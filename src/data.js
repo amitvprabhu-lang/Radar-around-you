@@ -112,15 +112,16 @@ export async function loadCore(onProgress = () => {}) {
 
 // Stage two: search index, details, impact maps, routes. Loaded after the first frame.
 export async function loadLater() {
-  const [names, ids, details, impact, routes, airlines] = await Promise.all([
+  const [names, ids, details, impact, routes, airlines, precise] = await Promise.all([
     text("names.txt").then(decodeNames),
     bytes("ids.bin").then(decodeIds),
     bytes("details.bin").then((b) => new Uint8Array(b)),
     json("impact.json"),
     json("routes.json"),
     json("airlines.json"),
+    json("precise.json"),
   ]);
-  return { names, ids, details, impact, routes, airlines };
+  return { names, ids, details, impact, routes, airlines, precise };
 }
 
 export function expandSwarm(core) {

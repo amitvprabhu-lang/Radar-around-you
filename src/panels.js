@@ -1,7 +1,9 @@
 // Detail cards, search, feed, sheets and toasts. All DOM work for the "tap for details" side of the app.
 import * as C from "./core.js";
 import * as I from "./info.js";
-import { tonightPlan } from "./plan.js";
+import * as SG from "./sgp4.js";
+import { trainItems, visiblePart, whenText } from "./tonight.js";
+import { drawCard, quakeSpec, passSpec, itemSpec, tonightSpec, CARD_W, CARD_H } from "./share.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
 const MMI_ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
@@ -37,6 +39,7 @@ export function createPanels(ctx) {
   }
   function openSheet(name, ...content) {
     const el = $("sheet");
+    $("toasts").replaceChildren();
     S.sheet = name;
     el.replaceChildren(h("div", { class: "body glass", onclick: (e) => e.stopPropagation() }, ...content));
     el.hidden = false;
@@ -71,19 +74,28 @@ export function createPanels(ctx) {
 
   // ------------------------------------------------------------------ satellite card
   const passCache = new Map();
-  function nextPass(idx) {
+  // Next pass over the place, plus the next pass that can actually be seen. Exact (SGP4) when precise elements exist.
+  function nextPasses(idx) {
     const key = idx + ":" + place().id + ":" + Math.floor(nowDate().getTime() / 600000);
     if (passCache.has(key)) return passCache.get(key);
     const s = D.swarm[idx];
-    let pass = null;
-    if (s.a < 20000) {
-      const now = nowDate();
+    const now = nowDate();
+    const ps = S.precise && S.precise.get(D.later.ids[idx]);
+    let next = null, nextVisible = null;
+    if (ps) {
+      const start = new Date(now.getTime() - 5 * 60000);
+      const day = SG.passesFor(ps, place(), start, 24, { minEl: 10 });
+      next = day.find((p) => p.set.getTime() > now.getTime()) || null;
+      nextVisible = day.find((p) => p.set.getTime() > now.getTime() && visiblePart(p)) || null;
+      if (!nextVisible && next) nextVisible = SG.passesFor(ps, place(), start, 24 * 10, { minEl: 10 }).find((p) => p.set.getTime() > now.getTime() && visiblePart(p)) || null;
+    } else if (s.a < 20000) {
       const passes = C.findPasses((d) => C.swarmLook(s, d, place().lat, place().lon), (d) => C.sunAltAz(place().lat, place().lon, d).alt, new Date(now.getTime() - 5 * 60000), 24, { stepSec: 30, minEl: 10 });
-      pass = passes.find((p) => p.set.getTime() > now.getTime()) || null;
+      next = passes.find((p) => p.set.getTime() > now.getTime()) || null;
     }
+    const res = { next, nextVisible, exact: !!ps };
     passCache.clear();
-    passCache.set(key, pass);
-    return pass;
+    passCache.set(key, res);
+    return res;
   }
 
   function satCard(sel) {
@@ -93,6 +105,9 @@ export function createPanels(ctx) {
     const tags = [tag(info.objectType || "Satellite", "live")];
     if (info.isNew) tags.push(tag(`NEW · launched ${daysAgoText(info.ageDays)}`, "new"));
     if (info.status && info.status !== "Not known") tags.push(tag(info.status));
+    const psat = S.precise && S.precise.get(D.later.ids[idx]);
+    const ageH = psat ? SG.elementAgeHours(psat, nowDate()) : D.later.details[idx * 8 + 7] * 4;
+    if (ageH > 72) tags.push(tag(`ORBIT DATA ${Math.round(ageH / 24)} DAYS OLD`, "warn"));
     const isFollowing = () => S.followIdx === idx;
     const kids = [head(tags, info.name, [info.owner, info.purpose && info.purpose !== "Unspecified" ? info.purpose : null].filter(Boolean).join(" · "))];
     const facts = h("dl", { class: "facts" },
@@ -103,25 +118,38 @@ export function createPanels(ctx) {
       kv("Height now", `${num(info.altKm)} km`, { mono: true, live: () => `${num(get().altKm)} km` }),
       kv("Speed", `${info.speedKmS.toFixed(2)} km/s · ${num(info.speedKmS * 3600)} km/h`, { mono: true }),
       kv("Orbit", `${num(info.periodMin)} min around · ${info.inclinationDeg.toFixed(1)}° tilt`, { mono: true }),
+      kv("Orbit data age", `${ageH < 48 ? Math.round(ageH) + " hours" : Math.round(ageH / 24) + " days"}${psat ? "" : " (approximate)"}`, { mono: true }),
       kv("Sees a circle on the ground of", `${num(info.footprintKm)} km radius`, { mono: true }),
       kv("Directly over", latLonText(info.lat, info.lon), { mono: true, live: () => { const g = get(); return latLonText(g.lat, g.lon); } }),
       kv(`From ${place().name}`, info.look ? (info.look.above ? `${Math.round(info.look.el)}° up, ${info.look.compass}, ${num(info.look.rangeKm)} km away` : "Below your horizon right now") : "", {
         live: () => { const g = get(); return g.look.above ? `${Math.round(g.look.el)}° up, ${g.look.compass}, ${num(g.look.rangeKm)} km away` : "Below your horizon right now"; },
       }));
     kids.push(facts);
-    const pass = nextPass(idx);
+    const { next: pass, nextVisible, exact } = nextPasses(idx);
+    const passLine = (p, label) => {
+      const v = visiblePart(p);
+      const inProgress = p.rise.getTime() <= nowDate().getTime();
+      const text = v
+        ? `visible ${whenText(v.first.time, nowDate(), tz())} to ${fmtTime(v.last.time, tz())}, highest ${Math.round(v.best.el)}° in the ${C.compassPoint(v.best.az)}${v.fadesOut ? ", then it fades into Earth's shadow" : ""}`
+        : `${whenText(p.rise, nowDate(), tz())}, peaks ${Math.round(p.max.el)}° up in the ${C.compassPoint(p.max.az)}, ${C.formatDuration(p.set - p.rise)}, not visible to the eye (not lit or the sky is too bright)`;
+      return h("p", { class: "note", style: { color: "var(--text)" } }, h("b", { text: inProgress && !v ? "Passing over you now: " : label + ": " }), text + ".");
+    };
     if (pass) {
-      const inProgress = pass.rise.getTime() <= nowDate().getTime();
-      kids.push(h("p", { class: "note", style: { color: "var(--text)" } },
-        h("b", { text: inProgress ? "Passing over you now: " : "Next pass: " }),
-        `${fmtDayTime(pass.rise, tz())}, peaks ${Math.round(pass.max.el)}° up in the ${C.compassPoint(pass.max.az)}, ${C.formatDuration(pass.set - pass.rise)}${pass.visible ? ", visible to the eye if the sky is clear" : ", not lit or the sky is too bright"}. Approximate.`));
+      kids.push(passLine(pass, "Next pass"));
+      if (nextVisible && nextVisible !== pass) kids.push(passLine(nextVisible, "Next visible pass"));
+      else if (!nextVisible && exact) kids.push(h("p", { class: "note", text: "No visible pass in the next 10 days from here." }));
+      kids.push(h("p", { class: "note", text: exact ? `Pass times are computed with SGP4 from an element set about ${Math.round(ageH)} hours old, so they are good to about a minute.` : "Pass times use a simplified orbit model, so treat them as approximate." }));
+    }
+    const train = (S.trains || []).find((t) => t.memberIdxs.includes(idx));
+    if (train) {
+      kids.push(h("p", { class: "note", style: { color: "var(--text)" } }, h("b", { text: "Part of a Starlink string: " }), `${train.count} satellites launched ${fmtDate(train.launchDate, "UTC")}, now spread over about ${Math.round(train.spanDeg)}° of their orbit.`));
     }
     if (info.purpose) kids.push(h("p", { class: "note", text: `"${info.purpose}" is the category of the CelesTrak group this object is listed in. It is not an official mission statement.` }));
     const followBtn = btn(isFollowing() ? "Exit 3D follow" : "Follow in 3D", "follow", () => { actions.toggleFollow(idx); renderLabel(); }, "primary");
     const renderLabel = () => { followBtn.replaceChildren(icon("follow"), isFollowing() ? "Exit 3D follow" : "Follow in 3D"); };
     const acts = [followBtn, btn("Find in my sky", "eye", () => actions.findInSky(sel))];
     if (pass) acts.push(link("Remind me", C.googleCalendarUrl({ title: `Look up: ${info.name} passes over ${place().name}`, start: new Date(pass.rise.getTime() - 5 * 60000), end: pass.set, details: `Rises ${C.compassPoint(pass.riseAz)}, peaks ${Math.round(pass.max.el)}° ${C.compassPoint(pass.max.az)}. Approximate times from Radar Around You.`, location: place().name }), "bell"));
-    acts.push(btn("Share", "share", () => actions.share()));
+    acts.push(btn(pass ? "Share this pass" : "Share", "share", () => (pass ? actions.openShare(passSpec({ name: info.name, short: info.name.split(" ")[0], place: place(), tz: tz(), pass })) : actions.share())));
     kids.push(h("div", { class: "actions" }, ...acts));
     return kids;
   }
@@ -210,7 +238,7 @@ export function createPanels(ctx) {
     kids.push(h("div", { class: "actions" },
       btn("Under my feet", "down", () => actions.showUnder(q), "primary"),
       link("Did you feel it?", info.url, "link"),
-      btn("Share", "share", () => actions.share())));
+      btn("Share card", "share", () => actions.openShare(quakeSpec(get(), place(), nowDate().getTime())))));
     return kids;
   }
 
@@ -409,17 +437,85 @@ export function createPanels(ctx) {
       h("button", { class: "btn small primary", onclick: () => { closeSheet(); actions.focusItem({ kind: "plane", hex: r.p.hex, rec: r }); } }, icon("eye"), "Look")); })));
 
     // tonight and space weather
-    const aur = S.sky().info.aurora;
-    const plan = tonightPlan(place(), now, aur ? aur.chance : 0);
+    const t = ctx.tonight();
     body.push(h("h3", { text: "Tonight and space weather" }));
     const kp = I.kpAt(D.meta.kp, nowMs);
-    const lines = [];
-    if (plan.best) lines.push(h("p", null, h("b", { text: `Best window: ${fmtTime(plan.best.start, tz())} to ${fmtTime(plan.best.endExclusive, tz())}` }), ` (score ${plan.best.avg} of 100)`));
-    else lines.push(h("p", { text: "No good stargazing window in the next 12 hours (daylight, cloud or a bright Moon)." }));
-    if (kp) lines.push(h("p", { text: `Geomagnetic activity (Kp) is ${kp.kp.toFixed(1)}. ${aur && aur.chance >= 3 ? `Aurora chance near ${place().name}: about ${aur.chance}%.` : `The aurora oval is too far from ${place().name} for a realistic chance.`}` }));
-    body.push(...lines);
-    if (plan.best) body.push(h("div", { class: "actions" }, link("Remind me", C.googleCalendarUrl({ title: `Stargazing window over ${place().name}`, start: plan.best.start, end: plan.best.endExclusive, details: "Best viewing window from Radar Around You.", location: place().name }), "bell", "primary")));
+    body.push(h("p", null, h("b", { text: t.verdict.headline }), `. ${t.verdict.sentence}`));
+    if (kp) body.push(h("p", { text: `Geomagnetic activity (Kp) is ${kp.kp.toFixed(1)}.` }));
+    body.push(h("div", { class: "actions" }, btn("See the full plan for tonight", "eye", () => { closeSheet(); openTonight(); }, "primary")));
     openSheet("feed", ...body);
+  }
+
+  // ------------------------------------------------------------------ tonight, strings and share sheets
+  const KIND_CLASS = { pass: "pass", train: "train", aurora: "aurora", planet: "planet", shower: "shower" };
+  function itemRow(it, { close = true } = {}) {
+    const now = nowDate();
+    const btns = [];
+    if (it.target || it.sky) btns.push(h("button", { class: "btn small primary", onclick: () => { if (close) closeSheet(); actions.showItem(it); } }, icon("eye"), "Show me"));
+    if (it.remind) btns.push(link("Remind me", it.remind.url, "bell", "small"));
+    if (it.kind === "pass" || it.kind === "train") btns.push(btn("Share card", "share", () => actions.openShare(itemSpec(it, place(), tz())), "small"));
+    return h("div", { class: "titem" },
+      h("span", { class: `tchip ${KIND_CLASS[it.kind] || ""}`, text: it.tag }),
+      h("div", { class: "grow" }, h("div", { class: "ttime mono", text: whenText(it.start || it.time, now, tz()) }), h("b", { text: it.title }), h("p", { class: "tdetail", text: it.detail }), btns.length ? h("div", { class: "actions tight" }, ...btns) : null));
+  }
+
+  function openTonight() {
+    const holder = h("div", null, h("p", { text: "Working out your night..." }));
+    openSheet("tonight", h("h2", { text: `Tonight in ${place().name}` }), holder);
+    setTimeout(() => {
+      if (S.sheet !== "tonight") return;
+      const t = ctx.tonight(true);
+      const v = t.verdict;
+      const ring = h("div", { class: `ring ${v.level}`, style: { "--p": String(v.score) } }, h("span", { text: String(v.score) }));
+      const kids = [
+        h("div", { class: "verdict" }, ring, h("div", { class: "grow" }, h("div", { class: "kicker" }, h("span", { class: `tag ${v.level === "excellent" || v.level === "good" ? "live" : v.level === "poor" ? "warn" : ""}`, text: v.level.toUpperCase() })), h("h3", { class: "vhead", text: v.headline }), h("p", { text: v.sentence }))),
+        h("div", { class: "conds" }, ...t.conditions.filter((c) => c.kind !== "note").map((c) => h("div", { class: "cond" }, h("b", { text: c.title }), h("span", { text: c.detail })))),
+      ];
+      for (const c of t.conditions.filter((x) => x.kind === "note")) {
+        kids.push(h("div", { class: "cond wide" }, h("b", { text: c.title }), h("span", { text: c.detail }),
+          c.target ? h("div", { class: "actions tight" }, h("button", { class: "btn small", onclick: () => { closeSheet(); actions.showItem({ ...c, time: c.atTime, kind: "pass" }); } }, icon("eye"), "Show me that pass")) : null));
+      }
+      kids.push(h("h3", { text: "What to look for" }));
+      if (t.items.length) kids.push(h("div", { class: "tlist" }, ...t.items.map((it) => itemRow(it))));
+      else kids.push(h("p", { text: "Nothing special is lined up. Stars and the Moon are still there." }));
+      kids.push(h("div", { class: "actions" }, btn("Share tonight", "share", () => actions.openShare(tonightSpec(t, place())), "primary")));
+      kids.push(h("p", { class: "note", text: "Satellite times use SGP4 with CelesTrak element sets and are good to about a minute. Meteor shower dates and rates are approximate. Cloud comes from a MET Norway forecast. A pass counts as visible only while the satellite is in sunlight and the Sun is more than 6 degrees below your horizon." }));
+      holder.replaceChildren(...kids);
+    }, 40);
+  }
+
+  function openTrains() {
+    const trains = S.trains || [];
+    const now = nowDate();
+    const kids = [h("h2", { text: "Starlink strings" }), h("p", { text: "Satellites from one recent launch that are still in a line. They spread out over days and weeks as they climb to their final orbit, so a string is only worth looking for in the first few weeks." })];
+    if (!trains.length) kids.push(h("p", { text: "No recent Starlink launch is still bunched together in this data." }));
+    for (const tr of trains) {
+      kids.push(h("h3", { text: `Launched ${fmtDate(tr.launchDate, "UTC")}, ${tr.count} satellites, spread over ${Math.round(tr.spanDeg)}°` }));
+      const items = trainItems({ train: tr, precise: S.precise, place: place(), from: now, hours: 72, now, limit: 4 });
+      if (items.length) kids.push(h("div", { class: "tlist" }, ...items.map((it) => itemRow(it))));
+      else kids.push(h("p", { text: `No sighting from ${place().name} in the next 3 days (it has to be dark, and the satellites have to be above the horizon and in sunlight).` }));
+      kids.push(h("div", { class: "actions tight" }, btn("Show on the globe", "follow", () => { closeSheet(); actions.focusItem({ kind: "sat", idx: tr.centralIdx }); }, "small")));
+    }
+    kids.push(h("p", { class: "note", text: "Strings are found by comparing the exact (SGP4) positions of every satellite from the same launch. Orbit data is refreshed every few hours in the full app." }));
+    openSheet("trains", ...kids);
+  }
+
+  function openShare(spec) {
+    const canvas = document.createElement("canvas");
+    try { drawCard(spec, canvas, { when: nowDate(), tz: tz() }); } catch (e) { toast("Could not draw the card", { plain: true }); return; }
+    canvas.className = "sharecanvas";
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", `${spec.title}. ${spec.subtitle}`);
+    const status = h("p", { class: "note", role: "status", text: "" });
+    const textBox = h("div", { class: "sharetext", tabindex: "0", text: spec.text });
+    const copy = async () => {
+      try { await navigator.clipboard.writeText(spec.text); status.textContent = "Text copied."; }
+      catch { const r = document.createRange(); r.selectNodeContents(textBox); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); status.textContent = "Copying is blocked here. The text is selected, copy it by hand."; }
+    };
+    const save = async () => { const ok = await actions.saveCard(canvas, spec); status.textContent = ok === true ? "Image saved." : ok || ""; };
+    openSheet("share", h("h2", { text: "Share this" }), h("div", { class: "sharebox" }, canvas), textBox,
+      h("div", { class: "actions" }, btn("Save image", "down", save, "primary"), btn("Copy text", "link", copy)), status,
+      h("p", { class: "note", text: "On a phone you can also press and hold the picture to save it." }));
   }
 
   function openAbout() {
@@ -432,14 +528,16 @@ export function createPanels(ctx) {
         h("li", { text: "Earthquakes, shaking maps, PAGER: USGS. Hazards: GDACS." }),
         h("li", { text: "Aurora and Kp: NOAA Space Weather Prediction Center. Clouds: NASA GIBS imagery from 3 Oct 2026, so the cloud layer is a day old and has visible swath seams." }),
         h("li", { text: "Aircraft and routes: adsb.lol. Airlines: OpenFlights. Cloud forecasts: MET Norway. Stars: Hipparcos-based catalogue. Earth imagery: NASA Blue Marble." })),
+      h("h3", { text: "Data health" }),
+      h("p", { text: `${num(m.health.recordsRead)} element sets read, ${num(m.health.kept)} kept. Duplicates dropped: ${m.health.duplicatesDropped}. Rejected as invalid: ${Object.values(m.health.invalidDropped).reduce((a, b) => a + b, 0)}. At the snapshot the median element set was ${m.health.ageHours.median} hours old and 90% were under ${m.health.ageHours.p90} hours. ${num(m.health.staleOver3d)} objects had data over 3 days old and ${num(m.health.staleOver7d)} over 7 days (each satellite card shows its own data age). Exact SGP4 orbits are used for ${m.preciseCount} objects: the stations, the brightest objects and everything launched in the last 30 days.` }),
       h("h3", { text: "Honest limits" }),
       h("ul", null,
-        h("li", { text: "Satellite positions in the swarm use a fast simplified orbit model, accurate to tens or a few hundred kilometres. Pass times are approximate." }),
+        h("li", { text: "Satellite positions in the globe swarm use a fast simplified orbit model, accurate to tens or a few hundred kilometres. Pass times and Starlink strings use exact SGP4 orbits where available, good to about a minute." }),
         h("li", { text: "Seismic waves use constant speeds along straight lines. It is a teaching model, not a travel-time table." }),
         h("li", { text: "3D models of aircraft and satellites are generic and not to scale. The Moon is enlarged." }),
         h("li", { text: "Sky glow is estimated from NASA night-light imagery, not measured." }),
         h("li", { text: "Phone-sensor look-around has not been tested on a real phone in this preview." })));
   }
 
-  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, buildSearchIndex, runSearch };
+  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
 }
