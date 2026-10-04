@@ -1,0 +1,65 @@
+# Runs the collector (the pipeline folder) about every 10 minutes and publishes its output to the `data` branch.
+#
+# Needs one repository secret: CONTACT_EMAIL, a real contact address. CelesTrak and MET Norway ask for identifying
+# requests, and it is sent in the User-Agent header.
+#
+# The `data` branch holds only the collector's output (manifest.json, one folder per feed, and _state, the collector's
+# memory between runs). Each run replaces it with a single commit, so the repository does not grow.
+#
+# This file was written from GitHub's documentation and has not been run. The first scheduled run also builds the
+# satellite catalogue (about 50 requests to CelesTrak), so watch it. If a source refuses a request the job turns red,
+# which is how a person gets told.
+name: Live data
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: live-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Restore the collector's memory from the data branch
+        run: |
+          mkdir live
+          if git ls-remote --exit-code --heads origin data > /dev/null 2>&1; then
+            git fetch --depth=1 origin data
+            git archive FETCH_HEAD | tar -x -C live
+          fi
+
+      - name: Collect
+        id: collect
+        continue-on-error: true
+        run: python3 -m pipeline.run --data live --baseline public
+        env:
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+
+      - name: Publish to the data branch
+        run: |
+          cd live
+          git init -q
+          git checkout -q -b data
+          git add -A
+          git -c user.name="live data collector" -c user.email="collector@users.noreply.github.com" commit -q -m "Live data $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
+
+      - name: Tell a person if the collector needs attention
+        if: steps.collect.outcome == 'failure'
+        run: |
+          echo "The collector exited with an error or a source halted it. Read the Collect step above."
+          exit 1

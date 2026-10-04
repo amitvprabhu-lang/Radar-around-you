@@ -19,29 +19,75 @@ This is a standalone project.
 ## Commands
 
 ```
-npm ci            # install (three, astronomy-engine, satellite.js, esbuild)
-npm test          # 82 unit tests, no browser needed
-npm run build     # bundles src/ into one page: dist/radar.html
-npm run e2e       # 150 browser checks on a phone-sized and a desktop-sized window (needs Playwright, see below)
-npm run data      # repacks raw/ and raw2/ into public/ (needs python3 with numpy, pillow, brotli)
+npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
+npm test                # 106 unit tests for the app, no browser needed
+npm run test:pipeline   # 82 tests for the data pipeline (Python, standard library only)
+npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
+npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
+npm run e2e             # 150 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:live        # 39 browser checks of live mode: new publishes, stale, failing, paused and offline states
+npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
+npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
 ```
 
 The page loads its data from `public/` with relative URLs, so any static host works. To try it locally, serve `dist/radar.html` and `public/` from the same folder root.
 
 `harness.mjs` serves the built page and `public/` inside Chromium through Playwright routes, because the sandbox proxy blocks localhost. It expects Playwright at `/opt/node-tools/node_modules/playwright`, which is specific to the build sandbox. Change that one path on another machine.
 
+## Live data
+
+The app can run on bundled data (a snapshot taken on 4 Oct 2026) or on data that a collector keeps fresh. The collector is the `pipeline/` folder. It fetches each source on its own schedule, checks it, keeps the last good copy if anything goes wrong, and writes plain static files plus a `manifest.json` that says what is current and how fresh. The page reads that manifest, uses the live files, and keeps polling while it is open.
+
+**What is live, and how often it is asked** (each interval is tied in `pipeline/config.py` to the source page or response headers it came from, or marked as our own choice):
+
+| Feed | Source | We ask | The source says |
+|---|---|---|---|
+| Earthquakes | USGS | every 10 min | feed page: "Updated every minute" |
+| Storms, floods, fires, volcanoes | GDACS | every 15 min | feed page: "updated every 6 minutes" |
+| Aurora forecast | NOAA SWPC | every 15 min | a 30 to 90 minute forecast; refresh interval not stated |
+| Kp | NOAA SWPC | every 30 min | refresh interval not stated |
+| Cloud forecast per place | MET Norway | every 60 min | do not repeat before the `Expires` header (about 30 min) |
+| Aircraft per place | adsb.lol | every 10 min | rate limits not stated |
+| Satellite orbits | CelesTrak | every 2 hours | "updates are once every 2 hours" |
+| Satellite catalogue | CelesTrak | once a day | not stated |
+
+Not live yet, and listed as such in the app's Data status sheet: stars, coastlines, textures and the cloud image, flight routes and airlines, and the shaking maps for individual quakes.
+
+**What the app does with it.** New quakes, hazards, aurora, Kp, cloud forecasts and aircraft appear without a reload. New satellite orbits change the numbering of every object, so the app shows a "Reload" prompt instead of swapping them in. Every feed has a stale limit; the Data tile at the start of the stats strip, the dot on the clock and the Data status sheet show fresh, retrying, stale or paused states, when each feed was last confirmed current, what its source says about itself, and its credit. If the data folder cannot be reached the page keeps what it has and says so. If a live file fails at start the bundled copy is used for it.
+
+**How the collector behaves.** Every request carries an identifying User-Agent with your contact address. A failed or invalid answer never replaces good data. Repeated failures back off, up to 8 times the normal interval. CelesTrak's policy says to stop at the first non-200 answer and tell a person, so on one it stops, makes no retry and does not follow redirects, waits 6 hours (our choice) and then tries once; the run exits with code 2 so a scheduler shows a failed job. Output files are written under a version folder named for the fetch time, and each feed's files share one version, so a reader can never mix two builds.
+
+**Running it.**
+
+```
+export CONTACT_EMAIL=you@example.com     # sent to the sources in the User-Agent
+npm run pipeline -- --data live --baseline public
+```
+
+Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the page. `npm run pipeline -- --list` prints each feed with what its source says.
+
+**Scheduling.** `.github/workflows/live-data.yml` runs the collector about every 10 minutes and publishes its output to a `data` branch of the repository as a single commit. It needs a repository secret named `CONTACT_EMAIL`. `.github/workflows/ci.yml` runs the unit tests on every push. Both were written from GitHub's documentation and have not been run yet.
+
+**Serving it is not decided.** The page needs `live/` next to it. Two ways exist: serve the `data` branch next to the page (for example with GitHub Pages), or copy the folder to any static host. Neither has been tried. The bundled preview on claude.ai cannot reach any feed, so it is built with live polling off and shows the snapshot, and the Data tile says so.
+
+**Not tested here.** The build sandbox's connection to CelesTrak is reset mid-request, so a live download of element sets and the daily catalogue build have not been run against the real service. The satellite path was tested at full size with the real 7 MB download served through the real runner, and the CelesTrak behaviour (one request, no retry, halt on any refusal) is tested with a fake network. The first scheduled run will be the first real one.
+
 ## Layout
 
 ```
 src/        the app: core.js (all the maths), sgp4.js (exact orbits), trains.js (Starlink strings), tonight.js (the
-            Tonight plan), share.js (share cards), data.js, boot.js, orbit.js, sky.js, under.js, models.js,
-            stars.js, shaders.js, info.js, plan.js, panels.js, dom.js, engine.js, main.js
+            Tonight plan), share.js (share cards), live.js (reads the manifest, polls, freshness), data.js, boot.js,
+            orbit.js, sky.js, under.js, models.js, stars.js, shaders.js, info.js, plan.js, panels.js, dom.js,
+            engine.js, main.js
+pipeline/   the collector: config.py (feed registry), net.py, validate.py, pack.py, catalogue.py, feeds.py,
+            runner.py, run.py, and tests/ with real trimmed responses as fixtures
+.github/    the scheduler and test workflows
 test/       unit tests, checked against satellite.js, astronomy-engine and the real packed data
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
-e2e.mjs, harness.mjs, smoke/   browser tests and debugging scripts
+e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts
 build_data.py, fetch_*.py, build_snapshot.py   data pipeline (inputs live in raw/ and raw2/, which are git-ignored and not in the repository; the fetch scripts read your contact address from the CONTACT_EMAIL environment variable and put it in the User-Agent header, as the data providers ask)
 docs/       research reports, the technical plan, screenshots from the latest end-to-end run
 v1/         the first prototype, kept for reference
@@ -62,7 +108,9 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 
 ## Honest limits
 
-- The data is a snapshot taken on 4 Oct 2026. Within 36 hours of the snapshot the clock is real time; after that it counts forward from the snapshot.
+- Without a live folder the data is a snapshot taken on 4 Oct 2026. Within 36 hours of the newest orbit data the clock is real time; after that it counts forward from it.
+- Aircraft move on a short looping animation from where they were when observed, not by the real time since the observation.
+- The hazard list now includes Orange and Red alerts and pages through GDACS. An ended event stays listed for 7 days (our choice). GDACS says its results are model output that "should not be used for decision making" on their own.
 - Satellite positions on the globe use a fast two-body orbit with J2 drift, good to tens or a few hundred kilometres over a day or two. About 200 objects (the ISS, bright objects, launches of the last 30 days) use exact SGP4 for passes and strings; everything else falls back to the fast model, and its cards say so. SGP4 itself is only as good as the age of the element set, which each card shows.
 - Tonight's cloud figure is a forecast from MET Norway sampled in the snapshot, so it is stale after the snapshot day. The verdict is a simple score, not a measured seeing report.
 - A meteor shower is listed only within 3 days of its peak. That limit is an editorial choice, not a published threshold. The table of dates, rates and radiants was copied by hand from Table 5 of the IMO 2027 meteor shower calendar (ten of its 39 rows). The IMO says the maximum dates are accurate only for 2027, so another year can be a day or so off.
@@ -75,6 +123,9 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 
 ## To verify before a public launch
 
+- The two workflows, on the first real runs, and whether scheduled runs keep going: GitHub's documentation says scheduled workflows in a public repository are disabled after 60 days with no repository activity, and I have not checked whether the collector's own pushes count as activity.
+- adsb.lol's ODbL 1.0 obligations for the aircraft data we republish, and its rate limits (not stated on the pages read).
+- That MET Norway, GDACS and the NOAA files can be fetched by the collector from GitHub's runners (all but CelesTrak were fetched from the build sandbox).
 - Launch site coordinates in `src/core.js` (`LAUNCH_SITES`) were written from public knowledge, not from a data feed.
 - The aircraft type name table in `src/info.js` covers common types only. Check it against an official list.
 - OpenFlights airline names can be out of date (for example a callsign prefix showing an old airline name).

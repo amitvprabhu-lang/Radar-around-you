@@ -4,7 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-execFileSync("node", ["build.mjs", "--b64"], { stdio: "inherit" });
+// The preview host serves only the files published with the page and cannot reach live feeds, so live polling is off.
+execFileSync("node", ["build.mjs", "--b64"], { stdio: "inherit", env: { ...process.env, LIVE_BASE: "" } });
 const out = "preview";
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });

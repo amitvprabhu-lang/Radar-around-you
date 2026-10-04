@@ -1,0 +1,28 @@
+# Runs the tests that need no browser and no network: the app's unit tests and the pipeline's tests.
+# The browser suites (npm run e2e and npm run e2e:live) need Playwright and are run by hand.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:pipeline

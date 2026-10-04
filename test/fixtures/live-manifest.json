@@ -1,0 +1,259 @@
+{
+ "schema": 1,
+ "pipeline": 1,
+ "generatedAt": "2026-10-04T18:35:02Z",
+ "pollSec": 300,
+ "feeds": {
+  "quakes": {
+   "label": "Earthquakes",
+   "source": "U.S. Geological Survey",
+   "docUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php",
+   "says": "Feed page: \"Updated every minute.\" Response headers: cache-control max-age=60.",
+   "licence": "USGS Copyrights and Credits page: \"USGS-authored or produced data and information are considered to be in the U.S. Public Domain\"; credit is requested.",
+   "credit": "Earthquakes: U.S. Geological Survey",
+   "refreshSec": 600,
+   "staleAfterSec": 2400,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:33:46Z",
+   "fetchedAt": "2026-10-04T18:33:46Z",
+   "sourceTime": "2026-10-04T18:33:27Z",
+   "count": 330,
+   "version": "20261004T183346Z",
+   "files": {
+    "quakes.json": "quakes/20261004T183346Z/quakes.json"
+   },
+   "sizes": {
+    "quakes.json": 79352
+   },
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T18:42:46Z",
+   "halted": null
+  },
+  "events": {
+   "label": "Storms, floods, fires and volcanoes",
+   "source": "GDACS (Global Disaster Alert and Coordination System)",
+   "docUrl": "https://www.gdacs.org/feed_reference.aspx",
+   "says": "Feed reference page: its popular feeds are \"updated every 6 minutes\". The cadence of the API we call is not stated on the page.",
+   "licence": "Terms of use page: a disclaimer only (results are model output, \"may require further validation\", \"should not be used for decision making\" alone). A reuse licence is not stated on the page.",
+   "credit": "Hazards: GDACS",
+   "refreshSec": 900,
+   "staleAfterSec": 3600,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:33:59Z",
+   "fetchedAt": "2026-10-04T18:33:59Z",
+   "sourceTime": "2026-10-05T01:00:00Z",
+   "count": 300,
+   "version": "20261004T183359Z",
+   "files": {
+    "events.json": "events/20261004T183359Z/events.json"
+   },
+   "sizes": {
+    "events.json": 102102
+   },
+   "note": "1 red, 5 orange",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T18:47:59Z",
+   "halted": null
+  },
+  "aurora": {
+   "label": "Aurora forecast",
+   "source": "NOAA Space Weather Prediction Center",
+   "docUrl": "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast",
+   "says": "Product page: \"a 30 to 90 minute forecast\". The refresh interval is not stated on the page; response headers: cache-control max-age=60.",
+   "licence": "Not stated on the pages read.",
+   "credit": "Aurora: NOAA Space Weather Prediction Center",
+   "refreshSec": 900,
+   "staleAfterSec": 3600,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:34:00Z",
+   "fetchedAt": "2026-10-04T18:34:00Z",
+   "sourceTime": "2026-10-04T18:23:00Z",
+   "count": 20331,
+   "version": "20261004T183400Z",
+   "files": {
+    "aurora.bin": "aurora/20261004T183400Z/aurora.bin",
+    "aurora.json": "aurora/20261004T183400Z/aurora.json"
+   },
+   "sizes": {
+    "aurora.bin": 65160,
+    "aurora.json": 72
+   },
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T18:48:00Z",
+   "halted": null
+  },
+  "kp": {
+   "label": "Geomagnetic activity (Kp)",
+   "source": "NOAA Space Weather Prediction Center",
+   "docUrl": "https://www.spaceweather.gov/content/data-access",
+   "says": "The refresh interval is not stated on the page; response headers: cache-control max-age=60.",
+   "licence": "Not stated on the pages read.",
+   "credit": "Kp: NOAA Space Weather Prediction Center",
+   "refreshSec": 1800,
+   "staleAfterSec": 10800,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:34:00Z",
+   "fetchedAt": "2026-10-04T18:34:00Z",
+   "sourceTime": "2026-10-04T15:00:00Z",
+   "count": 16,
+   "version": "20261004T183400Z",
+   "files": {
+    "kp.json": "kp/20261004T183400Z/kp.json"
+   },
+   "sizes": {
+    "kp.json": 605
+   },
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T19:03:00Z",
+   "halted": null
+  },
+  "clouds": {
+   "label": "Cloud forecast",
+   "source": "MET Norway",
+   "docUrl": "https://api.met.no/doc/TermsOfService",
+   "says": "Terms: \"don't repeat requests until the time indicated in the Expires response header\" and use If-Modified-Since. Measured: Expires about 30 minutes after the request.",
+   "licence": "Terms: attribution required as in CC BY 4.0; requests must identify the application in the User-Agent; browsers \"should not contact the API directly\".",
+   "credit": "Weather: MET Norway",
+   "refreshSec": 3600,
+   "staleAfterSec": 14400,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:34:09Z",
+   "fetchedAt": "2026-10-04T18:34:09Z",
+   "sourceTime": "2026-10-04T17:31:19Z",
+   "count": 6,
+   "version": "20261004T183409Z",
+   "files": {
+    "clouds.json": "clouds/20261004T183409Z/clouds.json"
+   },
+   "sizes": {
+    "clouds.json": 12156
+   },
+   "note": "6 of 6 places refreshed",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T19:33:09Z",
+   "halted": null
+  },
+  "planes": {
+   "label": "Aircraft",
+   "source": "adsb.lol",
+   "docUrl": "https://www.adsb.lol/docs/open-data/api/",
+   "says": "Refresh interval and rate limits are not stated on the pages read.",
+   "licence": "Pages read: \"License: ODbL 1.0\". Its attribution and share-alike conditions need reading before a public launch.",
+   "credit": "Aircraft: adsb.lol (ODbL 1.0)",
+   "refreshSec": 600,
+   "staleAfterSec": 2400,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:34:17Z",
+   "fetchedAt": "2026-10-04T18:34:17Z",
+   "sourceTime": "2026-10-04T18:34:17Z",
+   "count": 647,
+   "version": "20261004T183417Z",
+   "files": {
+    "planes.json": "planes/20261004T183417Z/planes.json"
+   },
+   "sizes": {
+    "planes.json": 80374
+   },
+   "note": "6 of 6 places refreshed",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T18:43:17Z",
+   "halted": null
+  },
+  "satellites": {
+   "label": "Satellite orbits",
+   "source": "CelesTrak",
+   "docUrl": "https://celestrak.org/usage-policy.php",
+   "says": "Usage policy: \"For GP data, updates are once every 2 hours.\" Stop at the first non-200 answer and tell a human; repeating gets the address firewalled.",
+   "licence": "Usage policy page read; it asks users to follow it and to cache. No licence text on that page.",
+   "credit": "Orbits: CelesTrak",
+   "refreshSec": 7200,
+   "staleAfterSec": 21600,
+   "status": "ok",
+   "checkedAt": "2026-10-04T18:35:02Z",
+   "fetchedAt": "2026-10-04T18:35:02Z",
+   "sourceTime": "2026-10-04T19:13:46Z",
+   "count": 19316,
+   "version": "20261004T183502Z",
+   "files": {
+    "swarm.bin": "satellites/20261004T183502Z/swarm.bin",
+    "ids.bin": "satellites/20261004T183502Z/ids.bin",
+    "details.bin": "satellites/20261004T183502Z/details.bin",
+    "names.txt": "satellites/20261004T183502Z/names.txt",
+    "precise.json": "satellites/20261004T183502Z/precise.json",
+    "satmeta.json": "satellites/20261004T183502Z/satmeta.json"
+   },
+   "sizes": {
+    "swarm.bin": 386320,
+    "ids.bin": 77264,
+    "details.bin": 154528,
+    "names.txt": 279792,
+    "precise.json": 25130,
+    "satmeta.json": 5494
+   },
+   "note": "206 exact orbits, 162 launched in the last 30 days, median element age 15.1 h",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-04T20:34:02Z",
+   "halted": null
+  },
+  "catalogue": {
+   "label": "Satellite catalogue",
+   "source": "CelesTrak",
+   "docUrl": "https://celestrak.org/usage-policy.php",
+   "says": "The catalogue refresh interval is not stated on the pages read. Larger lists are rate limited, so this is fetched once a day.",
+   "licence": "Usage policy page read; no licence text on that page.",
+   "credit": "Catalogue: CelesTrak",
+   "refreshSec": 86400,
+   "staleAfterSec": 259200,
+   "status": "never",
+   "checkedAt": null,
+   "fetchedAt": null,
+   "sourceTime": null,
+   "count": null,
+   "version": null,
+   "files": {},
+   "sizes": {},
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": null,
+   "halted": null
+  }
+ },
+ "static": [
+  {
+   "id": "stars",
+   "label": "Stars and constellation lines",
+   "note": "Fixed catalogue packed at build time (Hipparcos based). Non-commercial licence, see docs/feature-sources.md."
+  },
+  {
+   "id": "coast",
+   "label": "Coastlines",
+   "note": "Natural Earth outlines via world-atlas, packed at build time."
+  },
+  {
+   "id": "textures",
+   "label": "Earth, Moon and cloud images",
+   "note": "Packed at build time. The cloud image is a daily NASA GIBS composite from the build day and is not refreshed by this pipeline yet."
+  },
+  {
+   "id": "routes",
+   "label": "Flight routes and airlines",
+   "note": "Looked up once at build time from adsb.lol and OpenFlights. The route endpoint is marked deprecated, so this is not refreshed."
+  },
+  {
+   "id": "impact",
+   "label": "Shaking maps and population exposure",
+   "note": "Fetched once at build time for the largest quakes from USGS ShakeMap and PAGER. New quakes show no shaking map until this is made live."
+  }
+ ]
+}

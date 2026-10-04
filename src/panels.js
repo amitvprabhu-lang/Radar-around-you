@@ -4,6 +4,7 @@ import * as I from "./info.js";
 import * as SG from "./sgp4.js";
 import { trainItems, visiblePart, whenText } from "./tonight.js";
 import { drawCard, quakeSpec, passSpec, itemSpec, tonightSpec, CARD_W, CARD_H } from "./share.js";
+import { agoText, STATE_LABEL } from "./live.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
 const MMI_ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
@@ -518,10 +519,60 @@ export function createPanels(ctx) {
       h("p", { class: "note", text: "On a phone you can also press and hold the picture to save it." }));
   }
 
+  // ------------------------------------------------------------------ data status
+  function stateTime(iso) {
+    return iso ? fmtUtc(new Date(iso)) : "not stated";
+  }
+  function feedRow(r, nowMs) {
+    const f = r.feed;
+    const pill = h("span", { class: "statepill " + r.state, text: STATE_LABEL[r.state] });
+    const bits = [r.ageSec == null ? "never checked" : `checked ${agoText(r.ageSec)}`];
+    if (f.sourceTime) bits.push(`source time ${stateTime(f.sourceTime)}`);
+    if (f.count != null) bits.push(`${num(f.count)} item${f.count === 1 ? "" : "s"}`);
+    return h("div", { class: "feedrow", "data-feed": r.id },
+      h("div", { class: "frow-head" }, h("b", { text: f.label }), pill),
+      h("p", { class: "mono small", text: bits.join(" · ") }),
+      h("p", { class: "note", text: `${f.source}. ${f.says}` }),
+      f.note ? h("p", { class: "note", text: f.note }) : null,
+      f.error ? h("p", { class: "note warn", text: `Last problem: ${f.error}` }) : null,
+      h("p", { class: "note" }, h("a", { href: f.docUrl, target: "_blank", rel: "noopener noreferrer", text: "Source page" }), ` · Reuse, in the source's own words: ${f.licence}`));
+  }
+  function openStatus() {
+    const st = actions.liveStatus();
+    const kids = [h("h2", { text: "Data status" })];
+    if (!st.manifest || !st.summary) {
+      kids.push(h("p", { text: `This copy of the app is showing the bundled snapshot taken ${fmtUtc(new Date(D.meta.taken))}. Live feeds are not connected here, so nothing on screen updates by itself.` }));
+      kids.push(h("p", { class: "note", text: "Live data appears when the data folder written by the collector (the pipeline folder in the project) is published next to the page." }));
+      if (st.state && st.state.lastPollAt) kids.push(h("p", { class: "note", text: `The page last looked for it ${agoText((Date.now() - st.state.lastPollAt) / 1000)} and found nothing.` }));
+      openSheet("status", ...kids);
+      return;
+    }
+    const sum = st.summary, nowMs = Date.now();
+    const bad = sum.counts.failing + sum.counts.stale + sum.counts.none + sum.counts.halted;
+    kids.push(h("p", { text: bad ? `${sum.counts.fresh} of ${sum.counts.fresh + bad} feeds are up to date.` : "Every feed is up to date." }));
+    kids.push(h("p", { class: "note", text: `The collector last wrote its report ${agoText(sum.generatedAgeSec)}. Each time is when the collector last confirmed that feed was current. Where a source gives its own time, that is shown too.` }));
+    if (st.state && st.state.offline) kids.push(h("p", { class: "note warn", text: `This page could not reach the data folder on its last try, so it is showing what it already had.` }));
+    if (st.state && st.state.satellitesWaiting) kids.push(h("div", { class: "actions" }, btn("Reload to use newer orbit data", "down", () => actions.reloadForOrbits(), "primary")));
+    if (st.fellBack && st.fellBack.length) kids.push(h("p", { class: "note warn", text: `Could not load live ${st.fellBack.join(", ")} at start, so the bundled snapshot was used for ${st.fellBack.length === 1 ? "it" : "them"}.` }));
+    kids.push(...sum.rows.map((r) => feedRow(r, nowMs)));
+    const stat = st.manifest.static || [];
+    if (stat.length) {
+      kids.push(h("h3", { text: "Not live yet" }));
+      kids.push(h("ul", null, ...stat.map((x) => h("li", { text: `${x.label}: ${x.note}` }))));
+    }
+    kids.push(h("p", { class: "note", text: "Credits: " + [...new Set(sum.rows.map((r) => r.feed.credit))].join("; ") + "." }));
+    openSheet("status", ...kids);
+  }
+
   function openAbout() {
     const m = D.meta;
+    const st = actions.liveStatus ? actions.liveStatus() : { used: {}, manifest: null };
+    const liveUsed = Object.keys(st.used || {}).length > 0;
     openSheet("about", h("h2", { text: "About this prototype" }),
-      h("p", { text: `Data snapshot: ${fmtUtc(new Date(m.taken))}. ${ctx.clock.state.simulated ? "The clock runs forward from the snapshot, because it is more than 36 hours old." : "The clock is real time, and satellite positions are computed on your device."}` }),
+      h("p", { text: liveUsed
+        ? `Live data: orbits fetched ${fmtUtc(new Date(m.taken))}, and the other feeds refresh while the page is open. ${ctx.clock.state.simulated ? "The clock runs forward from that time, because the data is more than 36 hours old." : "The clock is real time, and satellite positions are computed on your device."}`
+        : `Data snapshot: ${fmtUtc(new Date(m.taken))}. ${ctx.clock.state.simulated ? "The clock runs forward from the snapshot, because it is more than 36 hours old." : "The clock is real time, and satellite positions are computed on your device."}` }),
+      h("div", { class: "actions" }, btn("Data status", "link", () => openStatus(), "small")),
       h("h3", { text: "Where the data comes from" }),
       h("ul", null,
         h("li", { text: "Satellites and orbits: CelesTrak (GP data and the satellite catalogue)." }),
@@ -539,5 +590,5 @@ export function createPanels(ctx) {
         h("li", { text: "Phone-sensor look-around has not been tested on a real phone in this preview." })));
   }
 
-  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
+  return { replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
 }

@@ -54,7 +54,7 @@ FEEDS = {f.id: f for f in [
          "https://api.met.no/weatherapi/locationforecast/2.0/compact",
          "https://api.met.no/doc/TermsOfService",
          "Terms: \"don't repeat requests until the time indicated in the Expires response header\" and use If-Modified-Since. Measured: Expires about 30 minutes after the request.",
-         "Terms: attribution required as in CC BY 4.0; requests must identify the application in the User-Agent; browsers \"should not contact the API directly\".",
+         "Attribution required as in CC BY 4.0; requests must identify the application in the User-Agent; browsers \"should not contact the API directly\".",
          "Weather: MET Norway", 3600, 14400),
     Feed("planes", "Aircraft", "adsb.lol",
          "https://api.adsb.lol/v2/point",

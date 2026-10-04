@@ -156,5 +156,8 @@ def pack_satellites(sources, stations, visual, catalogue, ref_ms, taken):
             "owners": [catalogue["owners"].get(c, c) for c in owners_used], "ownerCodes": owners_used,
             "sites": [catalogue["sites"].get(c, c) for c in sites_used], "siteCodes": sites_used,
             "purposes": [p[0] for p in PURPOSES], "newIdx": new_idx, "health": health, "preciseCount": len(rows)}
-    report = {"kinds": kinds, "newest_epoch": max(parse_epoch_ms(r) for r in gp), "precise": len(rows), "new": len(new_idx)}
+    # some operators publish element sets dated slightly ahead; the reported source time never runs ahead of the build time
+    epochs = [parse_epoch_ms(r) for r in gp]
+    newest = max([e for e in epochs if e <= ref_ms] or epochs)
+    report = {"kinds": kinds, "newest_epoch": newest, "precise": len(rows), "new": len(new_idx)}
     return files, meta, report

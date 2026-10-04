@@ -10,7 +10,7 @@ const metrics = {};
 
 async function boot(label, viewport, mobile) {
   const stats = { files: {}, bytes: 0 };
-  const { p } = await openPage(browser, process.env.PAGE || "dist/radar.html", { viewport, mobile, label, errors, stats });
+  const { p } = await openPage(browser, process.env.PAGE || "dist/radar-snapshot.html", { viewport, mobile, label, errors, stats });
   const t0 = Date.now();
   await p.goto("https://radar.test/", { waitUntil: "commit" });
   await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });

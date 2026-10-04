@@ -284,7 +284,6 @@ export function createSky(ctx) {
   api.setPlace = (city) => {
     place = { ...city, lat: Number(city.lat), lon: Number(city.lon) };
     info.glow = sampleGlow(place);
-    info.aurora = auroraFromGrid(D.aurora, place.lat, place.lon, 1100);
     const o = observerEcef(place.lat, place.lon);
     satU.obs.value.set(o.x / R_KM, o.z / R_KM, -o.y / R_KM);
     const la = place.lat * DEG, lo = place.lon * DEG;
@@ -294,7 +293,14 @@ export function createSky(ctx) {
     planeObjs.forEach((o2) => { planeGroup.remove(o2.model); if (o2.trail) scene.remove(o2.trail.obj); });
     planeObjs.clear();
     bodiesAt = 0; scan = { t: 0, list: [] }; api.scan = scan; job = null;
-    // aurora curtains toward the oval
+    buildAuroraCurtains();
+    // first view: face the Moon if it is up, else the south (north in the southern hemisphere)
+    api.faceDefault();
+  };
+
+  // aurora curtains toward the oval, from the current grid; called when the place changes and when a new grid arrives
+  function buildAuroraCurtains() {
+    info.aurora = auroraFromGrid(D.aurora, place.lat, place.lon, 1100);
     const a = info.aurora;
     if (a && a.chance >= 3 && a.at) {
       const look = a.distKm < 60 || a.here >= a.at.prob * 0.9 ? { az: 0, el: 50 } : lookAngle(place.lat, place.lon, a.at.lat, a.at.lon, 110);
@@ -305,8 +311,22 @@ export function createSky(ctx) {
       while (curtainGroup.children.length) { const c = curtainGroup.children.pop(); c.geometry.dispose(); }
       curtainGroup.userData.on = false;
     }
-    // first view: face the Moon if it is up, else the south (north in the southern hemisphere)
-    api.faceDefault();
+  }
+  api.refreshAurora = () => { if (place) buildAuroraCurtains(); };
+
+  // New cloud forecast and aircraft for the place already on show, without resetting the view or the Moon and planets.
+  // Aircraft that are no longer in the list are removed so none is left hanging at its last position.
+  api.refreshPlace = (city) => {
+    if (!place || !city || city.id !== place.id) return;
+    place.clouds = city.clouds;
+    place.planes = city.planes;
+    const keep = new Set((city.planes ? city.planes.aircraft : []).map((p) => p.hex));
+    for (const [hex, o] of [...planeObjs]) {
+      if (keep.has(hex)) continue;
+      planeGroup.remove(o.model);
+      if (o.trail) scene.remove(o.trail.obj);
+      planeObjs.delete(hex);
+    }
   };
   api.faceDefault = () => {
     view.pitch = 32; view.fov = 72;

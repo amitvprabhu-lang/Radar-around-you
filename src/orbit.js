@@ -176,6 +176,10 @@ export function createOrbit(ctx) {
     }
   }
   buildMarkers();
+  // after a live update of D.quakes or D.events
+  api.refreshMarkers = buildMarkers;
+  // after D.aurora was overwritten in place with a new grid
+  api.refreshAurora = () => { auroraTex.needsUpdate = true; };
 
   // you are here
   const youGeo = new THREE.BufferGeometry();

@@ -16,7 +16,9 @@ export async function launch() {
   });
 }
 
-export async function openPage(browser, htmlFile, { viewport = { width: 390, height: 780 }, mobile = true, label = "page", errors = [], stats = null } = {}) {
+// `live` is an optional in-memory live folder for tests: { files: Map("live/..." -> Buffer|object), failing: Set(paths) }.
+// Tests change it while the page runs to simulate the pipeline publishing, going quiet, or the host failing.
+export async function openPage(browser, htmlFile, { viewport = { width: 390, height: 780 }, mobile = true, label = "page", errors = [], stats = null, live = null } = {}) {
   const body = fs.readFileSync(dir + htmlFile, "utf8");
   const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${body}</body></html>`;
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, ignoreHTTPSErrors: true });
@@ -27,6 +29,16 @@ export async function openPage(browser, htmlFile, { viewport = { width: 390, hei
   await p.route("https://radar.test/**", (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: page });
+    if (url.pathname.startsWith("/live/")) {
+      let rel = decodeURIComponent(url.pathname.slice(1));
+      let twin = false;
+      if (rel.endsWith(".bin.txt")) { rel = rel.slice(0, -4); twin = true; }
+      if (!live || live.failing.has(rel) || !live.files.has(rel)) return route.fulfill({ status: live && live.failing.has(rel) ? 500 : 404, body: "no" });
+      const v = live.files.get(rel);
+      let buf = Buffer.isBuffer(v) ? v : Buffer.from(JSON.stringify(v));
+      if (twin) buf = Buffer.from(buf.toString("base64"));
+      return route.fulfill({ status: 200, contentType: MIME[path.extname(rel)] || "application/octet-stream", body: buf, headers: { "access-control-allow-origin": "*", "cache-control": "no-store" } });
+    }
     let f = path.join(dir, "public", decodeURIComponent(url.pathname));
     let asBase64 = false;
     if (f.endsWith(".bin.txt")) { f = f.slice(0, -4); asBase64 = true; } // the preview build asks for base64 twins of the binary files

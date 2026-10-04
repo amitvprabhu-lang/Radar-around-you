@@ -76,6 +76,18 @@ class Layout(unittest.TestCase):
             self.assertEqual(name, cat["owners"].get(code, code))
 
 
+class SourceTime(unittest.TestCase):
+    def test_the_reported_newest_epoch_never_runs_ahead_of_the_build_time(self):
+        s, st, vis, cat = sample()
+        ahead = copy.deepcopy(s[0][0])
+        ahead["NORAD_CAT_ID"] = 999002
+        ahead["EPOCH"] = "2026-10-05T10:00:00.000000"  # within the 24 hour allowance, but later than REF
+        _, meta, rep = P.pack_satellites([s[0] + [ahead]] + s[1:], st, vis, cat, REF, TAKEN)
+        self.assertEqual(meta["health"]["invalidDropped"], {}, "an epoch a few hours ahead is accepted, as before")
+        self.assertLessEqual(rep["newest_epoch"], REF)
+        self.assertGreater(rep["newest_epoch"], REF - 3 * 86400000, "and it is the newest epoch that is not ahead")
+
+
 class Gate(unittest.TestCase):
     def bad(self, mutate):
         s, st, vis, cat = sample()

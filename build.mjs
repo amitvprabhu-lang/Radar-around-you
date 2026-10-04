@@ -20,7 +20,8 @@ const stubWasm = {
 const result = await esbuild.build({
   plugins: [stubWasm],
   entryPoints: [entry], bundle: true, minify: true, format: "iife", target: "es2020", write: false, legalComments: "none", charset: "utf8",
-  define: { "process.env.NODE_ENV": '"production"', __B64__: b64 ? "true" : "false" },
+  // LIVE_BASE="" turns live polling off (a snapshot-only host); any other value is the folder the pipeline publishes into
+  define: { "process.env.NODE_ENV": '"production"', __B64__: b64 ? "true" : "false", ...(process.env.LIVE_BASE !== undefined ? { __LIVE_BASE__: JSON.stringify(process.env.LIVE_BASE) } : {}) },
 });
 const js = result.outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
 const html = fs.readFileSync(template, "utf8").replace("__APP__", () => js);

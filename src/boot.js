@@ -40,5 +40,5 @@ export async function boot({ canvas, quality = "auto", onProgress = () => {} }) 
 }
 
 export function startLater(app, cb) {
-  return loadLater().then((later) => { app.D.later = later; if (cb) cb(later); return later; });
+  return loadLater(app.D.live).then((later) => { app.D.later = later; if (cb) cb(later); return later; });
 }

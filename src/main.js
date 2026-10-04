@@ -11,6 +11,8 @@ import * as I from "./info.js";
 import { tonightPlan } from "./plan.js";
 import { buildTonight } from "./tonight.js";
 import { loadPrecise } from "./sgp4.js";
+import { loadFeedData } from "./data.js";
+import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
@@ -74,6 +76,8 @@ async function main() {
     tonight: (force) => tonightModel(force),
   });
   const { toast } = panels;
+  // live feed state, declared early because the first draw of the stats strip already asks for it (see "live feeds" below)
+  let liveCtl = null, sumCache = { at: 0, value: null };
 
   function render() {
     // the three scenes share one renderer and one canvas
@@ -234,6 +238,17 @@ async function main() {
     const c = S.place;
     $("placeChip").replaceChildren(icon("pin"), c.name, h("small", { text: c.country }));
   }
+  // the Data tile: is the picture live, and are the feeds behind it up to date
+  function dataTile() {
+    const sum = liveSummary();
+    const open = () => panels.openStatus();
+    if (!sum) return ["data", "Snapshot", "bundled data, not live", open];
+    const bad = sum.counts.failing + sum.counts.stale + sum.counts.none + sum.counts.halted;
+    if (sum.overall === "fresh") return ["data", "Live", "all feeds up to date", open];
+    if (sum.overall === "failing") return ["data", "Live", `${sum.counts.failing} feed${sum.counts.failing === 1 ? "" : "s"} retrying`, open];
+    if (sum.overall === "halted") return ["data", "Paused", "a source asked us to wait", open];
+    return ["data", "Stale", `${bad} feed${bad === 1 ? "" : "s"} out of date`, open];
+  }
   function renderStats(force = false) {
     const el = $("stats");
     if (S.view !== "globe") { el.hidden = true; return; }
@@ -242,6 +257,7 @@ async function main() {
     const above = sky.info.above || 0;
     const recent = D.quakes.events.filter((q) => nowDate().getTime() - Date.parse(q.time) < 24 * 3600e3).length;
     const stats = [
+      dataTile(),
       ["inorbit", num(D.meta.count), "objects in orbit", () => panels.openSearch()],
       ["above", num(above), `above ${S.place.name} now`, () => setView("sky")],
       ["quakes", num(recent), "quakes in 24 h", () => panels.openFeed()],
@@ -577,7 +593,10 @@ async function main() {
     const el = $("clockText");
     const txt = rate === 1 ? (clock.state.simulated ? `SNAPSHOT ${t}` : `LIVE ${t}`) : `x${rate} ${t}`;
     if (el.textContent !== txt) el.textContent = txt;
-    el.previousElementSibling.classList.toggle("sim", rate !== 1 || clock.state.simulated);
+    const sum = liveSummary();
+    const dot = el.previousElementSibling;
+    dot.classList.toggle("sim", rate !== 1 || clock.state.simulated || (!!sum && (sum.overall === "stale" || sum.overall === "failing")));
+    dot.classList.toggle("bad", !!sum && sum.overall === "halted");
   }
 
   // ------------------------------------------------------------------ frame loop
@@ -688,7 +707,61 @@ async function main() {
     if (S.searchOpen && S.searchRender) S.searchRender();
     announceArrivals();
     renderStats(true);
+    startLive();
   });
+
+  // ------------------------------------------------------------------ live feeds
+  // The pipeline (pipeline/) publishes a manifest and versioned files. The app polls the manifest and puts new quakes,
+  // hazards, aurora, Kp, cloud forecasts and aircraft into the scene without a reload. New satellite orbits change the
+  // indexes of every object, so those are announced and applied on a reload.
+  function liveSummary() {
+    const m = liveCtl ? liveCtl.state().manifest : D.live && D.live.manifest;
+    if (!m) return null;
+    const t = Date.now();
+    if (t - sumCache.at > 5000) sumCache = { at: t, value: summarize(m, t) };
+    return sumCache.value;
+  }
+  actions.liveStatus = () => ({ manifest: liveCtl ? liveCtl.state().manifest : D.live && D.live.manifest, summary: liveSummary(), state: liveCtl ? liveCtl.state() : null, used: D.live ? D.live.used : {}, fellBack: D.live ? D.live.fellBack : [] });
+  actions.reloadForOrbits = () => location.reload();
+
+  const byTimeDesc = (a, b) => Date.parse(b.time) - Date.parse(a.time);
+  function refreshDerived() {
+    sumCache.at = 0;
+    S._tonight = null; S.statsKey = "";
+    renderStats(true);
+    if (S.precise.size) updateTonightBtn();
+  }
+  function applyCities(clouds, planes) {
+    const changed = overlayCities(D.cities, clouds, planes);
+    if (changed.has(S.place.id)) {
+      S.place = asPlace(cityById(S.place.id));
+      sky.refreshPlace(S.place);
+    }
+    refreshDerived();
+  }
+  const applyFeed = {
+    quakes(data) { D.quakes = data; D.quakes.events.sort(byTimeDesc); orbit.refreshMarkers(); refreshDerived(); },
+    events(data) { D.events = data; orbit.refreshMarkers(); refreshDerived(); },
+    kp(rows) { D.meta.kp = rows; refreshDerived(); },
+    aurora({ grid, meta }) { D.aurora.set(grid); D.meta.aurora = meta; orbit.refreshAurora(); sky.refreshAurora(); refreshDerived(); },
+    clouds(data) { applyCities(data, null); },
+    planes(data) { applyCities(null, data); },
+  };
+  function startLive() {
+    liveCtl = createLive({
+      base: LIVE_BASE, fetchFn: (u, i) => fetch(u, i), baselineTakenMs: D.live.baselineTakenMs, manifest: D.live.manifest, loaded: D.live.used,
+      loadFeed: loadFeedData, apply: (id, data) => applyFeed[id](data),
+      onState: () => { sumCache.at = 0; renderStats(); updateClockText(); if (S.sheet === "status") panels.openStatus(); },
+      onSatellites: () => toast("Newer orbit data is ready", { sub: "Reload to use it. Your place is remembered.", action: actions.reloadForOrbits, label: "Reload", ms: 14000, plain: true }),
+    });
+    liveCtl.start();
+    document.addEventListener("visibilitychange", () => {
+      const st = liveCtl.state();
+      if (!document.hidden && (!st.lastPollAt || Date.now() - st.lastPollAt > 60000)) liveCtl.pollNow();
+    });
+    // a visitor who arrives after the pipeline has been quiet should see what is current without waiting for the first interval
+    if (!D.live.manifest || Date.now() - Date.parse(D.live.manifest.generatedAt) > 120000) setTimeout(() => liveCtl.pollNow(), 4000);
+  }
 
   // The "something just happened" moments: the newest notable quake and the newest launch
   function announceArrivals() {
@@ -706,7 +779,7 @@ async function main() {
   }
 
   // hooks for tests and debugging
-  window.__radar = { S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize };
+  window.__radar = { S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize, liveCtl: () => liveCtl, liveSummary };
   window.__radarStarted = true;
 }
 

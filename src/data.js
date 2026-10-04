@@ -1,6 +1,7 @@
 // Loads the packed data files written by build_data.py. Everything is a static file, so a CDN can serve it.
 // Files are loaded in two stages: the first stage is what the first picture needs, the second loads while the visitor looks around.
 import { decodeSwarm } from "./core.js";
+import { LIVE_BASE, loadManifest, resolveSources, overlayCities } from "./live.js";
 
 const BASE = "";
 
@@ -75,51 +76,94 @@ export const TEXTURES = {
 };
 export const TEXTURES_LATER = { day4k: "tex/day4k.webp", clouds1k: "tex/clouds1k.webp" };
 
+// How long start-up waits for the live manifest before it shows the bundled snapshot instead.
+const MANIFEST_WAIT_MS = 2500;
+
+// Decode one live feed for the poller (the files are published by the pipeline, see pipeline/).
+export async function loadFeedData(id, source) {
+  const p = source.paths;
+  if (id === "quakes") return json(p["quakes.json"]);
+  if (id === "events") return json(p["events.json"]);
+  if (id === "kp") return json(p["kp.json"]);
+  if (id === "clouds") return json(p["clouds.json"]);
+  if (id === "planes") return json(p["planes.json"]);
+  if (id === "aurora") {
+    const [grid, meta] = await Promise.all([bytes(p["aurora.bin"]), json(p["aurora.json"])]);
+    return { grid: new Uint8Array(grid), meta };
+  }
+  throw new Error(`no loader for feed ${id}`);
+}
+
 // Stage one: what the first picture needs. onProgress(fraction, label)
-export async function loadCore(onProgress = () => {}) {
-  const manifest = await json("manifest.json").catch(() => []);
-  const sizes = Object.fromEntries(manifest.map((m) => [m.file, m.brotli || m.raw]));
-  const wanted = [
-    "meta.json", "swarm.bin", "stars.bin", "lines.json", "aurora.bin", "quakes.json", "events.json", "cities.json", "coast.bin",
-    ...Object.values(TEXTURES),
-  ];
-  const total = wanted.reduce((s, f) => s + (sizes[f] || 20000), 0);
+// Live files are used when the pipeline's manifest offers a complete set that is newer than the bundled snapshot;
+// anything missing or failing falls back to the snapshot, and the fallbacks are reported in `live.fellBack`.
+export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms) => loadManifest((u, i) => fetch(u, i), base, ms)) {
+  const [staticSizes, baseMeta, manifest] = await Promise.all([
+    json("manifest.json").catch(() => []),
+    json("meta.json"),
+    fetchManifest(LIVE_BASE, MANIFEST_WAIT_MS),
+  ]);
+  const sizes = Object.fromEntries(staticSizes.map((m) => [m.file, m.brotli || m.raw]));
+  const src = resolveSources(manifest, Date.parse(baseMeta.taken), LIVE_BASE);
+  const used = {}, fellBack = [];
+  const tryLive = async (id, fromLive, fromSnapshot) => {
+    if (src[id]) {
+      try { const r = await fromLive(src[id].paths); used[id] = src[id].version; return r; } catch { fellBack.push(id); }
+    }
+    return fromSnapshot();
+  };
+  const wanted = ["swarm.bin", "stars.bin", "lines.json", "aurora.bin", "quakes.json", "events.json", "cities.json", "coast.bin", ...Object.values(TEXTURES)];
+  const total = wanted.reduce((n, f) => n + (sizes[f] || 20000), 0);
   let done = 0;
   const tick = (f, label) => { done += sizes[f] || 20000; onProgress(Math.min(0.99, done / total), label); };
   const track = (f, label, p) => p.then((r) => { tick(f, label); return r; });
-  const [meta, swarmBuf, starsBuf, lines, auroraBuf, quakes, events, cities, coastBuf] = await Promise.all([
-    track("meta.json", "Reading the catalogue", json("meta.json")),
-    track("swarm.bin", "Placing satellites", bytes("swarm.bin")),
+  const [sat, starsBuf, lines, aur, quakes, events, baseCities, coastBuf, kpRows, clouds, planes] = await Promise.all([
+    track("swarm.bin", "Placing satellites", tryLive("satellites",
+      async (p) => { const [buf, satmeta] = await Promise.all([bytes(p["swarm.bin"]), json(p["satmeta.json"])]); return { buf, satmeta }; },
+      async () => ({ buf: await bytes("swarm.bin"), satmeta: null }))),
     track("stars.bin", "Lighting the stars", bytes("stars.bin")),
     track("lines.json", "Drawing constellations", json("lines.json")),
-    track("aurora.bin", "Painting the aurora oval", bytes("aurora.bin")),
-    track("quakes.json", "Finding earthquakes", json("quakes.json")),
-    track("events.json", "Checking hazards", json("events.json")),
+    track("aurora.bin", "Painting the aurora oval", tryLive("aurora",
+      async (p) => { const [buf, meta] = await Promise.all([bytes(p["aurora.bin"]), json(p["aurora.json"])]); return { buf, meta }; },
+      async () => ({ buf: await bytes("aurora.bin"), meta: null }))),
+    track("quakes.json", "Finding earthquakes", tryLive("quakes", (p) => json(p["quakes.json"]), () => json("quakes.json"))),
+    track("events.json", "Checking hazards", tryLive("events", (p) => json(p["events.json"]), () => json("events.json"))),
     track("cities.json", "Looking around you", json("cities.json")),
     track("coast.bin", "Tracing coastlines", bytes("coast.bin")),
+    tryLive("kp", (p) => json(p["kp.json"]), async () => null),
+    tryLive("clouds", (p) => json(p["clouds.json"]), async () => null),
+    tryLive("planes", (p) => json(p["planes.json"]), async () => null),
   ]);
+  const meta = { ...baseMeta, ...(sat.satmeta || {}) };
+  if (kpRows) meta.kp = kpRows;
+  if (aur.meta) meta.aurora = aur.meta;
+  overlayCities(baseCities, clouds, planes);
   return {
     meta,
-    swarmRaw: decodeSwarmFile(swarmBuf, meta.count),
+    swarmRaw: decodeSwarmFile(sat.buf, meta.count),
     stars: decodeStars(starsBuf),
     lines,
-    aurora: new Uint8Array(auroraBuf),
-    quakes, events, cities,
+    aurora: new Uint8Array(aur.buf),
+    quakes, events, cities: baseCities,
     coast: decodeCoast(coastBuf),
+    live: { manifest, sources: src, used, fellBack, baselineTakenMs: Date.parse(baseMeta.taken) },
     onTexture: (f) => tick(f, "Painting the Earth"),
   };
 }
 
 // Stage two: search index, details, impact maps, routes. Loaded after the first frame.
-export async function loadLater() {
+// The satellite files come from the same group as the swarm (live or snapshot), so the indexes line up.
+export async function loadLater(live = null) {
+  const sat = live && live.used && live.used.satellites ? live.sources.satellites.paths : null;
+  const P = (name) => (sat ? sat[name] : name);
   const [names, ids, details, impact, routes, airlines, precise] = await Promise.all([
-    text("names.txt").then(decodeNames),
-    bytes("ids.bin").then(decodeIds),
-    bytes("details.bin").then((b) => new Uint8Array(b)),
+    text(P("names.txt")).then(decodeNames),
+    bytes(P("ids.bin")).then(decodeIds),
+    bytes(P("details.bin")).then((b) => new Uint8Array(b)),
     json("impact.json"),
     json("routes.json"),
     json("airlines.json"),
-    json("precise.json"),
+    json(P("precise.json")),
   ]);
   return { names, ids, details, impact, routes, airlines, precise };
 }
