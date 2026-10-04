@@ -13,6 +13,11 @@ This is a standalone project.
 - **Tonight** ("Will I see it tonight?"): one verdict for your place (cloud, Moon, dark window, aurora chance) and a timeline of what to look for: visible satellite and ISS passes, Starlink strings, planets, meteor showers near their peak. Each item has Show me (jumps the Sky view to that time and turns to it) and Remind me (a calendar link).
 - **Starlink strings**: satellites from one recent launch that are still in a line. Found by comparing exact SGP4 positions of every satellite from the same launch. The home screen shows how many there are; the sheet says when one can be seen from your place.
 - **Exact passes**: the ISS, other bright objects and everything launched in the last 30 days use SGP4 (about 200 objects, `public/precise.json`). Pass times on their cards come from SGP4. Everything else uses the fast swarm model.
+- **Any place**: search any town or city (GeoNames, about 34,000 places of 15,000 people or more), or use your device's exact position, which is named for the largest place within 25 km and never leaves the device. The sky, calendar, Tonight and the screens below work for any place. Cloud forecasts and aircraft overhead exist only for the six cities the collector fetches for.
+- **Aurora**: Kp now with NOAA's geomagnetic storm scale in NOAA's own words, the NOAA warnings in force, your chance of aurora from NOAA's 30 to 90 minute forecast, and the last six hours of solar wind speed and magnetic field (Bz) drawn from live spacecraft data.
+- **Storms**: every storm NHC is tracking, with its position, wind in knots, km/h and mph, pressure, movement, a map with NHC's forecast track and cone of uncertainty (the cone's own caveat is quoted), Saffir-Simpson category, and distance to you. Cyclones outside NHC's areas are listed from GDACS with a warning that its wind figure is one number for the whole storm.
+- **Fires**: heat detections from three VIIRS satellites in the last 24 hours (about 190,000), grouped in 0.25 degree cells and drawn on the globe, with counts within 25, 50 and 100 km of you and the strongest clusters worldwide. A detection is a heat signal, not a confirmed wildfire.
+- **Around you**: the storms, fires, hazards, quakes and aurora that are near your place, most serious first. Each has its source and "as of" time. It links things only by distance and time and never claims one caused another; nothing in it is predicted by this app.
 - **Share cards**: a 1080 by 1350 picture and a text version for an earthquake, a satellite pass, a Starlink string or Tonight. Saved through the viewer's download permission when the host gives it, else the phone's share sheet, else press and hold.
 - **Sky calendar**: the next 90 days from your place: Moon phases, lunar and solar eclipses (with whether you can see them), oppositions and greatest elongations of the planets, close pairings of two naked-eye planets, equinoxes and solstices, and meteor shower peaks with the Moon's phase and how high the radiant gets from your latitude. Times come from the astronomy-engine library; Moon phases, seasons and solar eclipses are tested against the US Naval Observatory's published tables for 2026 and 2027 (99 phases to the minute). The home screen shows the next notable event. Lunar eclipses and planet events are checked for consistency only, because the USNO API has no table for them.
 - **Sources on every card**: each card says where its information comes from, with a link where the source has a page (USGS event page, GDACS report, CelesTrak, adsb.lol), and a quake card says whether USGS has reviewed it. The clock chip says LIVE only when live data is in use; otherwise SNAPSHOT.
@@ -22,12 +27,12 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 106 unit tests for the app, no browser needed
-npm run test:pipeline   # 82 tests for the data pipeline (Python, standard library only)
+npm test                # 152 unit tests for the app, no browser needed
+npm run test:pipeline   # 119 tests for the data pipeline (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
-npm run e2e             # 150 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:live        # 39 browser checks of live mode: new publishes, stale, failing, paused and offline states
+npm run e2e             # 192 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:live        # 76 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
 ```
@@ -48,6 +53,9 @@ The app can run on bundled data (a snapshot taken on 4 Oct 2026) or on data that
 | Storms, floods, fires, volcanoes | GDACS | every 15 min | feed page: "updated every 6 minutes" |
 | Aurora forecast | NOAA SWPC | every 15 min | a 30 to 90 minute forecast; refresh interval not stated |
 | Kp | NOAA SWPC | every 30 min | refresh interval not stated |
+| Solar wind, magnetic field, geomagnetic alerts | NOAA SWPC | every 10 min | one-minute rows; response headers `max-age=60` |
+| Tropical storms with forecast track and cone | NOAA NHC | every 15 min | response headers `max-age=300`; advisories about every 6 hours |
+| Active fire detections (3 VIIRS satellites) | NASA FIRMS (LANCE) | every 60 min | LANCE says near real-time users usually need data "within three hours"; not confirmed on a FIRMS page |
 | Cloud forecast per place | MET Norway | every 60 min | do not repeat before the `Expires` header (about 30 min) |
 | Aircraft per place | adsb.lol | every 10 min | rate limits not stated |
 | Satellite orbits | CelesTrak | every 2 hours | "updates are once every 2 hours" |

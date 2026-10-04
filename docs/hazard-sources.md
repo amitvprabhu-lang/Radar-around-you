@@ -1,0 +1,36 @@
+# Sources for the aurora, storm, fire and place features
+
+Everything here was read on 2026-10-04 from the page named, or measured from the source's own response. Anything marked NOT CONFIRMED could not be checked from a primary page. Re-read each page before a public launch: terms and URLs change.
+
+## NOAA Space Weather Prediction Center (solar wind, magnetic field, alerts, scales)
+- Feeds: `services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json`, `rtsw_mag_1m.json`, `products/alerts.json`. Rows are one minute apart; each row names its spacecraft (`source`) and an `active` flag. We use only rows flagged active. On 2026-10-04 the active spacecraft was `SOLAR1`; `ACE` and `IMAP` rows were present but not active.
+- Cadence: response headers `cache-control: max-age=60` on the mag and alerts files. The data-access page does not state a refresh interval.
+- Terms: the NWS disclaimer page (weather.gov/disclaimer) says NWS web page information is "in the public domain, unless specifically noted otherwise" and may be used without charge for any lawful purpose provided you do not claim it is your own, imply endorsement by NOAA/NWS, or modify it and present it as official government material. We show the source on every block and do not alter values.
+- Aurora physics we quote (spaceweather.gov/content/aurora-tutorial): "As the solar wind increases in speed and the interplanetary magnetic field embedded in the solar wind turns southward, the geomagnetic activity will increase and the aurora will become brighter, more active, and move further from the poles." And "When the Kp index is high (between 7 and 9), the aurora will be bright and the auroral oval will move to lower latitudes." The "15 to 45 minutes" lead time for satellite-based forecasts is from the same page.
+- Geomagnetic storm scale G1 to G5: swpc.noaa.gov/noaa-scales-explanation. Saved in `raw3/noaa-scales-explanation.txt`; `src/scales.js` is checked against it by `test/scales.test.js`. Note NOAA lists G4 as "Kp = 8, including a 9-".
+- Alert text: the messages are parsed from the plain text (`pipeline/hazards.py`). An extended warning names the serial it replaces ("Extension to Serial Number"), and the app drops the replaced one.
+- NOT CONFIRMED: which Bz coordinate system NOAA means in its tutorial. We use `bz_gsm`, the field the tutorial's "southward" is normally measured in, and say only "pointing south" for a negative value.
+
+## NOAA National Hurricane Center (storms)
+- Feed: `nhc.noaa.gov/CurrentStorms.json`, with links to each storm's forecast track and cone as KMZ files. Response headers: `cache-control: max-age=300`. Storm ids look like `ep182026`; the `binNumber` field (for example `CP2`) says where the storm is now, and for Nolo on 2026-10-04 it said Central Pacific while the id still said `ep`. We label by `binNumber`.
+- Units: `intensity` is knots. NHC's own KML for Rachel advisory 30 prints "Maximum Wind: 90 knots (105 mph)", matching the JSON value 90. NHC rounds miles per hour to the nearest 5 (90 kt as 105 mph, 55 kt as 65 mph, 45 kt as 50 mph in that file), and the app does the same.
+- Forecast hours: NHC counts forecast hours from the synoptic time (00, 06, 12 or 18 UTC) at or before the advisory. For an advisory issued at 15 UTC the "96 hr" point is valid 12 UTC four days on. The pipeline derives each point's UTC time this way and checks it against the "Valid at" local time printed in the KML; a mismatch rejects the file.
+- Dateline: the KML writes storms that cross the dateline with longitudes past 180 (Nolo's track ran to -210 and its cone to 181.8). The pipeline wraps them into range; found only by running against the live feed.
+- Cone wording, quoted from NHC's own KML: the cone "is formed by enclosing the area swept out by a set of circles along the forecast track ... two-thirds of historical official forecast errors over a 5-year sample fall within the circle. ... the entire track of a tropical cyclone can be expected to remain within the cone roughly 60-70% of the time." The KML also says "The official forecast track in KML format is an experimental product." Both are shown in the app.
+- Saffir-Simpson scale: nhc.noaa.gov/aboutsshws.php, saved in `raw3/nhc-sshws.txt`, checked by `test/scales.test.js`. NHC says the scale is "based only on a hurricane's maximum sustained wind speed" and ignores surge, rainfall flooding and tornadoes.
+- Terms: same NWS disclaimer as above.
+- GDACS tropical cyclones (used outside NHC's areas): GDACS gives one `severity` value per event. On 2026-10-04 it said 250 km/h for Nolo on all 56 of its episodes while NHC's current wind was 100 kt (185 km/h), so it is not the current wind. The app calls it "Highest wind GDACS lists for this storm" and says the current strength can be lower. NOT CONFIRMED: GDACS's own definition of the figure; the app does not claim it is a peak, only that it is one number for the whole storm.
+
+## NASA FIRMS (fire detections)
+- Files: `firms.modaps.eosdis.nasa.gov/data/active_fire/{suomi-npp-viirs-c2,noaa-20-viirs-c2,noaa-21-viirs-c2}/csv/{SUOMI_VIIRS_C2,J1_VIIRS_C2,J2_VIIRS_C2}_Global_24h.csv`. No key was needed on 2026-10-04. The `satellite` column holds `N`, `N20`, `N21` respectively; the app names them Suomi NPP, NOAA-20 and NOAA-21.
+- Latency: the LANCE page (earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data) says near real-time users "usually" need data "within three hours". The FIRMS pages themselves returned no text when read, so the exact latency for fire files is NOT CONFIRMED from a primary page. Measured: the newest detection in the files was about 2.5 hours older than the download.
+- Terms: the LANCE page says "NASA supports full and open sharing of data" and asks third parties to follow its acknowledgement, which the Fires screen shows in full: "We acknowledge the use of data and/or imagery from NASA's Land, Atmosphere Near real-time Capability for Earth observations (LANCE) (https://earthdata.nasa.gov/lance), part of NASA's Earth Science Data and Information System (ESDIS)." The same page says the information is provided "as is".
+- Our choices (not from NASA): low-confidence detections are left out (about 12 percent of rows on 2026-10-04); detections are grouped into 0.25 degree cells; the same fire seen on two passes counts twice, and the screen says so. NOT CONFIRMED: NASA's own definition of the confidence classes, since the FIRMS description page returned no text.
+
+## GeoNames (place search)
+- File: `download.geonames.org/export/dump/cities15000.zip`, read with its readme (saved by the builder's test fixture note). The readme says the data is licensed under Creative Commons Attribution 4.0, is tab-delimited UTF-8, and lists the column order we use. The file had 34,152 rows on 2026-10-04 (the readme says "ca 25.000").
+- Credit shown wherever a place from this index is used: "Place names and time zones: GeoNames (geonames.org), CC BY 4.0".
+- Limits: places under about 15,000 people are not in the file; names are not disambiguated by region (several "Springfield"), so results show country and population.
+
+## The 3D sources and the star data that are NOT yet verified
+See `docs/feature-sources.md`: the star catalogue's provenance and its non-commercial licence are still open.
