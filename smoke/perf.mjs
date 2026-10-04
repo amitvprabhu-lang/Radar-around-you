@@ -1,0 +1,26 @@
+import { launch, openPage, dir } from "../harness.mjs";
+const browser = await launch();
+const errors = [];
+const stats = { files: {}, bytes: 0 };
+const { p } = await openPage(browser, "dist/radar.html", { errors, label: "perf", viewport: { width: 390, height: 780 }, stats });
+await p.goto("https://radar.test/", { waitUntil: "commit" });
+await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 }).catch(() => {});
+await p.waitForTimeout(3000);
+const r = await p.evaluate(() => {
+  const R = window.__radar, D = R.app.D, date = R.app.clock.now();
+  const time = (fn, n = 30) => { const t = performance.now(); for (let i = 0; i < n; i++) fn(i); return (performance.now() - t) / n; };
+  const rect = document.getElementById("gl").getBoundingClientRect();
+  const out = {};
+  out.orbitUpdateMs = time((i) => R.orbit.update(new Date(date.getTime() + i * 100), 1, 0.016));
+  out.skyScanMs = time((i) => { R.sky.scan.t = 0; R.sky.scanOnly(new Date(date.getTime() + i * 100)); }, 10);
+  out.orbitPickMs = time(() => R.orbit.pick(rect.width / 2, rect.height / 2, rect.width, rect.height, date), 10);
+  R.setView("sky");
+  out.skyUpdateMs = time((i) => R.sky.update(new Date(date.getTime() + i * 100), 1, 0.016));
+  out.skyPickMs = time(() => R.sky.pick(rect.width / 2, rect.height / 2, rect.width, rect.height, date), 10);
+  out.satelliteInfoMs = time(() => { const info = R.panels; }, 1);
+  return out;
+});
+console.log(JSON.stringify(r, null, 1));
+console.log("errors:", errors.filter((e) => !/fonts\.g|ERR_FAILED/.test(e)));
+await browser.close();

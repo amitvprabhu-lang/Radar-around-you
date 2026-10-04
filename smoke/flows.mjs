@@ -1,0 +1,27 @@
+import { launch, openPage, dir } from "../harness.mjs";
+const browser = await launch();
+const errors = [];
+const { p } = await openPage(browser, "dist/radar.html", { errors, label: "flows", viewport: { width: 390, height: 780 } });
+await p.goto("https://radar.test/", { waitUntil: "commit" });
+await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 }).catch(() => {});
+await p.waitForTimeout(4200);
+const shot = async (n) => { await p.screenshot({ path: dir + `shots/v2-flow-${n}.png` }); };
+await p.evaluate(() => document.getElementById("toasts").replaceChildren());
+await p.click("#btnSearch"); await p.waitForTimeout(300);
+await p.fill("#searchPanel input", "iss"); await p.waitForTimeout(500);
+await p.click("#searchPanel .result >> nth=0"); await p.waitForTimeout(3200);
+await shot("03-iss-card");
+await p.click("text=Follow in 3D"); await p.waitForTimeout(4200);
+await shot("04-iss-follow");
+await p.click("text=Exit 3D follow"); await p.waitForTimeout(2500);
+// earthquake search by magnitude
+await p.click("#btnSearch"); await p.waitForTimeout(300);
+await p.fill("#searchPanel input", "m5.9"); await p.waitForTimeout(500);
+await shot("05-search-m59");
+await p.click("#searchPanel .result >> nth=0"); await p.waitForTimeout(3500);
+await shot("06-quake-card");
+await p.click("text=Under my feet"); await p.waitForTimeout(2500);
+await shot("07-under");
+console.log("errors:", errors.filter((e) => !/fonts\.g|ERR_FAILED/.test(e)));
+await browser.close();

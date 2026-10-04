@@ -1,0 +1,22 @@
+import { launch, openPage, dir } from "../harness.mjs";
+const browser = await launch();
+const errors = [];
+const { p } = await openPage(browser, "dist/radar.html", { errors, label: "day", viewport: { width: 390, height: 780 } });
+await p.goto("https://radar.test/", { waitUntil: "commit" });
+await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 }).catch(() => {});
+await p.waitForTimeout(2000);
+await p.evaluate(() => { document.getElementById("toasts").replaceChildren(); window.__radar.actions.setPlace("london"); window.__radar.setView("sky"); });
+await p.waitForTimeout(800);
+// noon in London: shift so local time is about 12:30
+const info = await p.evaluate(() => { const r = window.__radar; const now = r.app.clock.now(); const target = new Date(now); target.setUTCHours(11, 30, 0, 0); if (target < now) target.setUTCDate(target.getUTCDate() + 1); r.S.skyOffsetMin = Math.round((target - now) / 60000); return r.S.skyOffsetMin; });
+await p.waitForTimeout(1500);
+const plane = await p.evaluate(() => { const r = window.__radar; const pl = r.sky.planesNow.filter((x) => x.el > 8).sort((a, b) => a.slantKm - b.slantKm)[0]; r.sky.view.yaw = pl.az; r.sky.view.pitch = Math.min(70, pl.el - 6); r.sky.view.fov = 30; return { call: pl.p.call, type: pl.p.type, km: pl.slantKm, el: pl.el }; });
+console.log(JSON.stringify(plane), info);
+await p.waitForTimeout(1200);
+await p.screenshot({ path: dir + "shots/v2-day-plane.png" });
+await p.evaluate(() => { const r = window.__radar; r.sky.view.fov = 80; r.sky.view.pitch = 25; r.sky.view.yaw = r.sky.info.sunAz; });
+await p.waitForTimeout(1200);
+await p.screenshot({ path: dir + "shots/v2-day-sun.png" });
+console.log("errors:", errors.filter((e) => !/fonts\.g|ERR_FAILED/.test(e)));
+await browser.close();

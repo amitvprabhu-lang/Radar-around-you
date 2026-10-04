@@ -1,0 +1,22 @@
+import { launch, openPage, dir } from "../harness.mjs";
+const browser = await launch();
+const errors = [];
+const { p } = await openPage(browser, "dist/smoke.html", { errors, label: "smoke", viewport: { width: 390, height: 780 } });
+await p.goto("https://radar.test/", { waitUntil: "commit" });
+await p.waitForFunction(() => window.__radar && window.__radar.ready, null, { timeout: 120000 });
+await p.waitForTimeout(1500);
+const shot = async (name) => { await p.screenshot({ path: dir + `shots/v2-${name}.png` }); };
+await p.evaluate(() => {
+  const r = window.__radar; const q = r.app.D.quakes.events.find((e) => e.id === "us6000tzer") || r.app.D.quakes.events[0];
+  r.under.setQuake(q, { lat: r.place.lat, lon: r.place.lon, name: r.place.name }, new Date(Date.parse(q.time) + 3600e3 * 2));
+  r.under.replay.tau = 520; r.under.replay.paused = true;
+  r.state.view = "under";
+});
+await p.waitForTimeout(1500);
+await shot("under-1");
+await p.evaluate(() => { const u = window.__radar.under; u.replay.tau = 120; u.cam.yaw = 40; u.cam.pitch = 35; });
+await p.waitForTimeout(800);
+await shot("under-2");
+console.log(await p.evaluate(() => { const u = window.__radar.under; return JSON.stringify({ theta: u.st.theta, surfaceKm: u.st.surfaceKm, chord: u.st.chordKm, tP: u.st.tP, tS: u.st.tS, depth: u.st.depth }); }));
+console.log("errors:", errors.length ? errors : "none");
+await browser.close();

@@ -1,0 +1,20 @@
+{
+  "name": "radar-around-you",
+  "version": "2.0.0",
+  "description": "Live 3D radar of what is above, around and under you: satellites, aircraft, earthquakes, aurora. Prototype v2.",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "node build.mjs",
+    "e2e": "node e2e.mjs",
+    "data": "python3 build_data.py",
+    "preview": "node make-preview.mjs"
+  },
+  "type": "module",
+  "dependencies": {
+    "astronomy-engine": "^2.1.19",
+    "esbuild": "^0.28.2",
+    "satellite.js": "^7.1.0",
+    "three": "^0.186.1"
+  },
+  "private": true
+}

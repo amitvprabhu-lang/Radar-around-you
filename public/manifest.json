@@ -1,0 +1,140 @@
+[
+ {
+  "file": "airlines.json",
+  "raw": 3321,
+  "gzip": 1123,
+  "brotli": 944
+ },
+ {
+  "file": "aurora.bin",
+  "raw": 65160,
+  "gzip": 5808,
+  "brotli": 4442
+ },
+ {
+  "file": "cities.json",
+  "raw": 98469,
+  "gzip": 21409,
+  "brotli": 16963
+ },
+ {
+  "file": "coast.bin",
+  "raw": 84348,
+  "gzip": 76552,
+  "brotli": 66969
+ },
+ {
+  "file": "details.bin",
+  "raw": 154528,
+  "gzip": 11680,
+  "brotli": 9025
+ },
+ {
+  "file": "events.json",
+  "raw": 30791,
+  "gzip": 3440,
+  "brotli": 2653
+ },
+ {
+  "file": "ids.bin",
+  "raw": 77264,
+  "gzip": 27221,
+  "brotli": 18154
+ },
+ {
+  "file": "impact.json",
+  "raw": 40444,
+  "gzip": 11814,
+  "brotli": 8532
+ },
+ {
+  "file": "lines.json",
+  "raw": 13575,
+  "gzip": 5198,
+  "brotli": 4314
+ },
+ {
+  "file": "meta.json",
+  "raw": 7688,
+  "gzip": 3467,
+  "brotli": 2702
+ },
+ {
+  "file": "names.txt",
+  "raw": 279792,
+  "gzip": 55070,
+  "brotli": 36158
+ },
+ {
+  "file": "quakes.json",
+  "raw": 79367,
+  "gzip": 13159,
+  "brotli": 10251
+ },
+ {
+  "file": "routes.json",
+  "raw": 41235,
+  "gzip": 6473,
+  "brotli": 5113
+ },
+ {
+  "file": "stars.bin",
+  "raw": 30264,
+  "gzip": 29924,
+  "brotli": 30058
+ },
+ {
+  "file": "swarm.bin",
+  "raw": 386320,
+  "gzip": 288939,
+  "brotli": 257784
+ },
+ {
+  "file": "tex/clouds1k.webp",
+  "raw": 94344,
+  "gzip": 94392,
+  "brotli": 94349
+ },
+ {
+  "file": "tex/clouds2k.webp",
+  "raw": 200162,
+  "gzip": 199929,
+  "brotli": 200167
+ },
+ {
+  "file": "tex/day2k.webp",
+  "raw": 210584,
+  "gzip": 210667,
+  "brotli": 210589
+ },
+ {
+  "file": "tex/day4k.webp",
+  "raw": 488600,
+  "gzip": 488768,
+  "brotli": 488605
+ },
+ {
+  "file": "tex/moon512.webp",
+  "raw": 36220,
+  "gzip": 36253,
+  "brotli": 36224
+ },
+ {
+  "file": "tex/night2k.webp",
+  "raw": 72218,
+  "gzip": 72117,
+  "brotli": 72223
+ },
+ {
+  "file": "tex/relief2k.webp",
+  "raw": 29846,
+  "gzip": 28649,
+  "brotli": 28604
+ },
+ {
+  "file": "tex/water2k.webp",
+  "raw": 88038,
+  "gzip": 86788,
+  "brotli": 86721
+ }
+]

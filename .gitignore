@@ -1,0 +1,7 @@
+node_modules/
+dist/
+shots/
+raw/
+raw2/
+preview/
+v1/vendor/

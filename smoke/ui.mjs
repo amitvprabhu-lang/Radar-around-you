@@ -1,0 +1,17 @@
+import { launch, openPage, dir } from "../harness.mjs";
+const browser = await launch();
+const errors = [];
+const stats = { files: {}, bytes: 0 };
+const { p } = await openPage(browser, "dist/radar.html", { errors, label: "ui", viewport: { width: 390, height: 780 }, stats });
+const t0 = Date.now();
+await p.goto("https://radar.test/", { waitUntil: "commit" });
+await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+console.log("started in", Date.now() - t0, "ms");
+await p.waitForTimeout(500);
+await p.screenshot({ path: dir + "shots/v2-ui-0-loading.png" });
+await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 }).catch(() => {});
+await p.waitForTimeout(3500);
+await p.screenshot({ path: dir + "shots/v2-ui-1-globe.png" });
+console.log("bytes fetched", stats.bytes, Object.keys(stats.files).length, "files");
+console.log("errors:", errors.length ? errors.slice(0, 8) : "none");
+await browser.close();
