@@ -5,3 +5,6 @@ raw/
 raw2/
 preview/
 v1/vendor/
+live/
+__pycache__/
+*.pyc
