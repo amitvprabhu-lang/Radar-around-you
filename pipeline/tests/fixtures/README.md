@@ -21,3 +21,5 @@ the sources actually send.
 | nhc_ep182026_030_track.kmz, nhc_ep182026_030_cone.kmz | the forecastTrack and trackCone kmzFile links inside nhc_current_storms.json for Rachel, advisory 30 | whole files |
 | firms_snpp_500.csv, firms_noaa20_300.csv | https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv and noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv | the header and the first 500 and 300 rows |
 | nhc_ep152026_track.kmz, nhc_ep152026_cone.kmz | the forecastTrack and trackCone kmzFile links for Nolo, advisory 56 (a storm that crosses the dateline) | whole files |
+| iau_csn_sample.txt | https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt | the header, the first 30 rows, and Sirius, Mebsuta (blank component column), Geminga (pulsar, no magnitude) and Castor (multiple star) |
+| stars_sample.json | the app's star catalogue source (raw/stars6.json, Hipparcos numbers as ids) | the features for the stars named in the sample above plus the first 10, in catalogue order |

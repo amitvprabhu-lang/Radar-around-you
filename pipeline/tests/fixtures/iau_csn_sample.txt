@@ -1,0 +1,173 @@
+# "IAU Catalog of Star Names (IAU-CSN)"
+# IAU Division C Working Group on Star Names (WGSN) https://www.iau.org/science/scientific_bodies/working_groups/280/
+# WGSN Chair: Susanne Hoffmann. WGSN Secretary: Eric Mamajek. Email questions or comments to: starnames@exopla.net
+# Last updated 2022-04-04 (see notes on latest edits at end of file)
+#
+# For use of the contents of the data of this file, we encourage users to cite the official IAU version of the data at:
+$ https://www.iau.org/public/themes/naming_stars/. At times there may be a time delay between the posting of names in this file and what
+# is posted on the IAU website. All IAU-produced products (Images, Videos, Texts) are released under Creative Commons Attribution
+# (i.e. free to use in all perpetuity, world-wide, as long as the source is mentioned). Rows (2) and (5) require UTF-8 encoding
+# (For Firefox browser, set > View > Repair Text Encoding).  WGSN is working to add brief summaries of etymological information
+# to future editions of this table.
+#(1)              (2)               (3)          (4)   (5)   (6) (7)  (8)         (9)  (10) (11)   (12) (13)       (14)       (15)       (16)    
+#Name/ASCII       Name/Diacritics   Designation  ID    ID    Con #    WDS_J       mag  bnd  HIP     HD  RA(J2000)  Dec(J2000) Date       Notes
+#Name/ASCII       Name/Diacritics   Designation  ID    ID    Con #    WDS_J       mag  bnd  HIP     HD  RA(J2000)  Dec(J2000) Date       Notes 
+#(1)              (2)               (3)          (4)   (5)   (6) (7)  (8)         (9)  (10) (11)   (12) (13)       (14)       (15)       (16)
+#
+# Notes:
+#  (1) Proper name adopted by IAU WGSN (ASCII version)
+#  (2) Proper name adopted by IAU Working Group on Star Names (WGSN)
+#      (version with diacritic symbols, UTF-8).
+#  (3) Fiducial designation (in order of preference and availability):
+#      HR, GJ, HD, HIP, or discovery survey designation for host stars
+#      of transiting exoplanets (see SIMBAD;
+#      http://simbad.u-strasbg.fr/simbad/).
+#  (4) ID column is either (in order of preference and availability)
+#      Bayer greek letter (using SIMBAD databases; e.g. "alf" = alpha; see
+#      table http://simbad.u-strasbg.fr/Pages/guide/chA.htx), Flamsteed
+#      numbers (both following The Bright Star Catalogue [BSC], 5th Revised
+#      Ed. (Hoffleit & Warren 1991), or variable star designations.
+#  (5) ID, same as column 3 but Bayer Greek letters in UTF-8 encoding. 
+#  (6) Constellation (3-letter IAU abbrev.; following "The IAU Style Manual",
+#      Wilkins 1989, Table 11).
+#  (7) The "#" after the constellation column is the component ID to
+#      Washington Double Star (WDS) catalog multiple system, if needed
+#      (e.g. Proxima Centauri = alf Cen "C"), but may be left blank
+#      ("_") where the primary, by visual brightness, is unambiguous
+#      (blank = A) or if the other WDS catalogue entries are obviously
+#      unphysical (i.e. the star appears to have no known physical
+#      stellar companions). Component IDs are also given where the
+#      star does not have a WDS entry (i.e. is not a resolved
+#      multiple), but the star is either known to be a spectroscopic
+#      binary or astrometric binary in the literature (usually a "A"
+#      or "Aa" is given in those cases, e.g. Wezen). Many thanks to
+#      Brian Mason (IAU Commission G1 Binary and Multiple Star
+#      Systems) for help with vetting the WDS designations and IDs.
+#  (8) WDS designation for multiple systems (or candidate multiple systems),
+#      the official double star catalogue of IAU Commission 26 (now 
+#  (9) Magnitude in either Johnson V or Gaia G photometric system. For
+#      multiple stars, the V magnitude of the component is listed
+#      where available or calculable, however in some cases (e.g. some
+#      spectroscopic binaries, astrometric binaries), the unresolved
+#      magnitude is listed. Magnitudes are preferentially from The
+#      Hipparcos and Tycho catalogues (ESA 1997), WDS, or Gaia DR2
+#      catalog.
+# (10) Band (V or G) for magnitude listed in column (9). 
+# (11) HIP designations from The Hipparcos and Tycho Catalogues (ESA 1997).
+# (12) HD designations, usually cross-identified from SIMBAD, BSC, HIP
+#      catalogues. 
+# (13) Right Ascension (ICRS, epoch 2000.0)
+# (14) Declination (ICRS, epoch 2000.0) Columns 10 and 11 are
+#      calculated for epoch 2000.0 using Vizier, usually using
+#      positions and proper motions from the revised Hipparcos
+#      catalogue ("Hipparcos, the New Reduction of the Raw Data" (van
+#      Leeuwen 2007 A&A, 474, 653), Gaia DR2 (Gaia Collaboration et
+#      al.  2018 A&A, 616, A1), or Tycho-2 catalogue (Hog et al. 2000,
+#      A&A, 355, L27).
+# (15) Date approved. Names marked approved "2015-12-15" are exoplanet
+#      host star names - a mix of common names and names adopted via
+#      the NameExoWorlds contest - reviewed and adopted by the
+#      Executive Committee WG Public Naming of Planets and Planetary
+#      Satellites, and recognized by WGSN (although the posted date
+#      pre-dates WGSN).  Names dated "2019-12-17" are exoplanet host
+#      star names from the IAU100 NameExoWorlds public naming
+#      campaign, and the winning entries were reviewed and adopted by
+#      the IAU100 NameExoWorlds Steering Committee (which had
+#      representatives from WGSN).
+# (16) Notes: 
+#      * Acamar is tet01 Eri = tet Eri A = WDS J02583-4018A.
+#      * Algieba is gam01 Leo = gam Leo A = WDS J10200+1950A.
+#      * Alcor is 80 UMa A, which is component Ca of multiple WDS
+#        J13239+5456 (Mizar is component Aa).
+#      * Almach is gam01 And = gam And A = WDS J02039+4220A.
+#      * Pipirima is mu02 Sco (WDS J16523-3801A) and Xamidimura is mu01 Sco
+#        Aa (WDS J16519-3803Aa) and, however the these two stars are a
+#        wide physical multiple (WDS J16519-3803AD; sep. 346.8").
+#      * alf Cen system: three stellar components have IAU names:
+#        A: Rigil Kentaurus, B: Toliman, C: Proxima Centauri. 
+#
+# Notes on edits. 
+# 2018-06-11: Piautos: An incorrect position for Piautos was listed on a
+#             version of this list posted in early June 2018. The position
+#             has been corrected.
+# 2018-06-19: The WDS and component entries for Polaris and Polaris
+#             Australis were flipped and this has been corrected.
+#             Polaris is WDS J02318+8916 Aa, while Polaris Australis
+#             has no WDS entry nor component ID.
+# 2018-07-09: Okab: Typo in HIP # for Okab corrected to HIP 93747.
+# 2018-08-10: Algedi: removed WDS component ID as none of the WDS
+#             entries appear to be physically related. 
+# 2018-08-10: Azmidi: removed WDS component ID as B is unlikely to
+#             be physically connected with A, and evidence for SB
+#             status of A is weak.
+# 2018-08-10: Added: Gudja, Guniibuu, Imai, La Superba, Paikauhale & Toliman.
+# 2018-09-07: Fixed: Cujam: fixed o Her to ω Her (rest of data was correct).
+# 2019-09-20: Fixed: Piautos: added A component as system is an
+#             unresolved spectroscopic binary (Gullikson et al., 2016,
+#             AJ, 152, 40).
+# 2020-02-13: Added: 112 star names from IAU100 NameExoWorlds public
+#             naming campaign (see names, etymologies, and names of
+#             proposers at:
+#             http://www.nameexoworlds.iau.org/final-results). Note
+#             that the spelling of the name for HD 145457 from the
+#             Japan IAU100 NameExoWorlds campaign was originally
+#             "Kamui", but after consultation with the Hokkaido Ainu
+#             association, the IAU100 NameExoWorlds Steering Committee
+#             approved amending the spelling to "Kamuy".
+# 2020-03-01: Added: Mazaalai = HAT-P-21. Mazaalai is the winning
+#             entry from Mongolia, and the last star name approved by
+#             the IAU100 NameExoWorlds Steering Committee for the 2019
+#             public naming campaign (exoplanet HAT-P-21b was assigned
+#             name Bambaruush).
+# 2020-03-15: Several NameExoWorlds 2019 star names were found to be
+#             misassigned to stars due to sorting errors (names from
+#             Denmark(Muspelheim), Dominican Republic(Marohu),
+#             Finland(Horna), Ireland(Tuiren), Malta(Sansuna),
+#             Pakistan(Shama), Palestine(Moriah), Russia(Dombay),
+#             Serbia(Morava), South Africa(Naledi)).  The
+#             name-designation assignments have been checked again
+#             with: http://www.nameexoworlds.iau.org/final-results.
+#             If you used the 2020-02-13 or 2020-03-01 versions,
+#             please update to this latest version. Thank you to
+#             Eduardo Penteado for pointing out the errors.
+# 2021-04-04: Fixed accented version "Chaso" to "Chasoň" for HAT-P-5.
+#             Clarification for HD 149143: The star name is spelled
+#             "Rosalíadecastro" and the exoplanet b is "Ríosar". The
+#             accents were accidently omitted in the IAU100 NameExoWorlds
+#             announcement materials.
+# 2022-04-04: Added "Geminga" and "Rana". See Annual Report WGSN 2021:
+#             https://www.iau.org/static/science/scientific_bodies/working_groups/280/wg-starnames-annual-report-2021-2022.pdf
+Absolutno         Absolutno         XO-5         _     _     Lyn _    _          11.95  G      _      _ 116.716506  39.094572 2019-12-17 
+Acamar            Acamar            HR 897       tet01 θ1    Eri A    02583-4018  2.88  V  13847  18622  44.565311 -40.304672 2016-07-20 *
+Achernar          Achernar          HR 472       alf   α     Eri A    _           0.45  V   7588  10144  24.428523 -57.236753 2016-06-30 
+Achird            Achird            HR 219       eta   η     Cas A    00491+5749  3.46  V   3821   4614  12.276213  57.815187 2017-09-05 
+Acrab             Acrab             HR 5984      bet   β     Sco Aa   16054-1948  2.56  V  78820 144217 241.359300 -19.805453 2016-08-21 
+Acrux             Acrux             HR 4730      alf   α     Cru Aa   12266-6306  1.33  V  60718 108248 186.649563 -63.099093 2016-07-20 
+Acubens           Acubens           HR 3572      alf   α     Cnc Aa   08585+1151  4.26  V  44066  76756 134.621761  11.857700 2016-07-20 
+Adhafera          Adhafera          HR 4031      zet   ζ     Leo Aa   10167+2325  3.43  V  50335  89025 154.172567  23.417312 2016-07-20 
+Adhara            Adhara            HR 2618      eps   ε     CMa A    06586-2858  1.50  V  33579  52089 104.656453 -28.972086 2016-08-21 
+Adhil             Adhil             HR 390       ksi   ξ     And _    _           4.87  V   6411   8207  20.585080  45.528778 2016-08-21 
+Ain               Ain               HR 1409      eps   ε     Tau Aa1  04286+1911  3.53  V  20889  28305  67.154163  19.180435 2015-12-15 
+Ainalrami         Ainalrami         HR 7116      nu01  ν1    Sgr A    18542-2245  4.86  V  92761 174974 283.542404 -22.744840 2017-09-05 
+Aladfar           Aladfar           HR 7298      eta   η     Lyr Aa   19138+3909  4.43  V  94481 180163 288.439531  39.145970 2017-09-05 
+Alasia            Alasia            HD 168746    _     _     Ser _    18218-1155  7.95  V  90004 168746 275.457428 -11.922682 2019-12-17 
+Albaldah          Albaldah          HR 7264      pi    π     Sgr A    19098-2101  2.88  V  94141 178524 287.440971 -21.023615 2017-09-05 
+Albali            Albali            HR 7950      eps   ε     Aqr _    _           3.78  V 102618 198001 311.918969  -9.495775 2016-09-12 
+Albireo           Albireo           HR 7417      bet   β     Cyg Aa   19307+2758  3.37  V  95947 183912 292.680351  27.959692 2016-07-20 
+Alchiba           Alchiba           HR 4623      alf   α     Crv _    _           4.02  V  59199 105452 182.103402 -24.728875 2016-09-12 
+Alcor             Alcor             HR 5062      80    80    UMa Ca   13239+5456  3.99  V  65477 116842 201.306403  54.987954 2016-06-30 * 
+Alcyone           Alcyone           HR 1165      eta   η     Tau A    03475+2406  2.85  V  17702  23630  56.871152  24.105136 2016-06-30 
+Aldebaran         Aldebaran         HR 1457      alf   α     Tau _    04359+1631  0.87  V  21421  29139  68.980163  16.509302 2016-06-30 
+Alderamin         Alderamin         HR 8162      alf   α     Cep _    21186+6235  2.45  V 105199 203280 319.644885  62.585574 2016-07-20 
+Aldhanab          Aldhanab          HR 8353      gam   γ     Gru _    _           3.00  V 108085 207971 328.482192 -37.364855 2017-09-05 
+Aldhibah          Aldhibah          HR 6396      zet   ζ     Dra A    17088+6543  3.17  V  83895 155763 257.196650  65.714684 2017-09-05 
+Aldulfin          Aldulfin          HR 7852      eps   ε     Del _    _           4.03  V 101421 195810 308.303216  11.303261 2017-09-05 
+Alfirk            Alfirk            HR 8238      bet   β     Cep Aa   21287+7034  3.23  V 106032 205021 322.164987  70.560715 2016-08-21 
+Algedi            Algedi            HR 7754      alf02 α2    Cap _    20181-1233  3.58  V 100064 192947 304.513566 -12.544852 2016-08-21 
+Algenib           Algenib           HR 39        gam   γ     Peg _    00132+1511  2.83  V   1067    886   3.308963  15.183594 2016-06-30 
+Algieba           Algieba           HR 4057      gam01 γ1    Leo _    10200+1950  2.61  V  50583  89484 154.993144  19.841489 2016-07-20 * 
+Algol             Algol             HR 936       bet   β     Per Aa1  03082+4057  2.09  V  14576  19356  47.042215  40.955648 2016-06-30 
+Castor            Castor            HR 2891      alf   α     Gem Aa   07346+3153  1.98  V  36850  60179 113.649428  31.888276 2016-06-30 
+Geminga           Geminga           PSR B0633+17 _     _     Gem _    _              _  _      _      _  98.475638  17.770253 2022-04-04 
+Mebsuta           Mebsuta           HR 2473      eps   ε     Gem      06439+2508  3.06  V  32246  48329 100.983026  25.131127 2016-07-20 
+Sirius            Sirius            HR 2491      alf   α     CMa A    06451-1643 -1.45  V  32349  48915 101.287155 -16.716116 2016-06-30 
