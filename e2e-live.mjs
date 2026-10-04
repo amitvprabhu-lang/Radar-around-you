@@ -182,6 +182,7 @@ const closeSheet = (p) => R(p, () => window.__radar.panels.closeSheet());
 {
   const errors = [];
   const p = await open("snapshot", null, { errors });
+  check("snapshot: no Fires chip and no storm, fire or near-you tiles when there is no live data", !(await R(p, () => [...document.querySelectorAll("#layerChips .chip")].some((c) => c.textContent === "Fires"))) && (await tile(p, "active storm")) === null && (await tile(p, "fire detections")) === null);
   check("snapshot: the tile says it is a bundled snapshot", /Snapshot.*bundled data, not live/.test(await dataTile(p)), await dataTile(p));
   await openStatus(p);
   check("snapshot: the sheet says live feeds are not connected", /not connected here/.test(await p.textContent("#sheet")));
@@ -225,6 +226,14 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   t = await sheetText();
   check(`hazards ${label}: the Around you screen explains it makes no causal claims`, /Around /.test(t) && /Nothing here says one event caused another/.test(t));
   await shot(p, `hz-${label}-near`);
+  await closeSheet(p);
+  const g = await R(p, () => { const o = window.__radar.orbit, f = window.__radar.app.D.hazards.fires; return { vis: o.fires.visible, n: o.fires.geometry.attributes.position.count, want: f.n, storms: o.stormLines.children.length, chips: [...document.querySelectorAll("#layerChips .chip")].map((c) => c.textContent) }; });
+  check(`hazards ${label}: the globe draws one point per fire cell and a cone and a track for the storms`, g.vis && g.n === g.want && g.storms === 2, JSON.stringify(g));
+  check(`hazards ${label}: a Fires chip is offered because fire data is live`, g.chips.includes("Fires"), g.chips.join());
+  await R(p, () => window.__radar.actions.flyTo(-3.4, 108)); await p.waitForTimeout(3200); await shot(p, `hz-${label}-globe-fires`);
+  await R(p, () => window.__radar.actions.flyTo(24.5, -178)); await p.waitForTimeout(3200); await shot(p, `hz-${label}-globe-storm`);
+  await p.click('#layerChips .chip:has-text("Fires")'); await p.waitForTimeout(200);
+  check(`hazards ${label}: the Fires chip hides the fire points`, (await R(p, () => window.__radar.orbit.fires.visible)) === false);
   const other = errors.filter((e) => !/fonts\.g|ERR_FAILED|status of 404/.test(e));
   check(`hazards ${label}: no console errors`, other.length === 0, other.join(" | "));
   await p.close();

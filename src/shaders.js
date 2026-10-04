@@ -468,6 +468,33 @@ export const ATMO_FRAG = PRE + _ATMO_FRAG;
 export const AURORA_SHELL_FRAG = PRE + _AURORA_SHELL_FRAG;
 export const SWARM_FRAG = PRE + _SWARM_FRAG;
 export const MARKER_FRAG = PRE + _MARKER_FRAG;
+
+// ---------------------------------------------------------------- fire detections on the globe
+// One point per 0.25 degree cell: size and colour follow the cell's total fire radiative power, brightness follows how recent it is.
+const _FIRE_VERT = /* glsl */ `
+attribute float power; attribute float fresh; uniform float pr; uniform float sizeScale;
+varying float vP; varying float vFresh; varying float vFront;
+void main(){
+  vP = power; vFresh = fresh;
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vFront = step(0.08, dot(normalize(w.xyz), normalize(cameraPosition)));
+  vec4 mv = viewMatrix * w;
+  gl_PointSize = (2.4 + power * 6.0) * pr * sizeScale * clamp(3.4 / length(mv.xyz), 0.75, 1.8);
+  gl_Position = projectionMatrix * mv;
+}
+`;
+const _FIRE_FRAG = /* glsl */ `
+varying float vP; varying float vFresh; varying float vFront;
+void main(){
+  vec2 p = gl_PointCoord - 0.5; float d = length(p); if (d > 0.5) discard;
+  float a = ss(0.5, 0.0, d) * (0.4 + 0.6 * vFresh) * vFront;
+  vec3 c = mix(vec3(1.0, 0.32, 0.08), vec3(1.0, 0.92, 0.55), vP);
+  gl_FragColor = vec4(c * a, a);
+}
+`;
+export const FIRE_VERT = PRE + _FIRE_VERT;
+export const FIRE_FRAG = PRE + _FIRE_FRAG;
+
 export const YOU_FRAG = PRE + _YOU_FRAG;
 export const WAVE_FRAG = PRE + _WAVE_FRAG;
 export const RIBBON_FRAG = PRE + _RIBBON_FRAG;

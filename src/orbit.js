@@ -181,6 +181,66 @@ export function createOrbit(ctx) {
   // after D.aurora was overwritten in place with a new grid
   api.refreshAurora = () => { auroraTex.needsUpdate = true; };
 
+
+  // ------------------------------------------------------------------ fire detections and storm tracks (live feeds; absent in a snapshot)
+  const fireU = { pr: uni.pr, sizeScale: uni.sizeScale };
+  const fireGeo = new THREE.BufferGeometry();
+  const fireMesh = new THREE.Points(fireGeo, new THREE.ShaderMaterial({ vertexShader: S.FIRE_VERT, fragmentShader: S.FIRE_FRAG, uniforms: fireU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  fireMesh.frustumCulled = false;
+  fireMesh.renderOrder = 5;
+  fireMesh.visible = false;
+  scene.add(fireMesh);
+  api.fires = fireMesh;
+  // after D.hazards.fires was set or replaced: one point per cell, sized by fire radiative power (log scale) and brightest when newest
+  api.refreshFires = () => {
+    const f = D.hazards && D.hazards.fires;
+    if (!f || !f.n) { fireMesh.userData.has = false; fireMesh.visible = false; return; }
+    const pos = new Float32Array(f.n * 3), power = new Float32Array(f.n), fresh = new Float32Array(f.n), tmp = new THREE.Vector3();
+    for (let i = 0; i < f.n; i++) {
+      latLonVec(f.lat[i], f.lon[i], 1.003, tmp);
+      pos[i * 3] = tmp.x; pos[i * 3 + 1] = tmp.y; pos[i * 3 + 2] = tmp.z;
+      power[i] = clamp(Math.log10(f.frp[i] + 1) / 3, 0, 1);
+      fresh[i] = clamp(1 - f.minutesOld[i] / 1440, 0, 1);
+    }
+    fireGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    fireGeo.setAttribute("power", new THREE.BufferAttribute(power, 1));
+    fireGeo.setAttribute("fresh", new THREE.BufferAttribute(fresh, 1));
+    fireGeo.computeBoundingSphere();
+    fireMesh.userData.has = true;
+    fireMesh.visible = !!api.layers.fires;
+  };
+
+  const stormGroup = new THREE.Group();
+  stormGroup.renderOrder = 5;
+  scene.add(stormGroup);
+  api.stormLines = stormGroup;
+  const arc = (a, b, steps, r) => {  // points along the great circle from a to b, kept on the sphere
+    const va = latLonVec(a[1], a[0], r), vb = latLonVec(b[1], b[0], r), out = [];
+    for (let i = 0; i <= steps; i++) out.push(va.clone().lerp(vb, i / steps).normalize().multiplyScalar(r));
+    return out;
+  };
+  api.refreshStorms = () => {
+    for (const c of [...stormGroup.children]) { stormGroup.remove(c); c.geometry.dispose(); }
+    const st = D.hazards && D.hazards.storms;
+    if (!st) return;
+    const tracks = [], cones = [];
+    for (const s of st.storms) {
+      const pts = [[s.lon, s.lat], ...s.track.map((p) => [p.lon, p.lat])];
+      const line = [];
+      for (let i = 0; i + 1 < pts.length; i++) line.push(...arc(pts[i], pts[i + 1], 8, 1.007));
+      if (line.length) tracks.push(line);
+      for (const ring of s.cone) {
+        const loop = [];
+        for (let i = 0; i < ring.length; i++) loop.push(...arc(ring[i], ring[(i + 1) % ring.length], 2, 1.006));
+        cones.push(loop);
+      }
+    }
+    const mk = (polys, color, alpha) => { const m = new THREE.LineSegments(polylinesToSegments(polys, color, alpha), ribbonMaterial({ cull: 1, opacity: 1 })); m.renderOrder = 5; stormGroup.add(m); };
+    if (cones.length) mk(cones, new THREE.Color(0.45, 0.72, 1), 0.7);
+    if (tracks.length) mk(tracks, new THREE.Color(1, 0.95, 0.85), 0.95);
+    stormGroup.visible = !!api.layers.hazards;
+  };
+
   // you are here
   const youGeo = new THREE.BufferGeometry();
   youGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3), 3));
@@ -563,7 +623,7 @@ export function createOrbit(ctx) {
 
   // ------------------------------------------------------------------ per frame
   let lastMarkerRefresh = 0;
-  api.layers = { sats: true, starlink: true, debris: true, quakes: true, hazards: true, aurora: true, clouds: true, coast: true, constellations: false };
+  api.layers = { sats: true, starlink: true, debris: true, quakes: true, hazards: true, fires: true, aurora: true, clouds: true, coast: true, constellations: false };
   api.setLayers = (l) => {
     Object.assign(api.layers, l);
     const L = api.layers;
@@ -571,7 +631,10 @@ export function createOrbit(ctx) {
     clouds.visible = L.clouds; aurora.visible = L.aurora; api.coast.visible = L.coast; api.constellations.visible = L.constellations;
     markerU.showQH.value.set(L.quakes ? 1 : 0, L.hazards ? 1 : 0);
     markers.visible = L.quakes || L.hazards;
+    fireMesh.visible = !!L.fires && !!fireMesh.userData.has; stormGroup.visible = !!L.hazards;
   };
+  api.refreshFires();
+  api.refreshStorms();
   api.setLayers({});
 
   let lastT = performance.now();

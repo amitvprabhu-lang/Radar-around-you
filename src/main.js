@@ -22,7 +22,8 @@ const LAYERS = [
   { key: "starlink", label: "Starlink", color: "var(--sky)" },
   { key: "debris", label: "Debris", color: "var(--ember)" },
   { key: "quakes", label: "Earthquakes", color: "var(--ember)" },
-  { key: "hazards", label: "Storms and fires", color: "var(--violet)" },
+  { key: "hazards", label: "Storms and hazards", color: "var(--violet)" },
+  { key: "fires", label: "Fires", color: "var(--ember)" },
   { key: "aurora", label: "Aurora", color: "var(--aurora)" },
   { key: "clouds", label: "Clouds", color: "#dfe8ff" },
   { key: "coast", label: "Coastlines", color: "var(--sky)" },
@@ -62,7 +63,7 @@ async function main() {
   const startCity = cityById(savedPlace) || D.cities.find((c) => c.tz === tzGuess) || D.cities[0];
   const asPlace = (c) => ({ ...c, lat: Number(c.lat), lon: Number(c.lon) });
   const S = {
-    view: "globe", place: asPlace(startCity), selected: null, live: [], layers: { sats: true, starlink: true, debris: true, quakes: true, hazards: true, aurora: true, clouds: true, coast: true, constellations: false },
+    view: "globe", place: asPlace(startCity), selected: null, live: [], layers: { sats: true, starlink: true, debris: true, quakes: true, hazards: true, fires: true, aurora: true, clouds: true, coast: true, constellations: false },
     skyOffsetMin: 0, guide: null, followIdx: -1, sheet: null, searchOpen: false, searchReady: false, downloads: null, underQuake: null, rateIdx: 0, sky: () => sky, orbit: () => orbit, under: () => under,
     arrivals: [], feedCount: 0, precise: new Map(), trains: [], _tonight: null, tonightKey: "",
   };
@@ -297,7 +298,7 @@ async function main() {
   }
   const chipButtons = (defs, state) => defs.map((d) => h("button", { class: "chip glass", style: { "--c": d.color }, "aria-pressed": String(!!state[d.key]), onclick: () => toggleLayer(d.key) }, h("i", { class: "sw" }), d.label));
   function renderLayerChips() {
-    $("layerChips").replaceChildren(...chipButtons(LAYERS, S.layers));
+    $("layerChips").replaceChildren(...chipButtons(LAYERS.filter((l) => l.key !== "fires" || (D.hazards && D.hazards.fires)), S.layers));
     renderSkyChips();
   }
   function renderSkyChips() {
@@ -773,8 +774,8 @@ async function main() {
     aurora({ grid, meta }) { D.aurora.set(grid); D.meta.aurora = meta; orbit.refreshAurora(); sky.refreshAurora(); refreshDerived(); },
     clouds(data) { applyCities(data, null); },
     planes(data) { applyCities(null, data); },
-    storms(data) { D.hazards.storms = data; refreshDerived(); },
-    fires(data) { D.hazards.fires = data; refreshDerived(); },
+    storms(data) { D.hazards.storms = data; orbit.refreshStorms(); refreshDerived(); },
+    fires(data) { D.hazards.fires = data; orbit.refreshFires(); renderLayerChips(); refreshDerived(); },
     spaceweather(data) { D.hazards.space = data; refreshDerived(); },
   };
   function startLive() {
