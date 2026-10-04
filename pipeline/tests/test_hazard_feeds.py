@@ -121,3 +121,31 @@ class Fires(HazardBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CloseApproaches(HazardBase):
+    CAD = "https://ssd-api.jpl.nasa.gov/cad.api"
+
+    def test_the_feed_publishes_the_list_with_its_closest_object(self):
+        self.net.add(self.CAD, resp(200, fx("jpl_cad_60d.json")))
+        self.run_(["closeapproaches"])
+        f = self.manifest()["feeds"]["closeapproaches"]
+        d = self.jread(f["files"]["closeapproaches.json"])
+        self.assertEqual(len(d["approaches"]), 31)
+        self.assertEqual(f["count"], 31)
+        self.assertIn("closest:", f["note"])
+        self.assertEqual(self.net.count(self.CAD), 1)
+
+    def test_a_changed_api_version_keeps_the_last_good_copy(self):
+        self.net.add(self.CAD, resp(200, fx("jpl_cad_60d.json")))
+        self.run_(["closeapproaches"])
+        first = self.manifest()["feeds"]["closeapproaches"]["files"]["closeapproaches.json"]
+        d = json.loads(fx("jpl_cad_60d.json"))
+        d["signature"]["version"] = "9.9"
+        self.clock.advance(7 * 3600)
+        self.net.routes.clear()
+        self.net.add(self.CAD, resp(200, json.dumps(d)))
+        self.run_(["closeapproaches"], force=True)
+        f = self.manifest()["feeds"]["closeapproaches"]
+        self.assertEqual(f["files"]["closeapproaches.json"], first)
+        self.assertNotEqual(f["status"], "ok")

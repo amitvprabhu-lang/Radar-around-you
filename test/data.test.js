@@ -53,7 +53,7 @@ test("with no live folder the bundled snapshot is used, exactly as before", asyn
 test("a complete live set replaces the snapshot, feed by feed", async () => {
   const net = network(livePackFiles());
   const c = await core(net);
-  assert.deepEqual(Object.keys(c.live.used).sort(), ["aurora", "clouds", "events", "fires", "kp", "planes", "quakes", "satellites", "spaceweather", "storms"]);
+  assert.deepEqual(Object.keys(c.live.used).sort(), ["aurora", "closeapproaches", "clouds", "events", "fires", "kp", "planes", "quakes", "satellites", "spaceweather", "storms"]);
   assert.deepEqual(c.live.fellBack, []);
   assert.equal(c.meta.taken, LIVE_TAKEN, "the satellite group's own fetch time drives the clock");
   assert.equal(c.meta.count, baseMeta.count);
@@ -70,6 +70,7 @@ test("a complete live set replaces the snapshot, feed by feed", async () => {
   assert.deepEqual(c.hazards.storms.storms.map((x) => x.name), ["Rachel", "Nolo"]);
   assert.equal(c.hazards.fires.n, c.hazards.fires.summary.cells, "fire cells are decoded, one per record");
   assert.ok(c.hazards.space.points.length > 60 && c.hazards.space.alerts.length > 0);
+  assert.equal(c.hazards.close.approaches.length, 31);
   assert.equal(c.swarmRaw.f32.length, baseMeta.count * 2);
   assert.ok(net.requested.includes("live/satellites/v1/swarm.bin"));
   assert.ok(!net.requested.includes("swarm.bin"), "the snapshot swarm is not downloaded when the live one worked");
@@ -77,7 +78,7 @@ test("a complete live set replaces the snapshot, feed by feed", async () => {
 
 test("without a live copy the storm, fire and solar wind data are simply absent", async () => {
   const c = await core(network({}));
-  assert.deepEqual(c.hazards, { storms: null, fires: null, space: null });
+  assert.deepEqual(c.hazards, { storms: null, fires: null, space: null, close: null });
 });
 
 test("a live file that fails falls back to the snapshot and says so", async () => {

@@ -7,7 +7,7 @@ import {
   findPasses, auroraFromGrid, haversineKm, bearingDeg, raDecToAltAz,
 } from "./core.js";
 import * as S from "./shaders.js";
-import { glowTexture, ribbonMaterial, dynLine } from "./engine.js";
+import { glowTexture, ribbonMaterial, dynLine, eqVec, polylinesToSegments } from "./engine.js";
 import { buildStarfield } from "./stars.js";
 import { airlinerModel, aircraftVariantFor, updateAircraftLights } from "./models.js";
 import * as SG from "./sgp4.js";
@@ -57,6 +57,38 @@ export function createSky(ctx) {
   field.group.matrixAutoUpdate = false;
   scene.add(field.group);
   api.field = field;
+
+  // constellation overlays, drawn in the same celestial frame as the stars so they turn with the sky: the boundaries of all 88 (built
+  // the first time they are wanted) and the figure and boundary of one chosen constellation
+  const overlay = { all: null, focus: null, focusAbbr: null };
+  const toVecs = (loop, r) => loop.map(([ra, dec]) => eqVec(ra, dec, r));
+  const lineObj = (polys, color, alpha) => {
+    const obj = new THREE.LineSegments(polylinesToSegments(polys, color, alpha), ribbonMaterial({ vertex: S.SKYLINE_VERT, opacity: 1 }));
+    obj.frustumCulled = false;
+    return obj;
+  };
+  function ensureAllBoundaries() {
+    const cons = D.later && D.later.constellations;
+    if (overlay.all || !cons) return;
+    const polys = [];
+    for (const c of cons.list) for (const loop of c.boundary) polys.push(toVecs([...loop, loop[0]], SKY_R - 1.2));
+    overlay.all = lineObj(polys, new THREE.Color(0.95, 0.72, 0.4), 0.28);
+    field.group.add(overlay.all);
+  }
+  api.overlayInfo = () => ({ boundariesVisible: !!(overlay.all && overlay.all.visible), boundariesBuilt: !!overlay.all, focus: overlay.focusAbbr });
+  api.setConstellationFocus = (abbr) => {
+    if (overlay.focus) { field.group.remove(overlay.focus); overlay.focus.geometry.dispose(); overlay.focus = null; }
+    overlay.focusAbbr = abbr || null;
+    const c = abbr && D.later && D.later.constellations && D.later.constellations.byAbbr.get(abbr);
+    if (!c) return;
+    const group = new THREE.Group();
+    group.add(lineObj(c.boundary.map((loop) => toVecs([...loop, loop[0]], SKY_R - 1.3)), new THREE.Color(1, 0.8, 0.45), 0.9));
+    group.add(lineObj(c.figure.map((line) => toVecs(line, SKY_R - 1.1)), new THREE.Color(0.55, 0.85, 1), 1));
+    group.traverse((o) => { if (o.material) o.material.uniforms.opacity.value = 1; });
+    overlay.focus = group;
+    group.geometry = { dispose() { group.children.forEach((k) => k.geometry.dispose()); } };
+    field.group.add(group);
+  };
 
   // ------------------------------------------------------------------ Sun, Moon, planets
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(256), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -388,6 +420,8 @@ export function createSky(ctx) {
     field.starUniforms.dark.value = 1;
     field.milkyUniforms.amount.value = 1.15 * clamp((-sun.alt - 10) / 8, 0, 1) * clamp(1 - 1.7 * glow, 0, 1) * (1 - 0.7 * moonUp);
     field.lines.visible = opts.constellations;
+    if (opts.boundaries) ensureAllBoundaries();
+    if (overlay.all) { overlay.all.visible = !!opts.boundaries; overlay.all.material.uniforms.opacity.value = 0.35 + 0.65 * clamp((-sun.alt - 2) / 8, 0, 1); }
     field.lines.material.uniforms.opacity.value = clamp((-sun.alt - 4) / 8, 0, 1) * (0.9 - 0.5 * glow);
 
     // Sun
@@ -609,16 +643,19 @@ export function createSky(ctx) {
     }
     if (basis) {
       const ns = meta.starNames || {};
-      for (const key of Object.keys(ns)) {
-        const i = Number(key);
+      for (const i of brightStars()) {
         if (D.stars.mag[i] > info.limitMag) continue;
         const v = applyBasis(basis, D.stars.ra[i], D.stars.dec[i]);
         if (v.y < 0) continue;
-        consider({ kind: "star", i, name: ns[key] }, vec(v, SKY_R), 0, 22);
+        consider({ kind: "star", i, name: ns[i] || null }, vec(v, SKY_R), 0, 22);
       }
     }
     return best ? best.item : null;
   };
+
+  // the stars bright enough to be tapped (about 300): named ones and any other brighter than magnitude 3.6
+  let _bright = null;
+  const brightStars = () => _bright || (_bright = Array.from({ length: D.stars.n }, (_, i) => i).filter((i) => D.stars.mag[i] < 3.6 || (meta.starNames && meta.starNames[i] && D.stars.mag[i] < 5)));
 
   // look angles (alt, az) of an item in the current sky
   api.altAzOf = (item, date) => {
@@ -628,6 +665,7 @@ export function createSky(ctx) {
     if (item.kind === "moon") return info.moon ? { alt: info.moon.alt, az: info.moon.az } : null;
     if (item.kind === "planet") { const p = info.planets.find((x) => x.name === item.name); return p ? { alt: p.alt, az: p.az } : null; }
     if (item.kind === "star") { const h = raDecToAltAz(D.stars.ra[item.i], D.stars.dec[item.i], place.lat, place.lon, date); return { alt: h.alt, az: h.az }; }
+    if (item.kind === "constellation") { const c = D.later && D.later.constellations && D.later.constellations.byAbbr.get(item.abbr); if (!c) return null; const h = raDecToAltAz(c.centre.ra, c.centre.dec, place.lat, place.lon, date); return { alt: h.alt, az: h.az }; }
     return null;
   };
 
@@ -639,6 +677,7 @@ export function createSky(ctx) {
   api.select = (item, date) => {
     if (place) ensureBodies(date);
     sel.item = item;
+    api.setConstellationFocus(item && item.kind === "constellation" ? item.abbr : null);
     satU.selIdx.value = item && item.kind === "sat" ? item.idx : -1;
     passLine.clear();
     if (item && item.kind === "sat") {
@@ -652,7 +691,7 @@ export function createSky(ctx) {
     }
   };
   api.updateSelection = () => {
-    if (!sel.item) { selRing.visible = false; return; }
+    if (!sel.item || sel.item.kind === "constellation") { selRing.visible = false; return; }
     const aa = api.altAzOf(sel.item, clock.now());
     if (!aa || aa.alt < -2) { selRing.visible = false; return; }
     const v = altAzVec(aa.alt, aa.az, sel.item.kind === "plane" ? PLANE_R - 0.5 : sel.item.kind === "moon" ? 46 : 47);
@@ -674,6 +713,12 @@ export function createSky(ctx) {
       const ns = meta.starNames || {};
       const named = Object.keys(ns).map(Number).filter((i) => D.stars.mag[i] < Math.min(info.limitMag, 2.2)).sort((a, b) => D.stars.mag[a] - D.stars.mag[b]).slice(0, 16);
       for (const i of named) { const v = applyBasis(basis, D.stars.ra[i], D.stars.dec[i]); if (v.y > 0.03) out.push({ id: "s" + i, text: ns[i], pos: vec(v, SKY_R).add(new THREE.Vector3(0, 1, 0)), cls: "star", item: { kind: "star", i, name: ns[i] } }); }
+    }
+    if (basis && opts.constellations && D.later && D.later.constellations) {
+      for (const c of D.later.constellations.list) {
+        const v = applyBasis(basis, c.centre.ra, c.centre.dec);
+        if (v.y > 0.12) out.push({ id: "k" + c.abbr, text: c.name, pos: vec(v, SKY_R), cls: "con", item: { kind: "constellation", abbr: c.abbr } });
+      }
     }
     if (sel.item && sel.item.kind === "sat") {
       const aa = api.altAzOf(sel.item, clock.now());

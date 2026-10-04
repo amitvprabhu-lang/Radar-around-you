@@ -23,3 +23,4 @@ the sources actually send.
 | nhc_ep152026_track.kmz, nhc_ep152026_cone.kmz | the forecastTrack and trackCone kmzFile links for Nolo, advisory 56 (a storm that crosses the dateline) | whole files |
 | iau_csn_sample.txt | https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt | the header, the first 30 rows, and Sirius, Mebsuta (blank component column), Geminga (pulsar, no magnitude) and Castor (multiple star) |
 | stars_sample.json | the app's star catalogue source (raw/stars6.json, Hipparcos numbers as ids) | the features for the stars named in the sample above plus the first 10, in catalogue order |
+| jpl_cad_60d.json | https://ssd-api.jpl.nasa.gov/cad.api?date-min=now&date-max=%2B60&dist-max=0.05&sort=date&fullname=true | whole answer (31 close approaches, requested 2026-10-04) |

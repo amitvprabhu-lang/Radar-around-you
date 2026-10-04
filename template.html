@@ -53,6 +53,7 @@
   .placeinput:focus { outline: 2px solid color-mix(in srgb, var(--ion) 60%, transparent); outline-offset: 1px; }
   #nightveil { position: fixed; inset: 0; z-index: 9999; pointer-events: none; display: none; background: rgb(255, 24, 0); mix-blend-mode: multiply; }
   html.night #nightveil { display: block; }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--ion); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left; }
   button.item { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
   .item.near { border-left: 3px solid var(--line-2); align-items: flex-start; }
   .item.near.alert { border-left-color: var(--alert); } .item.near.watch { border-left-color: var(--signal); } .item.near.info { border-left-color: var(--sky); }
@@ -174,6 +175,7 @@
   .lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); white-space: nowrap; font: 500 11px/1 var(--f-mono); letter-spacing: .06em; color: #fff; text-shadow: 0 0 6px #000, 0 0 2px #000; opacity: .92; will-change: transform; }
   .lbl.cardinal { color: var(--muted); font-size: 12px; letter-spacing: .12em; }
   .lbl.body { color: #ffe9b0; }
+  .lbl.con { color: #f2c98b; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; opacity: .78; text-shadow: 0 0 6px #000; }
   .lbl.star { color: #b9c9f5; font-size: 10px; opacity: .8; }
   .lbl.plane { color: #bfe6ff; padding: 8px 6px; margin: -8px -6px; }
   .lbl.you { color: var(--ion); }

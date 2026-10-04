@@ -237,3 +237,63 @@ class FiresTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CloseApproachTest(unittest.TestCase):
+    NOW = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
+
+    def test_real_answer_is_read_and_sorted(self):
+        d = hazards.close_approaches(fx("jpl_cad_60d.json"), self.NOW)
+        a = d["approaches"]
+        self.assertEqual(len(a), 31)
+        self.assertEqual([x["time"] for x in a], sorted(x["time"] for x in a))
+        first = a[0]
+        self.assertEqual(first["des"], "2024 SH7")
+        self.assertEqual(first["name"], "2024 SH7")
+        self.assertAlmostEqual(first["distAu"], 0.026949, places=5)
+        self.assertEqual(first["h"], 27.31)
+        self.assertEqual(first["timeSigma"], "3_19:55")
+        self.assertEqual(d["version"], "1.5")
+
+    def test_times_are_converted_from_tdb_to_utc(self):
+        # JPL prints "2026-Oct-04 00:43" in TDB, rounded to the minute; the same moment in UTC is about 69 seconds earlier
+        first = hazards.close_approaches(fx("jpl_cad_60d.json"), self.NOW)["approaches"][0]
+        t = datetime.strptime(first["time"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        tdb_text = datetime(2026, 10, 4, 0, 43, tzinfo=UTC)
+        self.assertLess(abs((tdb_text - t).total_seconds() - 69.184), 31, f"{t} against {tdb_text}")
+
+    def test_distance_units(self):
+        a = hazards.close_approaches(fx("jpl_cad_60d.json"), self.NOW)["approaches"]
+        two = next(x for x in a if x["des"] == "2026 TF")
+        self.assertEqual(two["distKm"], round(0.0134295577440828 * 149_597_870.7))
+        self.assertAlmostEqual(two["distLd"], 5.23, places=2)  # 5.23 times the distance to the Moon
+        self.assertLess(two["distMinAu"], two["distAu"] + 1e-9)
+        self.assertGreater(two["distMaxAu"], two["distAu"] - 1e-9)
+
+    def test_a_changed_api_version_or_field_list_is_refused(self):
+        d = json.loads(fx("jpl_cad_60d.json"))
+        d["signature"]["version"] = "2.0"
+        with self.assertRaises(ValidationError):
+            hazards.close_approaches(json.dumps(d), self.NOW)
+        d = json.loads(fx("jpl_cad_60d.json"))
+        i = d["fields"].index("dist")
+        d["fields"][i] = "distance"
+        with self.assertRaises(ValidationError):
+            hazards.close_approaches(json.dumps(d), self.NOW)
+        with self.assertRaises(ValidationError):
+            hazards.close_approaches(b"[]", self.NOW)
+
+    def test_values_outside_sensible_ranges_are_refused(self):
+        for field, value in (("dist", "5.0"), ("v_rel", "900"), ("h", "-3"), ("jd", "2400000.5")):
+            d = json.loads(fx("jpl_cad_60d.json"))
+            d["data"][0][d["fields"].index(field)] = value
+            with self.assertRaises(ValidationError, msg=field):
+                hazards.close_approaches(json.dumps(d), self.NOW)
+
+    def test_an_unknown_size_is_kept_as_none_and_a_wrong_count_is_refused(self):
+        d = json.loads(fx("jpl_cad_60d.json"))
+        d["data"][0][d["fields"].index("h")] = None
+        self.assertIsNone(hazards.close_approaches(json.dumps(d), self.NOW)["approaches"][0]["h"])
+        d["count"] = 99
+        with self.assertRaises(ValidationError):
+            hazards.close_approaches(json.dumps(d), self.NOW)

@@ -234,6 +234,55 @@ async function suite(label, viewport, mobile) {
   check(L("back on the default place and the globe the address is clean"), (await st()).hash === "", (await st()).hash);
   await R(p, () => window.__radar.actions.setPlace("tokyo")); await p.waitForTimeout(500);
 
+  // ---- H5. stars and constellations
+  await R(p, () => window.__radar.setView("sky")); await p.waitForTimeout(800);
+  const sirius = await R(p, () => { const i = [...window.__radar.app.D.later.starInfo.values()].find((x) => x.name === "Sirius"); return i; });
+  await R(p, (i) => window.__radar.actions.focusItem({ kind: "star", i: i.i, name: "Sirius" }), sirius); await p.waitForTimeout(900);
+  let card = await p.textContent("#card");
+  check(L("a star card gives its IAU name, Bayer designation, constellation meaning and rank"), /Sirius/.test(card) && /α Canis Majoris/.test(card) && /the Great Dog/.test(card) && /the brightest in this catalogue/.test(card) && /IAU name/.test(card), card.slice(0, 220));
+  check(L("it gives colour, rise and set times for the place, and where it is now"), /white \(B-V/.test(card) && /(Rises|Never)/.test(card) && /(up,|below the horizon)/.test(card), card.slice(220, 600));
+  await R(p, () => window.__radar.actions.closeCard());
+  const unnamed = await R(p, () => { const D = window.__radar.app.D; for (let i = 0; i < D.stars.n; i++) if (D.stars.mag[i] < 3 && !D.later.starInfo.has(i)) return i; return -1; });
+  if (unnamed >= 0) { await R(p, (i) => window.__radar.actions.focusItem({ kind: "star", i, name: null }), unnamed); await p.waitForTimeout(700); card = await p.textContent("#card"); check(L("a star without an IAU name is shown by its Hipparcos number and says so"), /HIP \d+/.test(card) && /The IAU has not given this star a name/.test(card), card.slice(0, 160)); await R(p, () => window.__radar.actions.closeCard()); }
+  await R(p, () => window.__radar.actions.openConstellation("Ori")); await p.waitForTimeout(1200);
+  card = await p.textContent("#card");
+  check(L("a constellation card gives the IAU's name, meaning, pronunciation and genitive"), /Orion/.test(card) && /the Hunter/.test(card) && /Pronounced/.test(card) && /Orionis/.test(card), card.slice(0, 200));
+  check(L("it gives size, brightest star, best month and how it sits over the place"), /square degrees, number \d+ of 88/.test(card) && /Rigel, magnitude 0\.2/.test(card) && /Evenings in January/.test(card) && /(never rises|never sets|clears the horizon|part of it)/i.test(card), card.slice(200, 700));
+  check(L("it lists the IAU-named stars inside it as buttons"), (await p.locator("#card .examples .chip").count()) >= 5 && /Betelgeuse/.test(card));
+  check(L("choosing a constellation outlines it in the sky"), (await R(p, () => window.__radar.sky.overlayInfo().focus)) === "Ori");
+  await R(p, () => window.__radar.actions.closeCard());
+  check(L("closing the card removes the outline"), (await R(p, () => window.__radar.sky.overlayInfo().focus)) === null);
+  const chips2 = await p.locator("#skyChips .chip").allTextContents();
+  check(L("the sky chips offer Star lines and Boundaries"), chips2.includes("Star lines") && chips2.includes("Boundaries"), chips2.join());
+  await p.click('#skyChips .chip:has-text("Star lines")'); await p.click('#skyChips .chip:has-text("Boundaries")'); await p.waitForTimeout(1500);
+  const lab = await R(p, () => ({ n: document.querySelectorAll("#labels .lbl.con").length, b: window.__radar.sky.overlayInfo() }));
+  check(L("constellation names are labelled in the sky and the 88 boundaries are drawn"), lab.n >= 3 && lab.b.boundariesBuilt && lab.b.boundariesVisible, JSON.stringify(lab));
+  await shot(p, "constellations");
+  await R(p, () => { const el = [...document.querySelectorAll("#labels .lbl.con")].find((e) => !e.hidden); el.click(); }); await p.waitForTimeout(800);
+  check(L("tapping a constellation name opens its card"), (await R(p, () => window.__radar.S.selected && window.__radar.S.selected.kind)) === "constellation");
+  await R(p, () => window.__radar.actions.closeCard());
+  await p.click('#skyChips .chip:has-text("Star lines")'); await p.click('#skyChips .chip:has-text("Boundaries")'); await p.waitForTimeout(300);
+  await p.click('#hud button:has-text("Guide")'); await p.waitForSelector('#sheet button.item'); await p.waitForTimeout(500);
+  const upRows = await p.locator("#sheet button.item").count();
+  check(L("the constellation guide lists what is up now, brightest first"), upRows >= 15 && /Constellations/.test(await p.textContent("#sheet")), String(upRows));
+  await p.fill('#sheet input[type="search"]', "great bear"); await p.waitForTimeout(400);
+  check(L("it searches meanings as well as names"), /Ursa Major/.test(await p.textContent("#sheet")));
+  await p.click('#sheet button.item:has-text("Ursa Major")'); await p.waitForTimeout(1000);
+  check(L("choosing one from the list opens its card"), /Ursa Major/.test(await p.textContent("#card")) && (await R(p, () => window.__radar.sky.overlayInfo().focus)) === "UMa");
+  await R(p, () => window.__radar.actions.closeCard());
+  await R(p, () => window.__radar.panels.openSearch()); await p.waitForTimeout(300);
+  await p.fill("#searchPanel input", "betelgeuse"); await p.waitForSelector('#searchPanel .result:has-text("Betelgeuse")', { timeout: 15000 });
+  await p.click('#searchPanel .result:has-text("Betelgeuse")'); await p.waitForTimeout(900);
+  check(L("the main search finds a named star and opens its card"), /Betelgeuse/.test(await p.textContent("#card")) && /α Orionis/.test(await p.textContent("#card")));
+  await R(p, () => window.__radar.actions.closeCard());
+  await R(p, () => window.__radar.panels.openSearch()); await p.waitForTimeout(300);
+  await p.fill("#searchPanel input", "cassiopeia"); await p.waitForSelector('#searchPanel .result:has-text("Cassiopeia")', { timeout: 15000 });
+  check(L("the main search finds a constellation"), true);
+  await R(p, () => window.__radar.panels.closeSearch());
+  await go("#constellations");
+  check(L("a #constellations link opens the guide"), (await st()).sheet === "constellations", JSON.stringify(await st()));
+  await R(p, () => window.__radar.panels.closeSheet()); await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(400);
+
   // ---- H4. night use: red light and keeping the screen on
   const channels = async () => {
     const b64 = (await p.screenshot()).toString("base64");

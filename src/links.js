@@ -3,7 +3,7 @@
 // Parsing is strict: only known names are accepted and a place must match one of three exact shapes, so a pasted link can
 // never inject anything but a view, a sheet and a place.
 export const VIEWS = ["globe", "sky", "under"];
-export const SHEETS = ["feed", "calendar", "tonight", "trains", "status", "about", "places", "near"];
+export const SHEETS = ["feed", "calendar", "tonight", "trains", "status", "about", "places", "near", "constellations", "asteroids"];
 export const WATCH_TABS = ["aurora", "storms", "fires"];
 
 const CITY = /^[a-z][a-z0-9-]{1,30}$/;

@@ -36,6 +36,7 @@ export function livePack({ taken = "2026-10-04T19:00:00Z", withSatellites = true
     [dir("aurora") + "aurora.bin"]: grid, [dir("aurora") + "aurora.json"]: { observation: taken, forecast: taken },
     [dir("kp") + "kp.json"]: kp, [dir("clouds") + "clouds.json"]: clouds, [dir("planes") + "planes.json"]: planes,
     [dir("storms") + "storms.json"]: shiftTimes(JSON.parse(hz("storms.json")), Date.parse(taken) - FIXTURE_NOW), [dir("spaceweather") + "spaceweather.json"]: shiftTimes(JSON.parse(hz("spaceweather.json")), Date.parse(taken) - FIXTURE_NOW),
+    [dir("closeapproaches") + "closeapproaches.json"]: shiftTimes(JSON.parse(hz("closeapproaches.json")), Date.parse(taken) - FIXTURE_NOW),
     [dir("fires") + "fires.bin"]: hz("fires.bin"), [dir("fires") + "fires.json"]: shiftTimes(JSON.parse(hz("fires.json")), Date.parse(taken) - FIXTURE_NOW),
   };
   const rel = (id, ...names) => Object.fromEntries(names.map((n) => [n, `${id}/${version}/${n}`]));
@@ -45,6 +46,7 @@ export function livePack({ taken = "2026-10-04T19:00:00Z", withSatellites = true
     clouds: feed(version, rel("clouds", "clouds.json"), taken, { label: "Cloud forecast" }), planes: feed(version, rel("planes", "planes.json"), taken, { label: "Aircraft" }),
     storms: feed(version, rel("storms", "storms.json"), taken, { label: "Tropical storms (Atlantic and Pacific)" }), fires: feed(version, rel("fires", "fires.bin", "fires.json"), taken, { label: "Active fire detections" }),
     spaceweather: feed(version, rel("spaceweather", "spaceweather.json"), taken, { label: "Solar wind and geomagnetic alerts" }),
+    closeapproaches: feed(version, rel("closeapproaches", "closeapproaches.json"), taken, { label: "Asteroid close approaches" }),
   };
   if (withSatellites) {
     const names = ["swarm.bin", "ids.bin", "details.bin", "names.txt", "precise.json"];

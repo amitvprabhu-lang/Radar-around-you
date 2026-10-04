@@ -4,6 +4,7 @@ import { decodeSwarm } from "./core.js";
 import { LIVE_BASE, loadManifest, resolveSources, overlayCities } from "./live.js";
 import { decodeFires } from "./connect.js";
 import { decodePlaces } from "./places.js";
+import { indexConstellations } from "./constellations.js";
 
 const BASE = "";
 
@@ -91,6 +92,7 @@ export async function loadFeedData(id, source) {
   if (id === "planes") return json(p["planes.json"]);
   if (id === "storms") return json(p["storms.json"]);
   if (id === "spaceweather") return json(p["spaceweather.json"]);
+  if (id === "closeapproaches") return json(p["closeapproaches.json"]);
   if (id === "fires") {
     const [buf, summary] = await Promise.all([bytes(p["fires.bin"]), json(p["fires.json"])]);
     return decodeFires(buf, summary);
@@ -130,7 +132,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
   let done = 0;
   const tick = (f, label) => { done += sizes[f] || 20000; onProgress(Math.min(0.99, done / total), label); };
   const track = (f, label, p) => p.then((r) => { tick(f, label); return r; });
-  const [sat, starsBuf, lines, aur, quakes, events, baseCities, coastBuf, kpRows, clouds, planes, storms, fires, space] = await Promise.all([
+  const [sat, starsBuf, lines, aur, quakes, events, baseCities, coastBuf, kpRows, clouds, planes, storms, fires, space, close] = await Promise.all([
     track("swarm.bin", "Placing satellites", tryLive("satellites",
       async (p) => { const [buf, satmeta] = await Promise.all([bytes(p["swarm.bin"]), json(p["satmeta.json"])]); return { buf, satmeta }; },
       async () => ({ buf: await bytes("swarm.bin"), satmeta: null }))),
@@ -149,6 +151,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
     tryLive("storms", (p) => json(p["storms.json"]), async () => null),
     tryLive("fires", (p) => loadFeedData("fires", { paths: p }), async () => null),
     tryLive("spaceweather", (p) => json(p["spaceweather.json"]), async () => null),
+    tryLive("closeapproaches", (p) => json(p["closeapproaches.json"]), async () => null),
   ]);
   const meta = { ...baseMeta, ...(sat.satmeta || {}) };
   if (kpRows) meta.kp = kpRows;
@@ -161,7 +164,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
     lines,
     aurora: new Uint8Array(aur.buf),
     quakes, events, cities: baseCities,
-    hazards: { storms, fires, space },
+    hazards: { storms, fires, space, close },
     coast: decodeCoast(coastBuf),
     live: { manifest, sources: src, used, fellBack, baselineTakenMs: Date.parse(baseMeta.taken) },
     onTexture: (f) => tick(f, "Painting the Earth"),
@@ -173,7 +176,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
 export async function loadLater(live = null) {
   const sat = live && live.used && live.used.satellites ? live.sources.satellites.paths : null;
   const P = (name) => (sat ? sat[name] : name);
-  const [names, ids, details, impact, routes, airlines, precise] = await Promise.all([
+  const [names, ids, details, impact, routes, airlines, precise, consDoc, starNames, starIdsBuf] = await Promise.all([
     text(P("names.txt")).then(decodeNames),
     bytes(P("ids.bin")).then(decodeIds),
     bytes(P("details.bin")).then((b) => new Uint8Array(b)),
@@ -181,8 +184,12 @@ export async function loadLater(live = null) {
     json("routes.json"),
     json("airlines.json"),
     json(P("precise.json")),
+    json("constellations.json"),
+    json("starnames.json"),
+    bytes("starids.bin"),
   ]);
-  return { names, ids, details, impact, routes, airlines, precise };
+  // constellations: the 88 IAU constellations; starInfo: IAU names by catalogue index; starIds: the Hipparcos number of every catalogue star
+  return { names, ids, details, impact, routes, airlines, precise, constellations: indexConstellations(consDoc), starInfo: new Map(starNames.stars.map((x) => [x.i, x])), starNamesDoc: starNames, starIds: new Uint32Array(starIdsBuf) };
 }
 
 export function expandSwarm(core) {

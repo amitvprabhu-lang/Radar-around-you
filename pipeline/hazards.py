@@ -307,3 +307,48 @@ def fires(csv_bodies, now):
     summary = {"newest": iso(newest), "cells": len(cells), "detections": kept, "lowConfidenceLeftOut": low, "rows": total, "bySatellite": per_sat,
                "cellDeg": FIRE_CELL_DEG, "record": "uint16 latIndex, uint16 lonIndex, uint16 detections, float32 frpMw, uint16 minutesBeforeNewest; little endian; lat = -90 + index * cellDeg, lon = -180 + index * cellDeg (south-west corner of the cell)"}
     return bytes(out), summary
+
+
+# ---------------------------------------------------------------- NASA/JPL close approaches
+CAD_VERSION = "1.5"            # the API page says to check the payload's signature version; any other version may have changed format
+CAD_FIELDS = ("des", "jd", "dist", "dist_min", "dist_max", "v_rel", "h")
+TT_MINUS_UTC_S = 69.184        # OURS: TDB (what JPL gives) is within milliseconds of TT, which is 32.184 s plus the leap seconds (37) ahead of UTC
+AU_KM = 149_597_870.7          # the astronomical unit as the IAU fixed it in 2012
+LD_KM = 384_400                # OURS: the average Earth to Moon distance, about
+UNIX_EPOCH_JD = 2440587.5
+
+
+def jd_tdb_to_utc(jd):
+    return datetime.fromtimestamp((jd - UNIX_EPOCH_JD) * 86400 - TT_MINUS_UTC_S, timezone.utc)
+
+
+def close_approaches(body, now):
+    """Upcoming close approaches to Earth, sorted by time. Times are converted from JPL's TDB to UTC."""
+    d = _json(body, "close approaches")
+    sig = d.get("signature") if isinstance(d, dict) else None
+    if not isinstance(sig, dict) or sig.get("version") != CAD_VERSION:
+        raise ValidationError(f"close approaches: the API version is {sig.get('version') if isinstance(sig, dict) else 'missing'}, expected {CAD_VERSION}; the format may have changed")
+    fields, data = d.get("fields"), d.get("data")
+    if not isinstance(fields, list) or not isinstance(data, list) or any(f not in fields for f in CAD_FIELDS):
+        raise ValidationError("close approaches: the fields are not the ones expected")
+    ix = {f: fields.index(f) for f in fields}
+    out = []
+    for row in data:
+        try:
+            jd, dist, dmin, dmax, vrel = (float(row[ix[k]]) for k in ("jd", "dist", "dist_min", "dist_max", "v_rel"))
+            h = float(row[ix["h"]]) if row[ix["h"]] not in (None, "") else None
+            t = jd_tdb_to_utc(jd)
+        except (ValueError, TypeError, IndexError, OverflowError) as e:
+            raise ValidationError(f"close approaches: unreadable row ({e})") from e
+        if not (0 < dist < 1 and 0 < dmin <= dist <= dmax < 1 and 0 < vrel < 100 and (h is None or 0 < h < 40)):
+            raise ValidationError(f"close approaches: {row[ix['des']]} has values outside the expected ranges")
+        if not (now - timedelta(days=3) <= t <= now + timedelta(days=800)):
+            raise ValidationError(f"close approaches: {row[ix['des']]} is dated {t:%Y-%m-%d}, far from today")
+        name = (row[ix["fullname"]] if "fullname" in ix and row[ix["fullname"]] else row[ix["des"]]).strip().strip("()").strip()
+        out.append({"des": row[ix["des"]].strip(), "name": name, "time": iso(t), "distAu": round(dist, 6), "distMinAu": round(dmin, 6), "distMaxAu": round(dmax, 6),
+                    "distKm": round(dist * AU_KM), "distLd": round(dist * AU_KM / LD_KM, 2), "speedKms": round(vrel, 2), "h": h,
+                    "timeSigma": row[ix["t_sigma_f"]].strip() if "t_sigma_f" in ix and row[ix["t_sigma_f"]] else None})
+    if len(out) != d.get("count", len(out)):
+        raise ValidationError("close approaches: the row count does not match the count the API reported")
+    out.sort(key=lambda r: r["time"])
+    return {"generated": iso(now), "version": sig["version"], "ldKm": LD_KM, "approaches": out}

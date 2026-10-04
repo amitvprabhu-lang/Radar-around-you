@@ -310,6 +310,33 @@
    "failures": 0,
    "nextTryAt": "2026-10-04T19:53:40Z",
    "halted": null
+  },
+  "closeapproaches": {
+   "label": "Asteroid close approaches",
+   "source": "NASA/JPL CNEOS (SBDB Close-Approach Data API)",
+   "docUrl": "https://ssd-api.jpl.nasa.gov/doc/cad.html",
+   "says": "The page describes \"current close-approach data\" and sets its defaults to \"NEO Earth close-approaches less than 0.05 au in the next 60 days sorted by date\". It states no refresh interval; every 6 hours is our choice. It asks users to check the payload's signature version (we require 1.5).",
+   "licence": "Not stated on the page read.",
+   "credit": "Asteroid close approaches: NASA/JPL CNEOS",
+   "refreshSec": 21600,
+   "staleAfterSec": 86400,
+   "status": "ok",
+   "checkedAt": "2026-10-04T21:34:38Z",
+   "fetchedAt": "2026-10-04T21:34:38Z",
+   "sourceTime": "2026-10-04T21:34:37Z",
+   "count": 31,
+   "version": "20261004T213438Z",
+   "files": {
+    "closeapproaches.json": "closeapproaches/20261004T213438Z/closeapproaches.json"
+   },
+   "sizes": {
+    "closeapproaches.json": 6467
+   },
+   "note": "closest: 2025 UK9 at 0.82 lunar distances",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T03:33:38Z",
+   "halted": null
   }
  },
  "static": [

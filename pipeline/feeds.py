@@ -236,6 +236,16 @@ def fires(ctx):
     return Result({"fires.bin": blob, "fires.json": dumps(summary)}, summary["cells"], summary["newest"], note)
 
 
+def closeapproaches(ctx):
+    r = ctx.get("closeapproaches", F["closeapproaches"].url)
+    try:
+        data = hazards.close_approaches(r.body, ctx.now)
+    except validate.ValidationError as e:
+        raise FeedFailure(str(e))
+    nearest = min(data["approaches"], key=lambda a: a["distAu"], default=None)
+    return Result({"closeapproaches.json": dumps(data)}, len(data["approaches"]), data["generated"], f"closest: {nearest['name']} at {nearest['distLd']} lunar distances" if nearest else "none listed")
+
+
 BUILDERS = {"catalogue": catalogue, "satellites": satellites, "quakes": quakes, "events": events,
             "aurora": aurora, "kp": kp, "clouds": clouds, "planes": planes,
-            "spaceweather": spaceweather, "storms": storms, "fires": fires}
+            "spaceweather": spaceweather, "storms": storms, "fires": fires, "closeapproaches": closeapproaches}

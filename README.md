@@ -13,6 +13,7 @@ This is a standalone project.
 - **Tonight** ("Will I see it tonight?"): one verdict for your place (cloud, Moon, dark window, aurora chance) and a timeline of what to look for: visible satellite and ISS passes, Starlink strings, planets, meteor showers near their peak. Each item has Show me (jumps the Sky view to that time and turns to it) and Remind me (a calendar link).
 - **Starlink strings**: satellites from one recent launch that are still in a line. Found by comparing exact SGP4 positions of every satellite from the same launch. The home screen shows how many there are; the sheet says when one can be seen from your place.
 - **Exact passes**: the ISS, other bright objects and everything launched in the last 30 days use SGP4 (about 200 objects, `public/precise.json`). Pass times on their cards come from SGP4. Everything else uses the fast swarm model.
+- **Stars and constellations**: tap a named star for its official IAU name, Bayer designation (for example α Canis Majoris), constellation and its meaning, brightness and rank, colour, and when it rises, is highest and sets for your place. Tap a constellation name in the sky (turn on Star lines) for its IAU name, meaning, pronunciation, size, brightest star, best month, how it sits over your place and what planets are inside it, with its boundary and figure drawn in the sky. A Boundaries chip draws all 88 IAU boundaries. The Guide button lists every constellation, with the ones above the horizon first. Search finds stars and constellations by name or meaning. 331 stars carry IAU names; distances and spectral types are not shown yet because no source with a licence we can use has been chosen.
 - **Any place**: search any town or city (GeoNames, about 34,000 places of 15,000 people or more), or use your device's exact position, which is named for the largest place within 25 km and never leaves the device. The sky, calendar, Tonight and the screens below work for any place. Cloud forecasts and aircraft overhead exist only for the six cities the collector fetches for.
 - **Aurora**: Kp now with NOAA's geomagnetic storm scale in NOAA's own words, the NOAA warnings in force, your chance of aurora from NOAA's 30 to 90 minute forecast, and the last six hours of solar wind speed and magnetic field (Bz) drawn from live spacecraft data.
 - **Storms**: every storm NHC is tracking, with its position, wind in knots, km/h and mph, pressure, movement, a map with NHC's forecast track and cone of uncertainty (the cone's own caveat is quoted), Saffir-Simpson category, and distance to you. Cyclones outside NHC's areas are listed from GDACS with a warning that its wind figure is one number for the whole storm.
@@ -28,11 +29,11 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 152 unit tests for the app, no browser needed
-npm run test:pipeline   # 119 tests for the data pipeline (Python, standard library only)
+npm test                # 185 unit tests for the app, no browser needed
+npm run test:pipeline   # 125 tests for the data pipeline (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
-npm run e2e             # 192 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e             # 258 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
 npm run e2e:live        # 76 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)

@@ -7,6 +7,9 @@ import { drawCard, quakeSpec, passSpec, itemSpec, tonightSpec, CARD_W, CARD_H } 
 import { agoText, STATE_LABEL } from "./live.js";
 import { createWatch } from "./watch.js";
 import { searchPlaces, placeFromRecord, countryName, PLACES_CREDIT } from "./places.js";
+import { constellationAt, visibilityFrom, VISIBILITY_TEXT, bestMonth, wanderersIn } from "./constellations.js";
+import { colourName, magnitudeRank, starDay, bayerName } from "./starinfo.js";
+import { sizeText, sigmaText, lunarText, kmCompact, whenFromNow, ASSUMED_ALBEDO } from "./asteroids.js";
 import { fmtDay } from "./tonight.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
@@ -19,6 +22,7 @@ export function createPanels(ctx) {
   const place = () => S.place;
   const tz = () => S.place.tz;
   const nowDate = () => ctx.clock.now();
+  const skyNow = () => (ctx.skyDate ? ctx.skyDate() : nowDate());
 
   // ------------------------------------------------------------------ toasts and sheets
   let toastSeq = 0;
@@ -286,9 +290,111 @@ export function createPanels(ctx) {
       kids.push(h("div", { class: "actions" }, btn("Guide me to it", "eye", () => actions.guide(sel), "primary"), btn("Share", "share", () => actions.share())));
       return kids;
     }
-    const kids = [head([tag("Star", "live")], sel.name, `Magnitude ${D.stars.mag[sel.i].toFixed(1)}`)];
-    kids.push(h("dl", { class: "facts" }, kv("Right ascension", `${(D.stars.ra[sel.i] / 15).toFixed(2)} h`, { mono: true }), kv("Declination", `${D.stars.dec[sel.i].toFixed(1)}°`, { mono: true })));
-    kids.push(h("div", { class: "actions" }, btn("Guide me to it", "eye", () => actions.guide(sel), "primary")));
+    return starCard(sel);
+  }
+
+  // A constellation: what the IAU says it is called, how big it is, what is in it, when it is best placed, and how it sits over this place.
+  let areaRank = null;
+  function constellationCard(sel) {
+    const L = D.later, cons = L.constellations, c = cons.byAbbr.get(sel.abbr), sky = S.sky();
+    if (!areaRank) { areaRank = new Map(); [...cons.list].sort((a, b) => b.areaDeg2 - a.areaDeg2).forEach((x, k) => areaRank.set(x.abbr, k + 1)); }
+    const vis = visibilityFrom(c, place().lat), best = bestMonth(c.centre.ra), inIt = wanderersIn(c.abbr, nowDate());
+    const b = c.stars.brightest;
+    const midText = () => { const a = sky.altAzOf(sel, skyNow()); return a ? (a.alt > 0 ? `${Math.round(a.alt)}° up, ${C.compassPoint(a.az)}` : "below the horizon") : "n/a"; };
+    const named = [...L.starInfo.values()].filter((x) => x.con === c.abbr).sort((x, y) => x.mag - y.mag);
+    const kids = [head([tag("Constellation", "live")], c.name, `${c.english} · ${c.abbr}`)];
+    kids.push(h("dl", { class: "facts" },
+      kv("Pronounced", c.pron || "Not given", { mono: true, wide: true }),
+      kv("Genitive, used in star names", c.genitive, { mono: true }),
+      kv("Size", `${num(c.areaDeg2)} square degrees, number ${areaRank.get(c.abbr)} of 88`, { mono: true }),
+      kv("Brightest star", b ? h("button", { class: "linkbtn", onclick: () => actions.focusItem({ kind: "star", i: b.i, name: b.name }) }, `${b.name || "HIP " + b.hip}, magnitude ${b.mag.toFixed(1)}`) : "Not available"),
+      kv("Stars to magnitude 6", num(c.stars.count), { mono: true }),
+      kv("Best seen", `Evenings in ${best.month} (highest at 9 pm)`, { wide: true }),
+      kv(`From ${place().name}`, `${VISIBILITY_TEXT[vis.state]}${vis.state !== "never" ? ` Its middle gets as high as ${Math.round(Math.max(0, vis.maxAltCentre))}°.` : ""}`, { wide: true }),
+      kv("Its middle now", midText(), { mono: true, live: midText }),
+      kv("In it now", inIt.length ? inIt.join(", ") : "No planet or the Moon", { wide: true })));
+    if (named.length) kids.push(h("div", null, h("p", { class: "note", text: "Stars here with IAU names:" }), h("div", { class: "examples" }, ...named.map((x) => h("button", { class: "chip glass", onclick: () => actions.focusItem({ kind: "star", i: x.i, name: x.name }) }, x.name)))));
+    kids.push(h("p", { class: "note", text: "The boundaries are the IAU's. The blue stick figure is one common way of joining the stars and is not an official one." }));
+    kids.push(h("div", { class: "actions" }, btn("Guide me to it", "eye", () => actions.guide(sel), "primary"), btn("All constellations", "link", () => actions.openConstellations(), "small")));
+    return kids;
+  }
+
+  // asteroids passing Earth in the next 60 days (NASA/JPL), soonest first
+  function openAsteroids() {
+    const close = D.hazards && D.hazards.close;
+    if (!close) { openSheet("asteroids", h("h2", { text: "Asteroids passing close" }), h("p", { class: "note warn", text: "Close-approach data comes from a live feed (NASA/JPL), and this copy of the app has no live connection, so there is nothing to show yet." })); return; }
+    const now = nowDate().getTime();
+    const list = close.approaches.filter((a) => Date.parse(a.time) >= now - 6 * 3600e3);
+    const closest = [...list].sort((a, b) => a.distAu - b.distAu)[0];
+    const kids = [h("h2", { text: "Asteroids passing close" })];
+    kids.push(h("p", { text: list.length ? `NASA/JPL lists ${list.length} asteroid${list.length === 1 ? "" : "s"} passing Earth within about 19 times the Moon's distance in the next 60 days.${closest ? ` The closest is ${closest.name}, at ${lunarText(closest.distLd)}.` : ""}` : "NASA/JPL lists no asteroid passing within about 19 times the Moon's distance in the next 60 days." }));
+    kids.push(h("p", { class: "note", text: `These are close passes, not impacts: each is a prediction that the object will miss. The brightness number H is the object's brightness if it were at a standard distance, and a larger number means a smaller rock. Sizes shown are rough, from H with an assumed reflectivity of ${Math.round(ASSUMED_ALBEDO * 100)} percent; the real reflectivity is not known for most of these.` }));
+    kids.push(h("div", { class: "list" }, ...list.map((a) => {
+      const t = new Date(a.time), when = fmtDateTime(t, tz()), sig = sigmaText(a.timeSigma);
+      return h("div", { class: "item near " + (a.distLd < 1 ? "alert" : a.distLd < 5 ? "watch" : "info") },
+        h("div", { class: "grow" }, h("b", { text: a.name }),
+          h("span", { class: "s", text: `${when} (${place().tz}), ${whenFromNow(t.getTime() - now)}${sig ? `, give or take ${sig}` : ""}` }),
+          h("span", { class: "s", text: `${lunarText(a.distLd)} · ${kmCompact(a.distKm)} · ${a.speedKms.toFixed(1)} km/s · H ${a.h != null ? a.h.toFixed(1) : "?"}, ${sizeText(a.h)}` })));
+    })));
+    kids.push(h("p", { class: "note", text: "Distance is between the centres of Earth and the asteroid. The time is JPL's, given in a time scale about 69 seconds ahead of UTC, converted here and shown in the place's time zone. The Moon's distance is taken as about 384,400 km. Most of these are far too faint to see without a telescope." }));
+    kids.push(h("p", { class: "srcline", text: `Source: NASA/JPL CNEOS, SBDB Close-Approach Data API (version ${close.version}), as of ${fmtUtc(new Date(close.generated))}.` }));
+    kids.push(h("div", { class: "actions" }, link("NASA's list (CNEOS)", "https://cneos.jpl.nasa.gov/ca/", "link", "small")));
+    openSheet("asteroids", ...kids);
+  }
+
+  // all 88 constellations, with the ones above the horizon first
+  function openConstellations() {
+    const cons = D.later && D.later.constellations;
+    if (!cons) { openSheet("constellations", h("h2", { text: "Constellations" }), h("p", { text: "The constellation list is still loading. Try again in a moment." })); return; }
+    const now = skyNow(), sky = S.sky();
+    const rows = cons.list.map((c) => { const aa = sky.altAzOf({ kind: "constellation", abbr: c.abbr }, now); return { c, alt: aa ? aa.alt : -90, az: aa ? aa.az : 0, vis: visibilityFrom(c, place().lat) }; });
+    let mode = "up", query = "";
+    const list = h("div", { class: "list" });
+    const status = (r) => (r.vis.state === "never" ? "never rises here" : r.alt > 3 ? `${Math.round(r.alt)}° up, ${C.compassPoint(r.az)}` : r.vis.state === "circumpolar" ? "never sets here" : "below the horizon now");
+    const render = () => {
+      const q = query.trim().toLowerCase();
+      let shown = rows.filter((r) => !q || r.c.name.toLowerCase().includes(q) || r.c.english.toLowerCase().includes(q) || r.c.abbr.toLowerCase() === q || r.c.genitive.toLowerCase().includes(q));
+      if (mode === "up") shown = shown.filter((r) => r.alt > 3).sort((a, b) => b.alt - a.alt);
+      else shown = shown.sort((a, b) => a.c.name.localeCompare(b.c.name));
+      list.replaceChildren(...(shown.length ? shown.map((r) => h("button", { class: "item", onclick: () => actions.openConstellation(r.c.abbr) },
+        h("span", { class: "mag sat", text: r.c.abbr }), h("div", { class: "grow" }, h("b", { text: r.c.name }), h("span", { class: "s", text: `${r.c.english} · ${status(r)}` })))) : [h("p", { class: "note", text: mode === "up" ? "None match that above the horizon right now. Try All." : "No constellation matches that." })]));
+      tabs.forEach(([id, b]) => { b.setAttribute("aria-pressed", String(id === mode)); });
+    };
+    const tabs = [["up", h("button", { class: "chip glass", onclick: () => { mode = "up"; render(); } }, "Up now")], ["all", h("button", { class: "chip glass", onclick: () => { mode = "all"; render(); } }, "All 88")]];
+    const input = h("input", { type: "search", placeholder: "Search by name or meaning", "aria-label": "Search constellations", autocomplete: "off", spellcheck: "false", class: "placeinput" });
+    input.addEventListener("input", () => { query = input.value; if (query.trim() && mode === "up") mode = "all"; render(); });
+    openSheet("constellations", h("h2", { text: "Constellations" }),
+      h("p", { text: `All 88 IAU constellations. Tap one to turn the sky to it and see its outline. ${place().name} is where "up now" is measured from.` }),
+      h("div", { class: "scroller", style: { margin: "8px 0", padding: 0 } }, ...tabs.map((t) => t[1])), input, list,
+      h("p", { class: "note", text: "Names, meanings and boundaries: IAU. Stick figures: d3-celestial project." }));
+    render();
+  }
+
+  // A star: its IAU name if it has one, where it is and when it is up, and how bright and what colour.
+  function starCard(sel) {
+    const i = sel.i, sky = S.sky(), L = D.later;
+    const info = L && L.starInfo && L.starInfo.get(i);
+    const ra = D.stars.ra[i], dec = D.stars.dec[i], mag = D.stars.mag[i], bv = D.stars.bv[i];
+    const con = L && L.constellations && L.constellations.byAbbr.get(constellationAt(ra, dec));
+    const title = sel.name || (info && info.name) || (L ? `HIP ${L.starIds[i]}` : "Star");
+    const bayer = bayerName(info, con);
+    const sub = [bayer, con ? con.english.replace(/^the /, "the ") : null].filter(Boolean).join(" · ") || (con ? con.name : "");
+    const kids = [head([tag("Star", "live"), info ? tag("IAU name") : null], title, sub)];
+    const nowText = () => { const a = sky.altAzOf({ kind: "star", i }, skyNow()); return a ? (a.alt > 0 ? `${Math.round(a.alt)}° up, ${C.compassPoint(a.az)}` : "below the horizon") : "n/a"; };
+    const rank = magnitudeRank(D.stars.mag, i);
+    const day = starDay(ra, dec, place().lat, place().lon, nowDate());
+    const t = (d) => (d ? fmtTime(d, tz()) : "none");
+    const dayText = day.state === "never" ? "Never rises above the horizon from here." : day.state === "circumpolar" ? `Never sets from here. Highest at ${t(day.transit)}, ${Math.round(day.transitAlt)}° up.` : `Rises ${t(day.rise)} · highest ${t(day.transit)} (${Math.round(day.transitAlt)}° up) · sets ${t(day.set)}`;
+    kids.push(h("dl", { class: "facts" },
+      kv("Brightness", `magnitude ${mag.toFixed(1)}, ${rank === 1 ? "the brightest" : `number ${num(rank)} of ${num(D.stars.n)}`} in this catalogue`, { mono: true, wide: true }),
+      kv("Colour", colourName(bv) ? `${colourName(bv)} (B-V ${bv.toFixed(2)})` : "Not available", { mono: true }),
+      kv("Constellation", con ? h("button", { class: "linkbtn", onclick: () => actions.openConstellation(con.abbr) }, con.name) : "Not available"),
+      kv("Right ascension", `${(ra / 15).toFixed(2)} h`, { mono: true }), kv("Declination", `${dec.toFixed(1)}°`, { mono: true }),
+      kv("Now", nowText(), { mono: true, live: nowText }),
+      kv(`From ${place().name}`, dayText, { wide: true })));
+    if (L && L.starIds && !info) kids.push(h("p", { class: "note", text: `Hipparcos number ${L.starIds[i]}. The IAU has not given this star a name.` }));
+    if (info) kids.push(h("p", { class: "note", text: `The name is the one approved by the IAU Working Group on Star Names${info.designation ? ` (${info.designation} in the Bright Star Catalogue)` : ""}.` }));
+    kids.push(h("div", { class: "actions" }, btn("Guide me to it", "eye", () => actions.guide(sel), "primary"), con ? btn(`${con.name}`, "link", () => actions.openConstellation(con.abbr), "small") : null));
     return kids;
   }
 
@@ -309,8 +415,12 @@ export function createPanels(ctx) {
     } else if (sel.kind === "event") {
       text = "Source: GDACS. Its results are model output and should be confirmed with official bulletins.";
       href = sel.e.url || null; label = "GDACS report";
+    } else if (sel.kind === "constellation") {
+      text = "Names and boundaries: IAU. Stick figures: d3-celestial project. Which stars and planets are inside is worked out on your device with astronomy-engine.";
+      href = "https://www.iau.org/public/themes/constellations/"; label = "IAU constellations";
     } else if (sel.kind === "star") {
-      text = "Source: Hipparcos star catalogue (ESA). Positions are computed on your device.";
+      text = "Source: star names from the IAU Working Group on Star Names; positions and brightness from a Hipparcos-based catalogue; constellation boundaries from the IAU. Rise and set times are computed on your device.";
+      href = "https://www.iau.org/public/themes/naming_stars/"; label = "IAU star names";
     } else {
       text = "Computed on your device with the astronomy-engine library, whose positions we checked against NASA JPL Horizons and the US Naval Observatory.";
     }
@@ -327,6 +437,7 @@ export function createPanels(ctx) {
     else if (sel.kind === "quake") kids = quakeCard(sel);
     else if (sel.kind === "plane") kids = planeCard(sel);
     else if (sel.kind === "event") kids = eventCard(sel);
+    else if (sel.kind === "constellation") kids = constellationCard(sel);
     else kids = bodyCard(sel);
     kids.push(sourceLine(sel));
     el.replaceChildren(...kids);
@@ -351,12 +462,16 @@ export function createPanels(ctx) {
     }
     for (const q of D.quakes.events) items.push({ id: q.id, name: `M${q.mag.toFixed(1)} ${q.place}`, kind: "quake", q, priority: q.mag });
     for (const c of D.cities) items.push({ id: c.id, name: `${c.name} ${c.country}`, kind: "place", c, priority: 2 });
+    if (later && later.constellations) {
+      for (const x of later.starInfo.values()) items.push({ id: `star${x.i}`, name: x.name, kind: "star", st: x, extra: `${x.designation || ""} ${x.id || ""}`, priority: 4 - Math.min(4, x.mag) });
+      for (const c of later.constellations.list) items.push({ id: c.abbr, name: `${c.name} ${c.english}`, kind: "con", c, extra: `${c.genitive} ${c.abbr}`, priority: 1 });
+    }
     search = C.buildSearch(items);
     S.searchReady = !!later;
   }
   function runSearch(q) {
     if (!search) buildSearchIndex();
-    const out = { sat: [], quake: [], place: [], plane: [], geo: [] };
+    const out = { sat: [], quake: [], place: [], plane: [], geo: [], sky: [] };
     const query = q.trim();
     if (!query) return out;
     const mag = C.parseMagnitudeQuery(query);
@@ -367,6 +482,7 @@ export function createPanels(ctx) {
       if (r.kind === "sat" && out.sat.length < 6) out.sat.push(r);
       else if (r.kind === "quake" && out.quake.length < 6 && !out.quake.find((x) => x.q.id === r.q.id)) out.quake.push(r);
       else if (r.kind === "place" && out.place.length < 3) out.place.push(r);
+      else if ((r.kind === "star" || r.kind === "con") && out.sky.length < 5) out.sky.push(r);
     }
     // any place on Earth, once the index is loaded; a place within 30 km of one of the six cities is skipped as a duplicate of it
     if (S.placesIndex) {
@@ -410,6 +526,8 @@ export function createPanels(ctx) {
       return h("button", { class: "result", onclick: () => actions.focusItem({ kind: "plane", hex: r.hex, rec: r.rec }) }, h("span", { class: "ico", text: "AIR" }), h("div", null, h("b", { text: `${info.call} · ${info.typeName}` }), h("span", { text: `${info.airline || "Airline not known"} · ${kmText(info.slantKm)} away` })));
     }
     if (r.kind === "geo") return geoRow(r.rec, "result");
+    if (r.kind === "star") return h("button", { class: "result", onclick: () => actions.focusItem({ kind: "star", i: r.st.i, name: r.st.name }) }, h("span", { class: "ico", text: "STAR" }), h("div", null, h("b", { text: r.st.name }), h("span", { text: `${r.st.bayer ? r.st.bayer + " " : ""}${(D.later.constellations.byAbbr.get(r.st.con) || {}).genitive || r.st.con} · magnitude ${r.st.mag.toFixed(1)}` })));
+    if (r.kind === "con") return h("button", { class: "result", onclick: () => actions.openConstellation(r.c.abbr) }, h("span", { class: "ico", text: r.c.abbr.toUpperCase() }), h("div", null, h("b", { text: r.c.name }), h("span", { text: `Constellation · ${r.c.english}` })));
     return h("button", { class: "result", onclick: () => actions.setPlace(r.c.id) }, h("span", { class: "ico", text: "PIN" }), h("div", null, h("b", { text: r.c.name }), h("span", { text: `Look from ${r.c.name}, ${r.c.country}` })));
   }
 
@@ -417,21 +535,21 @@ export function createPanels(ctx) {
     if (!search) buildSearchIndex();
     const panel = $("searchPanel");
     const results = h("div", { class: "results", "aria-live": "polite" });
-    const input = h("input", { type: "search", placeholder: "Try ISS, Starlink 1008, M5.9 or any place", "aria-label": "Search", autocomplete: "off", spellcheck: "false", enterkeyhint: "search" });
+    const input = h("input", { type: "search", placeholder: "Try ISS, Sirius, Orion, M5.9 or any place", "aria-label": "Search", autocomplete: "off", spellcheck: "false", enterkeyhint: "search" });
     const render = () => {
       const q = input.value;
       results.replaceChildren();
       if (!q.trim()) {
         results.append(h("h4", { text: "Try one of these" }), h("div", { class: "examples" },
-          ...["ISS", "Tiangong", "Hubble", "Starlink", "M5.9", "Tambolaka", "Moon"].map((t) => h("button", { class: "chip glass", onclick: () => { input.value = t; render(); input.focus(); } }, t))));
+          ...["ISS", "Tiangong", "Starlink", "Sirius", "Orion", "M5.9", "Moon"].map((t) => h("button", { class: "chip glass", onclick: () => { input.value = t; render(); input.focus(); } }, t))));
         results.append(h("p", { class: "note", style: { margin: "14px 4px" }, text: S.searchReady ? "Search 19,000 satellites and debris objects, this week's earthquakes and the aircraft above you. Pick one and the globe flies there." : "Satellite names are still loading. Earthquakes and places work already." }));
         return;
       }
       if (q.trim().toLowerCase() === "moon") { results.append(h("button", { class: "result", onclick: () => actions.focusItem({ kind: "moon" }) }, h("span", { class: "ico", text: "MOON" }), h("div", null, h("b", { text: "The Moon" }), h("span", { text: "Show it in your sky" })))); }
       const o = runSearch(q);
       const sec = (title, arr) => { if (arr.length) results.append(h("h4", { text: title }), ...arr.map(resultRow)); };
-      sec("Satellites and objects", o.sat); sec("Earthquakes this week", o.quake); sec(`Aircraft near ${place().name}`, o.plane); sec("Places", [...o.place, ...o.geo]);
-      if (!o.sat.length && !o.quake.length && !o.plane.length && !o.place.length && !o.geo.length && !(q.trim().toLowerCase() === "moon")) results.append(h("p", { class: "note", style: { margin: "14px 4px" }, text: S.searchReady ? "Nothing matches that. Try a satellite name, a NORAD number, a place name or a magnitude like M5.9." : "Satellite names are still loading, try again in a moment." }));
+      sec("Satellites and objects", o.sat); sec("Earthquakes this week", o.quake); sec(`Aircraft near ${place().name}`, o.plane); sec("Stars and constellations", o.sky); sec("Places", [...o.place, ...o.geo]);
+      if (!o.sat.length && !o.quake.length && !o.plane.length && !o.place.length && !o.geo.length && !o.sky.length && !(q.trim().toLowerCase() === "moon")) results.append(h("p", { class: "note", style: { margin: "14px 4px" }, text: S.searchReady ? "Nothing matches that. Try a satellite name, a NORAD number, a place name or a magnitude like M5.9." : "Satellite names are still loading, try again in a moment." }));
     };
     let timer = 0;
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 70); });
@@ -700,5 +818,5 @@ export function createPanels(ctx) {
 
   const watch = createWatch(ctx, { openSheet, closeSheet, tag, btn, link });
 
-  return { openNear: watch.openNear, openWatch: watch.openWatch, connectionList: watch.connectionList, replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
+  return { openNear: watch.openNear, openWatch: watch.openWatch, connectionList: watch.connectionList, replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openAsteroids, openConstellations, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
 }

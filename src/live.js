@@ -4,9 +4,9 @@
 export const LIVE_BASE = typeof __LIVE_BASE__ !== "undefined" ? __LIVE_BASE__ : "live/";
 
 // feeds the app applies while it is open; the satellites are loaded as one group at start and need a reload to change
-export const APPLIED = ["quakes", "events", "storms", "fires", "aurora", "kp", "spaceweather", "clouds", "planes"];
+export const APPLIED = ["quakes", "events", "storms", "fires", "aurora", "kp", "spaceweather", "closeapproaches", "clouds", "planes"];
 // the order the Data status sheet lists them in; the catalogue is a private input of the satellites and is shown last
-export const FEED_ORDER = ["satellites", "quakes", "events", "storms", "fires", "aurora", "kp", "spaceweather", "clouds", "planes", "catalogue"];
+export const FEED_ORDER = ["satellites", "quakes", "events", "storms", "fires", "aurora", "kp", "spaceweather", "closeapproaches", "clouds", "planes", "catalogue"];
 const CORE = ["satellites", "quakes", "events", "aurora", "kp", "clouds", "planes"];
 const RANK = { fresh: 0, failing: 1, stale: 2, none: 2, halted: 3 };
 const SATELLITE_FILES = ["swarm.bin", "ids.bin", "details.bin", "names.txt", "precise.json", "satmeta.json"];
@@ -69,7 +69,7 @@ export async function loadManifest(fetchFn, base = LIVE_BASE, timeoutMs = 6000) 
 // Which live products the app may use. A product is used only if the manifest lists every file it needs and it is newer
 // than the bundled snapshot (otherwise an old live copy could replace newer bundled data).
 export function resolveSources(manifest, baselineTakenMs, base = LIVE_BASE) {
-  const out = { satellites: null, quakes: null, events: null, storms: null, fires: null, aurora: null, kp: null, spaceweather: null, clouds: null, planes: null };
+  const out = { satellites: null, quakes: null, events: null, storms: null, fires: null, aurora: null, kp: null, spaceweather: null, closeapproaches: null, clouds: null, planes: null };
   if (!validManifest(manifest)) return out;
   const pick = (id, names) => {
     const f = manifest.feeds[id];
@@ -92,6 +92,7 @@ export function resolveSources(manifest, baselineTakenMs, base = LIVE_BASE) {
   out.storms = pick("storms", ["storms.json"]);
   out.fires = pick("fires", ["fires.bin", "fires.json"]);
   out.spaceweather = pick("spaceweather", ["spaceweather.json"]);
+  out.closeapproaches = pick("closeapproaches", ["closeapproaches.json"]);
   return out;
 }
 

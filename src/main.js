@@ -39,6 +39,7 @@ const SKY_OPTIONS = [
   { key: "satellites", label: "Satellites", color: "var(--ion)" },
   { key: "showAll", label: "Unlit too", color: "var(--ember)" },
   { key: "labels", label: "Names", color: "#dfe8ff" },
+  { key: "boundaries", label: "Boundaries", color: "#f2b866" },
   { key: "keepAwake", label: "Keep screen on", color: "var(--ion)" },
   { key: "nightVision", label: "Red light", color: "var(--alert)" },
 ];
@@ -94,6 +95,7 @@ async function main() {
     currentReplay: () => (S.view === "under" ? under.replay : orbit.replay),
     tonight: (force) => tonightModel(force),
     calendar: () => calendarModel(),
+    skyDate: () => skyDate(),
     auroraChance: () => { const a = sky.info.aurora; return a ? a.chance : null; },
   });
   const { toast } = panels;
@@ -151,6 +153,19 @@ async function main() {
     if (aa && aa.alt > 0) { sky.lookAt(aa.alt, aa.az); actions.guide(item); }
     else toast("Below your horizon right now", { sub: "Try the Tonight slider, or open it in the globe view.", plain: true });
   };
+  // a constellation: turn the sky to its middle, outline it, and show its card
+  actions.openConstellation = (abbr) => {
+    const c = D.later && D.later.constellations && D.later.constellations.byAbbr.get(abbr);
+    if (!c) return;
+    panels.closeSearch(); panels.closeSheet();
+    setView("sky");
+    const item = { kind: "constellation", abbr };
+    select(item);
+    const aa = sky.altAzOf(item, skyDate());
+    if (aa && aa.alt > 0) sky.lookAt(Math.max(10, Math.min(aa.alt, 65)), aa.az);
+    else toast(`${c.name} is below your horizon now`, { sub: "Its outline is still drawn. Use the Tonight slider to see when it is up.", plain: true, ms: 5200 });
+  };
+  actions.openConstellations = () => panels.openConstellations();
   actions.guide = (item) => { S.guide = item; if (S.view !== "sky") setView("sky"); renderGuide(); };
   actions.showUnder = (q) => { S.underQuake = q; setView("under"); };
   // the place search index loads once, on demand
@@ -307,6 +322,7 @@ async function main() {
     const out = [];
     if (hz.storms || hz.fires || hz.space) { const n = panels.connectionList(hz).length; out.push(["near", String(n), `near ${S.place.name}`, () => panels.openNear()]); }
     if (hz.storms) out.push(["storms", String(hz.storms.storms.length), hz.storms.storms.length === 1 ? "active storm" : "active storms", () => panels.openWatch("storms")]);
+    if (hz.close) { const n = hz.close.approaches.filter((a) => Date.parse(a.time) >= nowDate().getTime() - 6 * 3600e3).length; out.push(["asteroids", String(n), "asteroid flybys, 60 days", () => panels.openAsteroids()]); }
     if (hz.fires) { const d = hz.fires.summary.detections; out.push(["fires", d >= 10000 ? `${Math.round(d / 1000)}k` : num(d), "fire detections, 24 h", () => panels.openWatch("fires")]); }
     return out;
   }
@@ -396,7 +412,7 @@ async function main() {
       const more = h("div", { id: "skyMore", hidden: !S.skyMore }, h("div", { class: "row", style: { margin: "6px 0" } }, h("button", { class: "btn small", onclick: () => sky.faceDefault() }, "Reset view")), info, plan);
       const moreBtn = h("button", { class: "btn small", "aria-expanded": String(!!S.skyMore), onclick: () => { S.skyMore = !S.skyMore; more.hidden = !S.skyMore; moreBtn.setAttribute("aria-expanded", String(S.skyMore)); moreBtn.textContent = S.skyMore ? "Less" : "More"; } }, S.skyMore ? "Less" : "More");
       hud.append(h("div", { class: "panel glass", style: { padding: "10px 12px" } },
-        h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "nowrap" } }, h("div", { class: "grow", style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, headEl), h("div", { class: "row", style: { flex: "none", gap: "6px" } }, sensorBtn, moreBtn)),
+        h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "nowrap" } }, h("div", { class: "grow", style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, headEl), h("div", { class: "row", style: { flex: "none", gap: "6px" } }, sensorBtn, h("button", { class: "btn small", onclick: () => actions.openConstellations() }, "Guide"), moreBtn)),
         h("div", { class: "row", style: { marginTop: "2px" } }, h("span", { class: "mono", style: { fontSize: "12px", color: "var(--muted)" }, text: "Tonight" }), h("div", { class: "grow" }, slider), sliderOut),
         more));
       skyHud.heading = headEl; skyHud.info = info; skyHud.plan = plan;
@@ -494,7 +510,7 @@ async function main() {
     const aa = sky.altAzOf(S.guide, skyDate());
     const title = $("guideTitle"), text = $("guideText");
     if (!title) return;
-    const name = S.guide.kind === "sat" ? D.later.names[S.guide.idx] : S.guide.kind === "plane" ? (S.guide.rec && S.guide.rec.p.call) || "aircraft" : S.guide.kind === "moon" ? "the Moon" : S.guide.name || "target";
+    const name = S.guide.kind === "constellation" ? (D.later.constellations.byAbbr.get(S.guide.abbr) || {}).name || "constellation" : S.guide.kind === "sat" ? D.later.names[S.guide.idx] : S.guide.kind === "plane" ? (S.guide.rec && S.guide.rec.p.call) || "aircraft" : S.guide.kind === "moon" ? "the Moon" : S.guide.name || "target";
     if (!aa || aa.alt < 0) { title.textContent = `${name} is below the horizon`; text.textContent = "Try the Tonight slider to see when it rises."; return; }
     const g = C.guideInstruction(sky.view.yaw, aa.az, aa.alt);
     const dAlt = aa.alt - sky.view.pitch;
@@ -536,7 +552,7 @@ async function main() {
         el = h("div", { class: "lbl " + (L.cls || "") });
         $("labels").append(el);
         labelEls.set(L.id, el);
-        if (L.item && ["plane", "body", "star"].includes(L.cls)) { el.style.pointerEvents = "auto"; el.style.cursor = "pointer"; el.addEventListener("click", () => { if (el._item) select(el._item); }); }
+        if (L.item && ["plane", "body", "star", "con"].includes(L.cls)) { el.style.pointerEvents = "auto"; el.style.cursor = "pointer"; el.addEventListener("click", () => { if (el._item) select(el._item); }); }
       }
       el._item = L.item;
       if (el.textContent !== text) el.textContent = text;
@@ -818,6 +834,7 @@ async function main() {
     storms(data) { D.hazards.storms = data; orbit.refreshStorms(); refreshDerived(); },
     fires(data) { D.hazards.fires = data; orbit.refreshFires(); renderLayerChips(); refreshDerived(); },
     spaceweather(data) { D.hazards.space = data; refreshDerived(); },
+    closeapproaches(data) { D.hazards.close = data; refreshDerived(); },
   };
   function startLive() {
     liveCtl = createLive({
@@ -866,7 +883,7 @@ async function main() {
       } catch { toast("Could not open the place in that link", { sub: "The place list could not be loaded.", plain: true }); }
     }
     if (t.view && t.view !== S.view) setView(t.view);
-    const sheets = { feed: () => panels.openFeed(), calendar: () => panels.openCalendar(), tonight: () => panels.openTonight(), trains: () => panels.openTrains(), status: () => panels.openStatus(), about: () => panels.openAbout(), places: () => panels.openPlaces(), near: () => panels.openNear() };
+    const sheets = { feed: () => panels.openFeed(), calendar: () => panels.openCalendar(), tonight: () => panels.openTonight(), trains: () => panels.openTrains(), status: () => panels.openStatus(), about: () => panels.openAbout(), places: () => panels.openPlaces(), near: () => panels.openNear(), constellations: () => panels.openConstellations(), asteroids: () => panels.openAsteroids() };
     if (t.watch) panels.openWatch(t.watch);
     else if (t.sheet && sheets[t.sheet]) sheets[t.sheet]();
   }
