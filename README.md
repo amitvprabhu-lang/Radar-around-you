@@ -84,3 +84,7 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 - Licence of the Moon texture (taken from the three.js examples).
 - adsb.lol asks to be contacted for heavy use. MET Norway requires an identifying User-Agent.
 - Whether Cloudflare R2 needs a card on file even for the free tier, and whether GitHub Actions scheduled runs keep going on a quiet public repository.
+
+## Licence
+
+The code is released under the MIT licence (see `LICENSE`). The data and images the app uses keep the terms of their sources, which are not all the same. In particular the star catalogue is Hipparcos-based and its licence is non-commercial, the Moon texture's licence still has to be confirmed, and aircraft data from adsb.lol is under ODbL 1.0. `docs/feature-sources.md` lists each source with what its own page says about reuse, and what could not be verified. Read it before using the project commercially.
