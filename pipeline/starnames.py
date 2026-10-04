@@ -14,6 +14,7 @@ import json
 import math
 import os
 import re
+import struct
 import sys
 
 CREDIT = "Star names: IAU Working Group on Star Names (IAU-CSN), CC BY"
@@ -109,6 +110,9 @@ def main(argv=None):
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "starnames.json"), "w", encoding="utf8") as f:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
+    # the Hipparcos number of every star in the catalogue, in catalogue order (unsigned 32-bit, little endian), so an unnamed star can be shown as "HIP n"
+    with open(os.path.join(a.out, "starids.bin"), "wb") as f:
+        f.write(b"".join(struct.pack("<I", ft["id"]) for ft in features))
     meta_path = os.path.join(a.out, "meta.json")
     with open(meta_path, encoding="utf8") as f:
         meta = json.load(f)

@@ -1,5 +1,6 @@
 import json
 import os
+import struct
 import tempfile
 import unittest
 
@@ -81,6 +82,10 @@ class StarNamesTest(unittest.TestCase):
                 self.assertEqual(starnames.main(["--csn", csn, "--stars", sf, "--out", d]), 0)
             finally:
                 starnames.build = old
+            with open(os.path.join(d, "starids.bin"), "rb") as f:
+                ids = f.read()
+            self.assertEqual(len(ids), 4 * len(features()))
+            self.assertEqual([struct.unpack_from("<I", ids, 4 * k)[0] for k in range(len(features()))], [ft["id"] for ft in features()])
             with open(os.path.join(d, "meta.json")) as f:
                 meta = json.load(f)
             self.assertEqual(meta["keep"], 1)
