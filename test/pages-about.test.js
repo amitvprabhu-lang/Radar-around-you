@@ -19,8 +19,8 @@ test("the page has its own address, one h1, and sane title and description lengt
 
 test("it is rich in plain text and has every section", () => {
   assert.ok(words >= 700, `only ${words} words`);
-  for (const id of ["what", "features", "data", "fresh", "limits", "privacy", "free", "method", "faq", "sources"]) assert.ok(html.includes(` id="${id}"`), id);
-  for (const q of ["What can you do with it?", "Where does the data come from?", "How fresh is the data?", "What does it not do?", "Does it know where I am?", "Is it free?"]) assert.ok(html.includes(`>${q}<`), q);
+  for (const id of ["what", "feeds", "features", "data", "fresh", "limits", "privacy", "free", "method", "faq", "sources"]) assert.ok(html.includes(` id="${id}"`), id);
+  for (const q of ["Which live feeds does it show?", "What can you do with it?", "Where does the data come from?", "How fresh is the data?", "What does it not do?", "Does it know where I am?", "Is it free?"]) assert.ok(html.includes(`>${q}<`), q);
 });
 
 test("every data source is named, and the sources with a verified address are linked", () => {
@@ -34,6 +34,19 @@ test("it links to the guides and reference pages that explain each feature", () 
   for (const to of ["../guides/aurora/", "../guides/storms/", "../guides/earthquakes/", "../guides/fires/", "../guides/asteroids/", "../guides/satellites/", "../moon-phases/", "../eclipses/", "../planets/", "../meteor-showers/", "../constellations/", "../stars/", "../sky/", "../methods/", "../how-many-satellites-in-orbit/", "../"]) {
     assert.ok(html.includes(`href="${to}"`), to);
   }
+});
+
+test("the site is positioned as a live feed, and what the feeds do is stated", () => {
+  assert.match(text, /live feed/);
+  assert.match(text, /Reload prompt/);
+  assert.match(page.title, /live feed/);
+  assert.match(page.lead, /live feed/);
+  assert.match(page.description, /live feed/);
+  const feeds = html.slice(html.indexOf('id="feeds"'), html.indexOf('id="features"'));
+  assert.ok(feeds.includes(">Which live feeds does it show?<"));
+  assert.match(feeds, /without a reload/);
+  assert.match(feeds, /clock chip shows SNAPSHOT instead of LIVE/);
+  assert.ok(html.indexOf('id="what"') < html.indexOf('id="feeds"') && html.indexOf('id="feeds"') < html.indexOf('id="features"'), "feeds sits between what and features");
 });
 
 test("privacy, limits and the free licence are stated", () => {

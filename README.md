@@ -1,6 +1,6 @@
 # Radar Around You (prototype v2)
 
-A free, global, real-time 3D tool that shows what is above you (satellites, the ISS, aircraft), in the sky tonight (stars, Moon, planets, aurora), under your feet (earthquakes cut open through the Earth) and around you (storms, fires, floods). Everything is drawn in 3D, and every object can be tapped for details or searched for by name.
+A free, global live feed, drawn in 3D, of what is above you (satellites, the ISS, aircraft), in the sky tonight (stars, Moon, planets, aurora), under your feet (earthquakes cut open through the Earth) and around you (storms, fires, floods). Everything is drawn in 3D, and every object can be tapped for details or searched for by name.
 
 This is a standalone project.
 

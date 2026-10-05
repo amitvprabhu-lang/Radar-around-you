@@ -31,6 +31,7 @@ Each statement on `/about/` and in the home page's description comes from the pl
 | You can choose to use your device's position; it is used on the device to name your place and never leaves it; the camera picture is never recorded or sent | README.md, Any place and Sky Lens |
 | Place search covers towns and cities of about 15,000 people or more | README.md, Any place (GeoNames) |
 | Free; the code is open source under the MIT licence (data and images keep their sources' terms); code on GitHub | `LICENSE`; README.md, licence section |
+| Feeds update while you watch; new quakes, hazards, aurora, Kp, cloud forecasts and aircraft appear without a reload; new satellite orbits show a Reload prompt; the app falls back to a snapshot and the clock chip says SNAPSHOT | README.md, "Live data", "What the app does with it" |
 | Moon phases, seasons and solar eclipses compared with US Naval Observatory tables at build time; a page only quotes a check that ran | README.md, Content site; `site/verify.mjs` |
 
 ## Statements in the author's own words (for the owner to review)

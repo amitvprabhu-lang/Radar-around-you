@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, APP_FEATURES } from "../site/build.mjs";
+import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, APP_FEATURES, APP_TITLE, APP_DESCRIPTION } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
@@ -160,6 +160,15 @@ test("every built page is a complete document that declares its encoding, so a h
   const home = read("index.html");
   assert.equal(countOf(home, '<div id="app"'), 1, "the app is in the home page once");
   assert.ok(home.includes('<script>var x=1</script>'), "the app's own script is kept as it was");
+});
+
+test("the home page head positions the site as a live feed", () => {
+  assert.equal(APP_TITLE, "Radar Around You: live feed of satellites, ISS, quakes, aurora and storms");
+  assert.match(APP_DESCRIPTION, /^A free live feed of what is above, around and under you/);
+  const full = asDocument(wrapApp(APP, { noindex: false }));
+  assert.ok(full.includes(`<title>${APP_TITLE}</title>`));
+  assert.ok(full.includes(`<meta name="description" content="${APP_DESCRIPTION.replace(/'/g, "&#39;")}">`) || full.includes(`<meta name="description" content="${APP_DESCRIPTION}">`));
+  assert.ok(APP_TITLE.length <= 85, String(APP_TITLE.length));
 });
 
 test("asDocument wraps the app page once, puts its lead tags in head, changes nothing else, and refuses a page that is already a document", () => {

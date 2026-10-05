@@ -9,13 +9,18 @@ const go = (to) => href(ABOUT_FILE, to);
 const a = (to, text) => `<a href="${go(to)}">${esc(text)}</a>`;
 const ext = (url, text) => `<a href="${esc(url)}" rel="noopener">${esc(text)}</a>`;
 
-const DESCRIPTION = "Radar Around You is a free live 3D view of the satellites, aircraft, sky, earthquakes, aurora, storms and fires around you. What it does, where its data comes from and what it does not do.";
+const DESCRIPTION = "Radar Around You is a free live feed, drawn in 3D, of the satellites, aircraft, sky, earthquakes, aurora, storms and fires around you. What it does, where its data comes from and what it does not do.";
 
 export function aboutPage() {
   const body = `
 <h2 id="what">What is Radar Around You?</h2>
-<p>Radar Around You is a free tool that shows what is above you (satellites, the International Space Station and aircraft), what is in tonight's sky (stars, constellations, the Moon, planets and passes), what is under your feet (earthquakes, shown cut open through the Earth) and what is happening around you (storms, fires, aurora and other hazards). Everything is drawn in 3D, and every object can be tapped for details or searched for by name. It is a free project, and it works for any place on Earth.</p>
+<p>Radar Around You is a free live feed, drawn in 3D, of what is above you (satellites, the International Space Station and aircraft), what is in tonight's sky (stars, constellations, the Moon, planets and passes), what is under your feet (earthquakes, shown cut open through the Earth) and what is happening around you (storms, fires, aurora and other hazards). Everything is drawn in 3D, and every object can be tapped for details or searched for by name. It is a free project, and it works for any place on Earth.</p>
 <p><a class="cta" href="${go("index.html")}">Open the live app</a></p>
+
+<h2 id="feeds">Which live feeds does it show?</h2>
+<p>The app follows these feeds and updates them while you watch. New earthquakes, storms, fires, aurora, Kp readings, cloud forecasts and aircraft appear without a reload. When new satellite orbits arrive the app shows a Reload prompt instead of swapping them in, because new orbits change the numbering of every object.</p>
+<ul><li>Satellite orbits and the satellite catalogue</li><li>Earthquakes</li><li>Storms, floods, fires and volcanoes</li><li>Tropical storms with forecast track and cone</li><li>Aurora forecast, the Kp index, solar wind and geomagnetic alerts</li><li>Active fire detections</li><li>Cloud forecasts and aircraft for six cities</li><li>Upcoming rocket launches</li></ul>
+<p>If live data is not available the app falls back to a bundled snapshot, and says so: the clock chip shows SNAPSHOT instead of LIVE.</p>
 
 <h2 id="features">What can you do with it?</h2>
 <h3>Above you</h3>
@@ -92,7 +97,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
 
 <h2 id="faq">Frequently asked questions</h2>
 <h3>What is Radar Around You?</h3>
-<p>A free live 3D view of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, for any place on Earth.</p>
+<p>A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.</p>
 <h3>Is it free?</h3>
 <p>Yes. The code is open source under the MIT licence.</p>
 <h3>Where does the data come from?</h3>
@@ -111,10 +116,10 @@ ${sources([
 
   return {
     file: ABOUT_FILE, crumbTitle: "About",
-    title: "What Radar Around You is and does: live sky, satellites, quakes and aurora",
+    title: "What Radar Around You is and does: a live feed of satellites, quakes and aurora",
     description: DESCRIPTION,
     h1: "What is Radar Around You?", kicker: "About",
-    lead: "A free live 3D view of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, for any place on Earth.",
+    lead: "A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.",
     body,
     jsonld: [{ "@context": "https://schema.org", "@type": "AboutPage", name: "What Radar Around You is and does", description: DESCRIPTION, url: `${SITE.url}/about/`, about: { "@type": "WebApplication", name: SITE.name, url: `${SITE.url}/` } }],
   };
