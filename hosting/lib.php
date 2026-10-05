@@ -229,6 +229,8 @@ function radar_safe_page_path(string $p): bool
 // such as satellites-by-country/japan/, are created as needed). Files whose hash
 // already matches are skipped. Each file is written through a temporary name and renamed, so a visitor never sees half a page, and a
 // download that does not match its hash is refused so the previous page stays.
+// Besides ok and fetched (and reason, failed), the result carries 'changed', the paths written in this run, and 'index', the parsed
+// pages/index.json once it was read, so radar_indexnow can ping only what changed without downloading the index again.
 function radar_sync_pages(string $base, string $destRoot, ?callable $http = null, ?string $logFile = null): array
 {
     $http = $http ?: function ($u) { return radar_http('GET', $u); };
@@ -237,18 +239,18 @@ function radar_sync_pages(string $base, string $destRoot, ?callable $http = null
     $r = $http($base . 'pages/index.json');
     if ($r['status'] !== 200) {
         $log('pages index: HTTP ' . $r['status'] . ' ' . $r['error']);
-        return ['ok' => false, 'reason' => 'index', 'fetched' => 0];
+        return ['ok' => false, 'reason' => 'index', 'fetched' => 0, 'changed' => []];
     }
     $d = json_decode($r['body'], true);
     if (!is_array($d) || ($d['schema'] ?? null) !== 1 || !isset($d['files']) || !is_array($d['files'])) {
         $log('pages index: not a valid index, nothing changed');
-        return ['ok' => false, 'reason' => 'invalid', 'fetched' => 0];
+        return ['ok' => false, 'reason' => 'invalid', 'fetched' => 0, 'changed' => []];
     }
     if (!is_dir($destRoot)) {
         $log('pages: the site folder ' . $destRoot . ' does not exist, nothing written');
-        return ['ok' => false, 'reason' => 'dest', 'fetched' => 0];
+        return ['ok' => false, 'reason' => 'dest', 'fetched' => 0, 'changed' => []];
     }
-    $fetched = 0; $failed = [];
+    $fetched = 0; $failed = []; $changed = [];
     foreach ($d['files'] as $path => $info) {
         $path = (string) $path;
         if (!radar_safe_page_path($path) || !is_array($info) || !isset($info['sha256']) || !preg_match('/^[0-9a-f]{64}\z/', (string) $info['sha256'])) {
@@ -273,13 +275,127 @@ function radar_sync_pages(string $base, string $destRoot, ?callable $http = null
             continue;
         }
         $fetched++;
+        $changed[] = $path;
     }
     if ($failed) {
         $log('pages: ' . count($failed) . ' not updated: ' . implode('; ', array_slice($failed, 0, 5)));
-        return ['ok' => false, 'reason' => 'files', 'fetched' => $fetched, 'failed' => $failed];
+        return ['ok' => false, 'reason' => 'files', 'fetched' => $fetched, 'failed' => $failed, 'changed' => $changed, 'index' => $d];
     }
     $log('pages: ok, ' . $fetched . ' file(s) fetched');
-    return ['ok' => true, 'fetched' => $fetched];
+    return ['ok' => true, 'fetched' => $fetched, 'changed' => $changed, 'index' => $d];
+}
+
+// ------------------------------------------------------------------ IndexNow pings for the pages that changed
+// docs/superpowers/specs/2026-10-06-live-hazard-pages-design.md, section 2b, from the IndexNow documentation read on 2026-10-06: a POST
+// of JSON (host, key, keyLocation, urlList) to an IndexNow endpoint; 200 or 202 is success, 403 an invalid key, 422 URLs that do not
+// match the host, 429 too many requests. The key is proved by <site root>/<key>.txt holding the key. The documentation asks sites not to
+// submit the same URL many times a day, so each page is sent at most once every RADAR_INDEXNOW_EVERY seconds.
+const RADAR_INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';
+const RADAR_INDEXNOW_EVERY = 6 * 3600;   // OURS: at most one ping per page every 6 hours
+
+// The throttle state lives next to the log as indexnow.json; without a log there is nowhere sensible to keep it.
+function radar_indexnow_state_file(?string $logFile): ?string
+{
+    return ($logFile === null || $logFile === '') ? null : dirname($logFile) . '/indexnow.json';
+}
+
+// Ping IndexNow for the pages in $changedPaths that are due. $index is the parsed pages/index.json (siteUrl, indexnowKey, noindex),
+// $destRoot the site's public folder, $http a function (method, url, headers, body) -> [status, body, error] (the default sends for
+// real), $now a Unix time (default: the current time). Writes exactly one log line and never throws; a failure only means the pages are
+// tried again on a later run. Returns ['sent' => number of URLs accepted, 'reason' => short word, 'status' => HTTP status or null].
+function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?callable $http = null, ?string $logFile = null, ?string $stateFile = null, ?int $now = null): array
+{
+    $log = function ($m) use ($logFile) { radar_log('indexnow: ' . $m, $logFile); };
+    $done = function (string $reason, string $line, ?int $status = null, int $sent = 0) use ($log) { $log($line); return ['sent' => $sent, 'reason' => $reason, 'status' => $status]; };
+    $now = $now === null ? time() : $now;
+    if ($stateFile === null || $stateFile === '') {
+        return $done('state', 'no state file (pull.php needs --log for it), nothing sent');
+    }
+    if (($index['noindex'] ?? false) === true) {
+        return $done('noindex', 'the site is noindex, nothing sent');
+    }
+    $key = $index['indexnowKey'] ?? null;
+    if ($key === null) {
+        return $done('nokey', 'no key in the pages index, nothing sent');
+    }
+    if (!is_string($key) || !preg_match('/^[A-Za-z0-9-]{8,128}\z/', $key)) {
+        return $done('badkey', 'the key in the pages index is not valid, nothing sent');
+    }
+    $site = $index['siteUrl'] ?? null;
+    if (!is_string($site) || !preg_match('#^https://([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)\z#', $site, $m)) {
+        return $done('site', 'the site address in the pages index is not a plain https host, nothing sent');
+    }
+    $host = $m[1];
+    // only pages (never the sitemap or anything the page sync would refuse), each once
+    $pages = [];
+    foreach ($changedPaths as $p) {
+        if (is_string($p) && radar_safe_page_path($p) && substr($p, -11) === '/index.html') {
+            $pages[$p] = true;
+        }
+    }
+    $pages = array_keys($pages);
+    if (!$pages) {
+        return $done('none', 'nothing due');
+    }
+    $sent = [];
+    $old = is_file($stateFile) ? json_decode((string) @file_get_contents($stateFile), true) : null;
+    if (is_array($old) && isset($old['sent']) && is_array($old['sent'])) {
+        foreach ($old['sent'] as $p => $t) {
+            if (is_int($t) && $t <= $now && radar_safe_page_path((string) $p)) {
+                $sent[(string) $p] = $t;  // anything else (a corrupt file, a time in the future) counts as never sent
+            }
+        }
+    }
+    $due = array_values(array_filter($pages, function ($p) use ($sent, $now) { return !isset($sent[$p]) || $now - $sent[$p] >= RADAR_INDEXNOW_EVERY; }));
+    if (!$due) {
+        return $done('none', 'nothing due');
+    }
+    $proof = $destRoot . '/' . $key . '.txt';
+    if (!is_file($proof) || (string) @file_get_contents($proof) !== $key) {
+        return $done('keyfile', 'key file missing or different, nothing sent');
+    }
+    $urls = [];
+    foreach ($due as $p) {
+        $urls[] = $site . '/' . substr($p, 0, -strlen('index.html'));
+    }
+    $body = json_encode(['host' => $host, 'key' => $key, 'keyLocation' => $site . '/' . $key . '.txt', 'urlList' => $urls], JSON_UNESCAPED_SLASHES);
+    $http = $http ?: function ($m, $u, $h, $b) { return radar_http($m, $u, $h, $b, 30); };
+    try {
+        $r = $http('POST', RADAR_INDEXNOW_ENDPOINT, ['Content-Type: application/json; charset=utf-8'], $body);
+    } catch (Throwable $e) {
+        return $done('error', 'the request failed (' . $e->getMessage() . '), nothing recorded; a later run tries again');
+    }
+    $status = is_array($r) && isset($r['status']) && is_int($r['status']) ? $r['status'] : 0;
+    if ($status !== 200 && $status !== 202) {
+        $why = [400 => 'bad request', 403 => 'the key was not accepted', 422 => 'the URLs do not match the host or the key', 429 => 'too many requests'];
+        $err = is_array($r) && !empty($r['error']) ? ' ' . $r['error'] : '';
+        return $done('http', 'HTTP ' . $status . ' ' . ($why[$status] ?? ($status === 0 ? 'no answer' : 'unexpected answer')) . $err . ', ' . count($urls) . ' url(s) not recorded; a later run tries again', $status);
+    }
+    foreach ($due as $p) {
+        $sent[$p] = $now;
+    }
+    ksort($sent);
+    $saved = radar_write_atomic($stateFile, json_encode(['sent' => $sent], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
+    return $done('sent', 'sent ' . count($urls) . ' url(s) (HTTP ' . $status . ')' . ($saved ? '' : ', but could not write ' . $stateFile), $status, count($urls));
+}
+
+// What pull.php runs after the page sync: one log line, never an exception, and the pull's exit code never depends on it.
+function radar_pull_indexnow(array $pagesResult, string $pagesDest, ?string $logFile, bool $off, ?callable $http = null, ?int $now = null): array
+{
+    if ($off) {
+        radar_log('indexnow: turned off (--no-indexnow)', $logFile);
+        return ['sent' => 0, 'reason' => 'off', 'status' => null];
+    }
+    if (!isset($pagesResult['index']) || !is_array($pagesResult['index'])) {
+        radar_log('indexnow: no pages index, nothing sent', $logFile);
+        return ['sent' => 0, 'reason' => 'noindexfile', 'status' => null];
+    }
+    try {
+        return radar_indexnow($pagesResult['index'], rtrim($pagesDest, '/'), $pagesResult['changed'] ?? [], $http, $logFile, radar_indexnow_state_file($logFile), $now);
+    } catch (Throwable $e) {
+        radar_log('indexnow: unexpected error (' . $e->getMessage() . '), nothing sent', $logFile);
+        return ['sent' => 0, 'reason' => 'error', 'status' => null];
+    }
 }
 
 // ------------------------------------------------------------------ asking GitHub to run the collector
