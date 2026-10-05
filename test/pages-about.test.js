@@ -36,11 +36,11 @@ test("it links to the guides and reference pages that explain each feature", () 
   }
 });
 
-test("privacy, limits and the free licence are stated, using the README's wording", () => {
+test("privacy, limits and the free licence are stated", () => {
   assert.match(text, /never leaves the device/);
   assert.match(text, /never recorded or sent/);
   assert.match(text, /not an emergency warning service/);
-  assert.match(text, /Sky Lens is new and has had limited testing on real phones/);
+  assert.match(text, /Sky Lens is new and has not yet been tested on a real phone/);
   assert.match(text, /heat signal, not a confirmed wildfire/);
   assert.match(text, /MIT licence/);
   assert.match(text, /Pune, New York, London, Troms\u00f8?[a-z]*, Tokyo and Sydney|Pune, New York, London, Tromso, Tokyo and Sydney/);
