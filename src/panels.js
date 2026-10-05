@@ -867,6 +867,8 @@ export function createPanels(ctx) {
         h("li", { text: "Storms: NOAA National Hurricane Center. Fires: NASA FIRMS (LANCE). Solar wind and geomagnetic alerts: NOAA Space Weather Prediction Center. " + PLACES_CREDIT + "." }),
         h("li", { text: "Rocket launches: The Space Devs (Launch Library 2). Asteroid close approaches: NASA/JPL CNEOS. Star names and constellations: IAU." }),
         h("li", { text: "Star distances, spectral types and luminosities: HYG database v4.4 (astronexus), CC BY-SA 4.0. This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program." })),
+      // the content site adds a text section below the app (site/home-text.mjs); this link closes the sheet and the anchor scrolls to it
+      ...($("about-home") ? [h("p", { class: "overview" }, h("a", { href: "#about-home", onclick: () => closeSheet(), text: "What is this site? Read the overview" }))] : []),
       ...(SITE_PAGES ? [
         h("h3", { text: "Guides and reference" }),
         h("p", { class: "note", text: "Plain pages that sit beside this app: sky reference for 2026 and 2027, the constellations and named stars, and guides to the data on these screens." }),

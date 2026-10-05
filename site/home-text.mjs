@@ -29,7 +29,7 @@ export function homeTextHtml({ countryHub = false } = {}) {
 <p class="home-back"><a href="#top">Back to the globe</a></p>
 <p class="home-lead">The globe above is Radar Around You: a free 3D view of what is over a place you choose, what its sky holds tonight, and what is happening under and around it.</p>
 <h2>${iss}</h2>
-<p>Search for ISS and the globe turns to the station, drawing its orbit and the patch of Earth it can see. Its card gives its height, speed and the age of the orbit data, which comes from CelesTrak; positions are worked out on your device. For the ISS, other bright objects and satellites launched in the last 30 days, pass times come from SGP4, the model those orbit data are made for. Other satellites use a faster, rougher approximation.</p>
+<p>Search for ISS and the globe turns to the station, drawing its orbit and the patch of Earth it can see. Its card gives its height, speed and the age of the orbit data, which comes from CelesTrak; positions are worked out on your device. For the ISS, other bright objects and satellites launched in the last 30 days, pass times come from SGP4, the model that kind of orbit data is made for. Other satellites use a faster, rougher approximation.</p>
 <h2>${above}</h2>
 <p>Choose a place: any town or city of about 15,000 people or more, or your device's own position, which never leaves the device. A tile at the top then says how many satellites are above that place now, and the Sky view draws them across your horizon, flashing when sunlit. Tap one for its name, how high it is, which way to face and how far away it is. Starlink strings, lines of satellites from one recent launch, have their own sheet saying when one can be seen from your place.</p>
 <h2>${tonight}</h2>
