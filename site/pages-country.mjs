@@ -9,6 +9,8 @@ import { worldMapSvg, uniqueDots } from "./svgmap.mjs";
 import { decodeCoast } from "../src/data.js";
 
 export { HUB_FILE, LIVE_FILES, sitemapLive };
+// The table the collector reads to turn each catalogue owner code into a name (pipeline/feeds.py fetches this page).
+const OWNERS = { title: "CelesTrak SATCAT source codes", url: "https://celestrak.org/satcat/sources.php", note: "The owner names, one for each owner code in the catalogue" };
 export const COUNTRY_FILES = COUNTRY_PAGES.map((p) => p.file);
 
 // public/coast.bin (the app's coastlines) read with fs, as polylines of [lat, lon]. decodeCoast wants an ArrayBuffer, not a Node Buffer.
@@ -117,7 +119,7 @@ ${cis ? `<li>The fleet the catalogue records as "${esc(cis.name)}" is shown unde
 <p>No. It counts active satellites by the owner the catalogue records. A satellite recorded under another owner, such as an organisation, is counted under that owner.</p>
 <h3>How often is this updated?</h3>
 <p>The page is rebuilt when a new version of the satellite data arrives. The time at the top says when the data was read.</p>
-${sources([CELESTRAK, SATCAT, STATUS])}`;
+${sources([CELESTRAK, SATCAT, OWNERS, STATUS])}`;
 
   return {
     file, crumbTitle: "Satellites by country",
@@ -222,7 +224,7 @@ ${table({ caption: `Active satellites of ${o.name} by launch year`, head: ["Laun
 <p>No. It shows where the satellites were at the data time, ${esc(time)} on ${esc(date)}, and it is redrawn when the page is rebuilt. The live globe shows them moving.</p>
 <h3>Does this include every satellite ${phrase} uses?</h3>
 <p>No. It counts satellites whose owner the catalogue records as "${owner}". A satellite recorded under another owner, such as an organisation, is counted under that owner instead.</p>
-${o.name !== page.name ? `<h3>Why does this page say "${owner}"?</h3>\n<p>That is how the catalogue records the owner of these satellites. We show owners as the catalogue records them and do not split, merge or rename them.</p>\n` : ""}${sources([CELESTRAK, SATCAT, STATUS])}`;
+${o.name !== page.name ? `<h3>Why does this page say "${owner}"?</h3>\n<p>That is how the catalogue records the owner of these satellites. We show owners as the catalogue records them and do not split, merge or rename them.</p>\n` : ""}${sources([CELESTRAK, SATCAT, OWNERS, STATUS])}`;
 
   const title = `How many satellites does ${page.phrase} have? Live count, ${date}`;
   return {

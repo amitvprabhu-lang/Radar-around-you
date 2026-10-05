@@ -2,7 +2,7 @@
 // Copies the collector's finished data from GitHub into the site's live/ folder. Run by cron every 10 minutes:
 //   php /home/USER/radar-tools/pull.php --dest=/home/USER/domains/YOURDOMAIN/public_html/live --pages-dest=/home/USER/domains/YOURDOMAIN/public_html
 // Optional: --base=https://.../  (default: the data branch of the Radar-around-you repository)  --log=/home/USER/radar-tools/pull.log
-//           --pages-dest=<the site's public folder>  also copies the finished pages (the satellite count page and its sitemap).
+//           --pages-dest=<the site's public folder>  also copies the finished pages (the satellite count page, the satellites by country pages and their sitemap).
 require __DIR__ . '/lib.php';
 $o = getopt('', ['dest:', 'base::', 'log::', 'pages-dest::']);
 if (empty($o['dest'])) {

@@ -158,7 +158,7 @@ test("the CIS page keeps the catalogue's name and never says Russia", () => {
 test("house style: no dashes, no emoji, no hidden text, no FAQ markup, nothing loaded from elsewhere, a dated WebPage", () => {
   for (const [f, h] of html) {
     const t = textOf(h);
-    assert.ok(!/[–—]/.test(h), `${f}: en or em dash`);
+    assert.ok(!/[\u2013\u2014]/.test(h), `${f}: en or em dash`);
     assert.ok(!/\p{Extended_Pictographic}/u.test(h), `${f}: emoji`);
     assert.ok(!/\bhidden\b|display:\s*none|aria-hidden|sr-only|visually-hidden/i.test(h.replace(/<style[\s\S]*?<\/style>/g, "").replace(/<script[\s\S]*?<\/script>/g, "")), `${f}: hidden text`);
     assert.ok(!/<script[^>]+src=/.test(h) && !/<img /.test(h) && !/<link[^>]+stylesheet/.test(h), f);
@@ -166,6 +166,7 @@ test("house style: no dashes, no emoji, no hidden text, no FAQ markup, nothing l
     assert.ok(!ld.some((o) => o["@type"] === "FAQPage" || o["@type"] === "Dataset"), f);
     assert.equal(ld.find((o) => o["@type"] === "WebPage").dateModified, "2026-10-05T09:00:00.000Z", f);
     assert.ok(t.includes("CelesTrak"), `${f}: credit`);
+    assert.ok(h.includes('<a href="https://celestrak.org/satcat/sources.php" rel="noopener">CelesTrak SATCAT source codes</a>'), `${f}: the owner names are sourced`);
   }
 });
 
@@ -177,7 +178,7 @@ test("each page stays under 400 KB, also with the bundled snapshot's full fleets
   for (const p of r.pages) {
     const h = renderPage(p, { noindex: false });
     assert.ok(Buffer.byteLength(h) < 400 * 1024, `${p.file}: ${Buffer.byteLength(h)}`);
-    assert.ok(!/[–—]/.test(h), p.file);
+    assert.ok(!/[\u2013\u2014]/.test(h), p.file);
   }
   assert.ok(!/russia/i.test(renderPage(r.pages.find((p) => p.file.includes("cis-former-ussr")))));
 });

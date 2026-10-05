@@ -32,7 +32,7 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 324 unit tests for the app, no browser needed
+npm test                # 364 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
@@ -92,7 +92,7 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 
 ## Content site (search pages)
 
-`npm run site` writes `dist/site/`: the app as `index.html` (with a description, canonical link, structured data and a plain-text list of links for visitors without JavaScript), the data files next to it, `sitemap.xml`, `robots.txt` and 112 static pages:
+`npm run site` writes `dist/site/`: the app as `index.html` (with a description, canonical link, structured data and a plain-text list of links for visitors without JavaScript), the data files next to it, `sitemap.xml`, `robots.txt` and 118 static pages:
 
 - Reference pages worked out with astronomy-engine: Moon phases, equinoxes and solstices, eclipses, planet events, meteor showers (2026 and 2027).
 - Six city sky guides (Pune, New York, London, Tromso, Tokyo, Sydney): sunrise, sunset and hours of full darkness each month, which constellations never rise or never set, eclipses and meteor shower radiants for that city.
@@ -100,6 +100,7 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 - Six guides (aurora, hurricanes, earthquakes, fires, asteroids, satellites) and a "How we know" page. Each factual sentence comes from `docs/hazard-sources.md` or `docs/feature-sources.md`, which record where it was read and what could not be confirmed. The G1 to G5 and Saffir-Simpson tables are printed from `src/scales.js`.
 - An About page (`/about/`) that says what the app is, what each view does, where the data comes from and what it does not do; every statement on it is traced in `docs/about-sources.md`.
 - A page on how many satellites are in orbit (`/how-many-satellites-in-orbit/`), built from a data folder after each collection (see `docs/satcount-sources.md`).
+- Satellites by country (`/satellites-by-country/`): every owner in the catalogue ranked by active satellites, and pages for five owners (the United States, China, the United Kingdom, the CIS (former USSR) as the catalogue names it, and Japan) with their orbits, purposes, launch years and a static map of where their satellites were at the data time. Built with the count page; see `docs/satcountry-sources.md`.
 
 An indexable build also writes llms.txt (a short summary and links in the llmstxt.org layout); a noindex build writes it no more than it writes a sitemap.
 
@@ -122,8 +123,9 @@ pipeline/   the collector: config.py (feed registry), net.py, validate.py, pack.
 test/       unit tests, checked against satellite.js, astronomy-engine and the real packed data
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
-site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs
-hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data into the site) with 84 tests; see hosting/README.md
+site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs;
+            satcount.mjs, satcountry.mjs, svgmap.mjs and build-live.mjs for the live satellite pages
+hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site) with 162 checks; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
 e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts
