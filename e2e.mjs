@@ -550,6 +550,7 @@ async function suite(label, viewport, mobile) {
   check("About: the build for the real site lists every guide and reference page, grouped", /Guides and reference/.test(site.text) && site.links.length === GUIDE_LINKS.length && GUIDE_LINKS.every((l, i) => site.links[i][0] === l.href && site.links[i][1] === l.label) && /Sky reference/.test(site.text) && /Stars and places/.test(site.text), JSON.stringify(site.links.slice(0, 3)));
   check("About: the links are plain relative addresses that open in the same tab and resolve next to the app", site.links.every((l) => l[2] === `https://radar.test/${l[0]}`) && !(await site.p.evaluate(() => [...document.querySelectorAll("#sheet .guidelinks a")].some((a) => a.target === "_blank"))), JSON.stringify(site.links.slice(0, 2)));
   check("About: the links section does not overflow the screen sideways", await site.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && [...document.querySelectorAll("#sheet .guidelinks a")].every((a) => a.getBoundingClientRect().right <= innerWidth)));
+  check("About: the app build alone has no home text section, so the About sheet shows no overview link (the content site adds both)", await site.p.evaluate(() => !document.getElementById("about-home") && !document.querySelector("#sheet .overview a")));
   await site.p.evaluate(() => { const s = document.querySelector("#sheet .guidelinks"); s && s.scrollIntoView(); }); await site.p.waitForTimeout(300);
   await shot(site.p, "about-guides");
   await site.p.context().close();
