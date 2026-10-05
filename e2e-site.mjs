@@ -151,7 +151,9 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
     await pg.click(".home-more"); await settle(pg);
     const s2 = await textState(pg);
     check(`${label}: the read-more link scrolls the section into view`, s2.y > 0 && s2.top >= 0 && s2.top < s2.vh, JSON.stringify(s2));
-    const backUp = await wheelOver(pg, "#about-home .home-lead", -300);
+    await wheelOver(pg, "#about-home .home-lead", -300);
+    // under load the smooth scroll can start seconds after the wheel (seen in a trace), so wait for it rather than a fixed time
+    const backUp = await pg.waitForFunction((y) => scrollY < y, s2.y, { timeout: 10000 }).then(() => pg.evaluate(() => Math.round(scrollY)), () => s2.y);
     check(`${label}: a wheel up over the section scrolls the page back towards the globe`, backUp < s2.y, JSON.stringify({ before: s2.y, after: backUp }));
     await pg.click(".home-back a"); await settle(pg);
     const s3 = await textState(pg);
