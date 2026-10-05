@@ -46,7 +46,6 @@ The satellite count on the hub comes from the satellites feed; its sources and t
 | FIRMS publishes 24 hour files for Suomi NPP, NOAA-20 and NOAA-21; codes N, N20, N21 | `docs/hazard-sources.md`, FIRMS section |
 | Low-confidence detections are left out; quarter-degree cells; the same fire on two passes counts twice | `docs/hazard-sources.md` ("Our choices"), `pipeline/hazards.py` |
 | A detection means a satellite instrument reported heat at that spot at that time; it is not a confirmed wildfire; no fire size is measured; no detections is not proof of no fire | The fires guide (`site/pages-guides.mjs`), `docs/about-sources.md` ("Fire detection is a heat signal, not a confirmed wildfire"). |
-| "For safety information, follow your local authorities." | The fires guide's wording, listed in `docs/about-sources.md` |
 | LANCE: near real-time users usually need data within three hours; the acknowledgement text | `docs/hazard-sources.md`, FIRMS section (quoted) |
 | The place list: GeoNames cities15000, towns and cities of about 15,000 people or more, CC BY 4.0 | `docs/hazard-sources.md`, GeoNames section; `public/places.json` (its `source`, `licence` and `credit` fields). The number of places is counted from the file (34,152 on 2026-10-06), not typed. The design's "list of 6,000" was wrong. |
 | Country names next to a place | The runtime's own region names (`Intl.DisplayNames`) for the GeoNames country code; the code itself if the runtime has no name |

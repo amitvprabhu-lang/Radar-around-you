@@ -314,7 +314,7 @@ export function stormsPage(s, { built = LIVE_FILES, coast = [] } = {}) {
     n ? ["Which storm is the strongest?", `${esc(top.name)}, with maximum wind of ${num(top.windKt)} knots (${num(top.windKmh)} km/h)${top.category ? `, Category ${top.category} on the Saffir-Simpson scale by that wind` : ""}.`] : null,
     hurricanes.length ? ["What do the hurricane categories measure?", "The Saffir-Simpson category comes from the maximum sustained wind alone. NHC says the scale does not take storm surge, rainfall flooding or tornadoes into account."] : null,
     ["Does this page cover typhoons in the western Pacific?", `No. It reads the National Hurricane Center's list, which covers the ${NHC_BASINS} basins. The live app shows storms elsewhere from GDACS.`],
-    ["Is this a warning service?", `No. For official advisories and warnings, see the <a href="${esc(SRC.nhc.url)}" rel="noopener">National Hurricane Center</a> and your local authorities.`],
+    ["Is this a warning service?", `No. For official advisories, see the <a href="${esc(SRC.nhc.url)}" rel="noopener">National Hurricane Center</a>.`],
   ].filter(Boolean);
   const trackTables = s.storms.map((x, i) => `<h3 id="track-${i + 1}">Forecast track: ${esc(x.name)}</h3>
 ${x.track.length ? table({ caption: `NHC forecast track for ${x.name}`, head: ["Forecast hour", "Valid (UTC)", "Position", "Maximum wind (knots)"], numeric: [0, 3], rows: x.track.map((t) => [num(t.hours), esc(dayHour(t.valid)), esc(pos(t.lat, t.lon)), t.windKt === null ? "Not given" : num(t.windKt)]) }) : "<p>No forecast track was in the data for this storm.</p>"}`).join("\n");
@@ -388,7 +388,7 @@ ${worldMapSvg({ coast, points: s.mapPoints, id: "map", title: `Fire detections i
 <p>Each dot is a square of ${s.mapDeg} ${v(s.mapDeg, "degree", "degrees")} with at least one detection: ${num(s.mapSquares)} squares in all. ${num(s.north)} of the detections were north of the equator and ${num(s.south)} south of it.</p>
 
 <h2 id="detection">What a detection is</h2>
-<p>A detection means a satellite instrument reported heat at that spot at that time. It is not a confirmed wildfire, and this page does not measure or estimate how large a fire is. A place with no detections is not proof that there was no fire. For safety information, follow your local authorities.</p>
+<p>A detection means a satellite instrument reported heat at that spot at that time. It is not a confirmed wildfire, and this page does not measure or estimate how large a fire is. A place with no detections is not proof that there was no fire.</p>
 
 <h2 id="how">How this page is made</h2>
 <ul>
