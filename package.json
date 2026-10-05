@@ -15,7 +15,8 @@
     "site": "node site/build.mjs",
     "build:hosting": "node build.mjs --site-pages && npm run site",
     "test:hosting": "php hosting/tests/run.php",
-    "build:sitepages": "LIVE_BASE= node build.mjs --site-pages src/main.js template.html dist/radar-sitepages.html"
+    "build:sitepages": "LIVE_BASE= node build.mjs --site-pages src/main.js template.html dist/radar-sitepages.html",
+    "e2e:site": "npm run build:hosting && node e2e-site.mjs"
   },
   "type": "module",
   "dependencies": {

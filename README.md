@@ -39,6 +39,7 @@ npm run build:snapshot  # the same page with live polling switched off: dist/rad
 npm run test:hosting    # 84 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 111 pages, the app as index.html, sitemap.xml, robots.txt (run npm run build first)
 npm run e2e             # 282 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:site        # 11 browser checks of the built content site served raw, the way a web host serves it (builds it first)
 npm run e2e:live        # 92 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)

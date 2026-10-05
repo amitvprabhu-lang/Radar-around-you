@@ -47,6 +47,9 @@ Moving to the final domain:
 3. After the first deployment open `/robots.txt` (it should say `Allow: /` and name the sitemap), open `/sitemap.xml`, and view the source of any page to confirm the robots tag reads `index,follow,max-image-preview:large`.
 4. Take the test site on zeninnov8.com down, or keep it with `SITE_NOINDEX=1` still set, so two copies of the content are not both open to search engines.
 
+## What the first deployment taught us
+The first deployment on zeninnov8.com showed the loader ("Starting up") and never started. Cause, reproduced in a browser with the exact deployed files: the app page was a bare HTML fragment with no doctype and no character encoding, because the places it was first published (the artifact viewer and the test harness) wrap it themselves. Hostinger serves the file as `text/html` with no charset, so the browser read it as `windows-1252`, which garbled a regular expression in the script into a syntax error, and the script did not run. The site build now writes `index.html` as a complete document (doctype, `<meta charset="utf-8">`, viewport, language, and the title and search tags in `<head>`). `test/site.test.js` checks that every page does this, and `npm run e2e:site` loads the built site in Chromium served raw with no charset and an html 404 page for the missing live folder, which is how the host behaves. That test fails on the old output and passes on the new.
+
 ## Not yet known
 - Whether a redeploy clears the extra folders in `public_html`, where the live data would sit. Test: put a file in `public_html/live/`, redeploy, see if it is still there. If it is cleared, the live data must be served from somewhere a redeploy does not touch.
 - Whether the generated `.htaccess` lets the manifest and `.webmanifest` files be served with the right type, and whether `live/manifest.json` can be kept from being cached for long. The app works without these; the risk is stale live data.

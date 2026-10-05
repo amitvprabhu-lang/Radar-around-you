@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { build, wrapApp, sitemap, robots, assertChecks, loadCities } from "../site/build.mjs";
+import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
@@ -136,6 +136,44 @@ test("a bad SITE_NOINDEX stops the site build before it writes anything; 1 and 0
   const on = run("1"), off = run("0");
   assert.equal(on.status, 0, on.stderr); assert.match(on.stdout, /noindex=true/);
   assert.equal(off.status, 0, off.stderr); assert.match(off.stdout, /noindex=false/);
+});
+
+test("every built page is a complete document that declares its encoding, so a host that sends no charset cannot garble it", () => {
+  // The first deployment served index.html as a bare fragment. The browser guessed windows-1252, a regular expression in the app's
+  // script was garbled into a syntax error, and the app never started. Every page, the app page included, must start like this.
+  for (const f of pageFiles) {
+    const h = read(f);
+    assert.match(h, /^<!doctype html>/i, `${f}: starts with a doctype`);
+    assert.ok(h.slice(0, 1024).includes('<meta charset="utf-8">'), `${f}: charset declared within the first 1024 bytes`);
+    assert.ok(h.slice(0, 1024).includes('<meta name="viewport"'), `${f}: viewport declared near the top`);
+    assert.equal(countOf(h, "<!doctype"), 1, `${f}: one doctype`);
+  }
+  const home = read("index.html");
+  assert.equal(countOf(home, '<div id="app"'), 1, "the app is in the home page once");
+  assert.ok(home.includes('<script>var x=1</script>'), "the app's own script is kept as it was");
+});
+
+test("asDocument wraps the app page once, puts its lead tags in head, changes nothing else, and refuses a page that is already a document", () => {
+  const d = asDocument(APP);
+  assert.match(d, /^<!doctype html>\n<html lang="en">/);
+  assert.ok(d.indexOf('<meta charset="utf-8">') < d.indexOf("<title>"), "charset comes before anything that could be misread");
+  assert.ok(d.endsWith("</body>\n</html>\n"));
+  // round trip: take the added wrapper away and the original fragment is back, byte for byte
+  const unwrapped = d.replace(/^<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport"[^>]*>\n/, "").replace("</head>\n<body>\n", "").replace(/<\/body>\n<\/html>\n$/, "");
+  assert.equal(unwrapped, APP);
+  // the app page as the site builds it: every search tag is in head, the app and its script are in body
+  const full = asDocument(wrapApp(APP, { noindex: false }));
+  const [head, body] = [full.slice(full.indexOf("<head>"), full.indexOf("</head>")), full.slice(full.indexOf("<body>"))];
+  for (const part of ["<title>", '<meta name="description"', '<link rel="canonical"', '<meta name="robots"', 'application/ld+json', '<meta property="og:title"', '<link rel="manifest"', "<style>"]) {
+    assert.ok(head.includes(part), `head has ${part}`);
+    assert.ok(!body.includes(part), `body does not have ${part}`);
+  }
+  assert.ok(body.startsWith("<body>\n") && body.includes("<noscript>") && body.indexOf("<noscript>") < body.indexOf('<div id="app"'));
+  assert.ok(body.includes('<script>var x=1</script>'));
+  assert.equal(countOf(full, "<title>"), 1);
+  assert.throws(() => asDocument(d), /already a complete document/);
+  assert.throws(() => asDocument("<!DOCTYPE html><title>x</title>"), /already a complete document/);
+  assert.throws(() => asDocument('<html lang="en"><body></body></html>'), /already a complete document/);
 });
 
 test("SITE_URL: a plain https address is used (without a trailing slash); anything else stops the build", () => {

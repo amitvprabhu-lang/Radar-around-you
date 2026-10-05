@@ -45,6 +45,20 @@ ${robotsMeta(noindex)}
   return appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => noscript + '<div id="app"');
 }
 
+// The built app is a fragment: no doctype, charset or viewport, because the places it was first published (the artifact viewer, the
+// test harness) wrap it themselves. Served raw by a web host it is read in quirks mode with a guessed encoding (windows-1252 when
+// the server sends no charset), and the guessed encoding garbled a regular expression in the script, so the script did not run and
+// the loader never went away. The site's index.html is therefore a complete document.
+// The fragment starts with its title, meta, link and style elements (and wrapApp adds the search tags there). Those lead elements go
+// into <head>, where search engines look for them; everything from the first other element on stays in <body>, byte for byte.
+const HEAD_PART = /^\s*(?:<title>[\s\S]*?<\/title>|<meta\b[^>]*>|<link\b[^>]*>|<style\b[^>]*>[\s\S]*?<\/style>|<script type="application\/ld\+json">[\s\S]*?<\/script>)/i;
+export function asDocument(fragment) {
+  if (/^\s*<!doctype|<html[\s>]/i.test(fragment)) throw new Error("site: the app page is already a complete document; asDocument would wrap it twice");
+  let head = "", rest = fragment;
+  for (let m; (m = HEAD_PART.exec(rest)); ) { head += m[0]; rest = rest.slice(m[0].length); }
+  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n${head}</head>\n<body>\n${rest}</body>\n</html>\n`;
+}
+
 export function sitemap(files) {
   const urls = files.map((f) => `  <url><loc>${esc(`${SITE.url}/${urlPath(f)}`)}</loc></url>`).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
@@ -90,7 +104,7 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     fs.mkdirSync(path.dirname(f), { recursive: true });
     fs.writeFileSync(f, renderPage(p, { noindex }));
   }
-  fs.writeFileSync(path.join(outDir, "index.html"), wrapApp(fs.readFileSync(appFile, "utf8"), { noindex }));
+  fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex })));
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files));
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
