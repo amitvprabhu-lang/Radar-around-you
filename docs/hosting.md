@@ -34,7 +34,7 @@ With `SITE_NOINDEX=1` the build changes only what crawlers are told:
 - every page, and the app page, carries `<meta name="robots" content="noindex,nofollow">` instead of `index,follow,max-image-preview:large`;
 - `robots.txt` says `User-agent: *` and `Disallow: /`, with no `Sitemap:` line;
 - `sitemap.xml` and `sitemap-live.xml` are not written, because a sitemap lists pages for search engines and would contradict the page tags (the live page's GitHub build, `site/build-live.mjs`, also writes no `sitemap-live.xml` and removes an old one);
-- `llms.txt` is not written either.
+- `llms.txt` is not written either, and neither is the IndexNow key file `<key>.txt` (so the server's pull job sends no IndexNow pings for a noindex site; see `hosting/README.md`).
 
 The pages, links and canonical addresses are otherwise identical, and the build prints `NOINDEX IS ON` so it shows in the build log. The unit tests (`test/site.test.js`) check that a normal build is unchanged, that a noindex build has no indexable page, and that a bad value stops the build.
 

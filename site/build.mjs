@@ -1,5 +1,5 @@
 // Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the live pages) and robots.txt,
-// and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
+// the IndexNow key file <key>.txt (only when the site is indexable and site/indexnow.key exists), and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
 import path from "node:path";
@@ -11,6 +11,7 @@ import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer, LIVE_FILES } from "./pages-country.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
+import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -120,7 +121,8 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
-export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast() } = {}) {
+export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast(), indexnowKey = readIndexNowKey() } = {}) {
+  if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("site: the IndexNow key must be 8 to 128 letters, digits and dashes");
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -149,6 +151,9 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => !LIVE_FILES.includes(f))));
     fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString(), LIVE_FILES.filter((f) => files.includes(f))));
     fs.writeFileSync(path.join(outDir, "llms.txt"), buildLlmsTxt({ pages, url: SITE.url, name: SITE.name, summary: APP_DESCRIPTION }));
+    // IndexNow ownership proof: the key and nothing else, UTF-8, at the site root. hosting/pull.php sends pings only while this file holds
+    // the key that pages/index.json names, and a redeploy writes it again. Never written for a noindex site, which must not be pinged.
+    if (indexnowKey) fs.writeFileSync(path.join(outDir, `${indexnowKey}.txt`), indexnowKey, "utf8");
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
   return { outDir, pages: files.length, checks, noindex, skipped: country.skipped };
@@ -157,5 +162,5 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const r = build({ allowUnchecked: process.env.ALLOW_UNCHECKED === "1" });
   console.log(`site: ${r.pages} pages written to ${r.outDir} (canonical base ${SITE.url})`);
-  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away, robots.txt disallows everything, and no sitemap or llms.txt is written. This setting is for a temporary address.");
+  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away, robots.txt disallows everything, and no sitemap, llms.txt or IndexNow key file is written. This setting is for a temporary address.");
 }
