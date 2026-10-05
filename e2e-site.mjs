@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./harness.mjs";
+import { LIVE_FILES, HAZARD_FILES, RIGHT_NOW_FILE } from "./site/livepages.mjs";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
@@ -86,6 +87,30 @@ for (const [url, want1] of [["https://radar.test/satellites-by-country/", "Which
   check(`${path1} has its own canonical address and a robots tag that matches SITE_NOINDEX`, (info.canonical || "").endsWith(path1) && info.robots === want, JSON.stringify(info));
   if (path1 !== "/satellites-by-country/") check(`${path1} carries the map as an inline SVG image`, info.map, JSON.stringify(info));
   await cp.close();
+}
+
+// the live hazard pages and the right-now hub, fetched raw (the HTML as the host sends it, no JavaScript run): status, canonical, robots
+// tag, the headline number in the lead, the data time, and on the hub a link to every live page this build wrote. A hazard page whose data
+// is not bundled in public/ is not written at deploy time (it arrives with the next pull), so it is reported and not checked here.
+const rawGet = (url) => p.evaluate(async (u) => { const r = await fetch(u); return { status: r.status, text: await r.text() }; }, url);
+for (const f of [...HAZARD_FILES, RIGHT_NOW_FILE]) {
+  const path1 = "/" + f.replace(/index\.html$/, "");
+  if (!fs.existsSync(site + f)) {
+    check(`${path1} is either written or left out because its data is not bundled`, f !== RIGHT_NOW_FILE && f !== "earthquakes-today/index.html", "the hub and the earthquake page are always written");
+    continue;
+  }
+  const r = await rawGet("https://radar.test" + path1);
+  const h = r.text;
+  const canonical = (h.match(/<link rel="canonical" href="([^"]+)">/) || [])[1] || "";
+  const robots = (h.match(/<meta name="robots" content="([^"]+)">/) || [])[1];
+  const lead = (h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "";
+  check(`${path1} answers 200 raw, with its canonical address, a robots tag matching SITE_NOINDEX, a number in the lead and the data time`,
+    r.status === 200 && canonical.endsWith(path1) && robots === want && /^As of /.test(lead) && /<strong>[^<]*\d/.test(lead) && /<time datetime="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ">/.test(h),
+    JSON.stringify({ status: r.status, canonical, robots, lead: lead.slice(0, 120) }));
+  if (f === RIGHT_NOW_FILE) {
+    const unlinked = LIVE_FILES.filter((x) => x !== RIGHT_NOW_FILE && fs.existsSync(site + x) && !h.includes(`href="../${x.replace(/index\.html$/, "")}"`));
+    check("the right-now hub links every live page this build wrote", unlinked.length === 0, unlinked.join(" "));
+  }
 }
 
 const about = await ctx.newPage();

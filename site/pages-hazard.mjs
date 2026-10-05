@@ -437,7 +437,7 @@ export function rightNowPage(rows, { available = LIVE_FILES } = {}) {
   const newest = times[times.length - 1] || null;
   const title = "Right now: live satellite, quake, aurora and fire numbers";
   const lead = newest
-    ? `As of ${esc(when(newest))}, the newest data time among them, the live pages show ${and(live.map((r, i) => (i === 0 ? `<strong>${esc(r.said)}</strong>` : esc(r.said))))}. Each row below gives the time of its own data.`
+    ? `As of ${esc(when(newest))}, the newest data time among the live pages, they show ${and(live.map((r, i) => (i === 0 ? `<strong>${esc(r.said)}</strong>` : esc(r.said))))}. Each row below gives the time of its own data.`
     : "None of the live pages has current data in this build.";
   const description = `The latest number from each live page of ${SITE.name}: satellites in orbit, earthquakes, Kp, asteroid passes, storms and fire detections, with data times.`;
   const cell = (r) => (r.value !== null && available.includes(r.file) ? `<a href="${href(file, r.file)}">${esc(r.label)}</a>` : esc(r.label));
