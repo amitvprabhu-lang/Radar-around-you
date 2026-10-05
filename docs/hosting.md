@@ -12,7 +12,8 @@ What is checked and what is not, so nobody has to guess later. Read on 2026-10-0
 ## What this project needs
 - Build command: `npm run build:hosting` (runs `npm run build`, then `npm run site`). Tested from a clean clone of the repository: install about 2 seconds, build about 2 seconds, 111 pages, 8.6 MB.
 - Output directory: `dist/site`.
-- Environment variable: `SITE_URL`, the final address with no trailing slash, for example `https://example.org`. Without it the canonical links and sitemap use a guess at a GitHub Pages address.
+- Environment variable: `SITE_URL`, the final address, for example `https://example.org`. Without it the canonical links and sitemap use a guess at a GitHub Pages address. The build stops with a message if the value is not a plain `https` address in lowercase (no spaces, login, query or fragment); trailing slashes are removed. This guards against a typing slip such as a stray character in front of `https`, which would otherwise put wrong canonical links on every page without any error.
+- Environment variable: `SITE_NOINDEX`, set to `1` while the site is on a temporary address that must not be indexed (see "Testing on a temporary address" below). Leave it out for the real launch. Only `1` turns it on and only `0` or nothing turns it off; any other value stops the build with a message, so a typo cannot quietly decide this.
 - Node.js 22 (the version the project was built and tested with).
 
 ## Steps (the exact button names in hPanel were not checked)
@@ -20,6 +21,31 @@ What is checked and what is not, so nobody has to guess later. Read on 2026-10-0
 2. Turn on a free HTTPS certificate for it. The camera, motion sensors and app install need `https://`.
 3. Create a Web App for that website from GitHub: pick this repository and the `main` branch, set the build command, output directory and `SITE_URL` as above.
 4. Open the site and check the pages: `/`, `/moon-phases/`, `/constellations/cru/`, `/sitemap.xml`.
+
+## Testing on a temporary address
+The first test site is `https://zeninnov8.com`, at the root of that domain, to be replaced by a new domain once the test succeeds. Set these two environment variables on the Web App:
+
+| Variable | Value while testing | Value at launch |
+| --- | --- | --- |
+| `SITE_URL` | `https://zeninnov8.com` | the final address, no trailing slash |
+| `SITE_NOINDEX` | `1` | remove it (or set `0`) |
+
+With `SITE_NOINDEX=1` the build changes only what crawlers are told:
+- every page, and the app page, carries `<meta name="robots" content="noindex,nofollow">` instead of `index,follow,max-image-preview:large`;
+- `robots.txt` says `User-agent: *` and `Disallow: /`, with no `Sitemap:` line;
+- `sitemap.xml` is not written, because a sitemap lists pages for search engines and would contradict the page tags.
+
+The pages, links and canonical addresses are otherwise identical, and the build prints `NOINDEX IS ON` so it shows in the build log. The unit tests (`test/site.test.js`) check that a normal build is unchanged, that a noindex build has no indexable page, and that a bad value stops the build.
+
+NOT CONFIRMED: how every search engine treats a page that is both blocked in `robots.txt` and marked noindex. My understanding is that a crawler that obeys `robots.txt` never fetches the page, so it never reads the tag, and that such an address can in rare cases still be listed by its bare address if other sites link to it. Verify this in the current documentation of each search engine you care about before relying on it. For a brand new test site that nobody links to, the practical risk is low, but it is not zero.
+
+Notes on the Hostinger form (read from its screens on 2026-10-05): the "Set environment variables" dialog says the variables are applied during the build; the Key box accepts only uppercase letters, numbers and underscores and shows its own error otherwise; the Value box keeps what you type. The "Review build settings" screen only says "Custom" and "Added: 2", so open Change and Edit to read the real values before pressing Deploy. In the Build and output dialog the Entry file stays empty because this is a static site.
+
+Moving to the final domain:
+1. Add the new domain as a website, turn on its HTTPS certificate, create its Web App from the same repository and branch.
+2. Set `SITE_URL` to the new address and do not set `SITE_NOINDEX`.
+3. After the first deployment open `/robots.txt` (it should say `Allow: /` and name the sitemap), open `/sitemap.xml`, and view the source of any page to confirm the robots tag reads `index,follow,max-image-preview:large`.
+4. Take the test site on zeninnov8.com down, or keep it with `SITE_NOINDEX=1` still set, so two copies of the content are not both open to search engines.
 
 ## Not yet known
 - Whether a redeploy clears the extra folders in `public_html`, where the live data would sit. Test: put a file in `public_html/live/`, redeploy, see if it is still there. If it is cleared, the live data must be served from somewhere a redeploy does not touch.

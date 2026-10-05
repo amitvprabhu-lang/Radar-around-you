@@ -6,11 +6,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { build, wrapApp, sitemap, robots, assertChecks, loadCities } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
-import { SITE, renderPage, href, urlPath } from "../site/layout.mjs";
+import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
+import { GUIDE_LINKS } from "../src/guidelinks.js";
 
 const root = new URL("../", import.meta.url).pathname;
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -23,7 +25,8 @@ const appFile = path.join(tmp, "radar.html");
 const APP = '<title>Radar Around You</title>\n<link rel="manifest" href="manifest.webmanifest">\n<style>body{margin:0}</style>\n\n<div id="app" data-view="globe"><canvas id="gl"></canvas></div>\n<script>var x=1</script>\n';
 fs.writeFileSync(appFile, APP);
 const outDir = path.join(tmp, "out");
-const result = build({ outDir, appFile, publicDir: null });
+// explicit, so a SITE_NOINDEX left in someone's shell cannot change what the ordinary checks below look at
+const result = build({ outDir, appFile, publicDir: null, noindex: false });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
@@ -98,6 +101,98 @@ test("the sitemap lists every page once and robots.txt points to it", () => {
   assert.match(fs.readFileSync(path.join(outDir, "robots.txt"), "utf8"), new RegExp(`Sitemap: ${SITE.url}/sitemap.xml`));
   assert.equal(sitemap(["index.html", "a/index.html"]).includes("<loc>" + SITE.url + "/a/</loc>"), true);
   assert.ok(robots().includes("Allow: /"));
+});
+
+const INDEXABLE = '<meta name="robots" content="index,follow,max-image-preview:large">';
+const NOINDEX = '<meta name="robots" content="noindex,nofollow">';
+const countOf = (s, part) => s.split(part).length - 1;
+
+test("the normal build still tells search engines to index every page, exactly as before the noindex switch existed", () => {
+  assert.equal(result.noindex, false);
+  assert.equal(ROBOTS_CONTENT.index, "index,follow,max-image-preview:large");
+  assert.equal(robotsMeta(false), INDEXABLE);
+  for (const f of pageFiles) {
+    const h = read(f);
+    assert.equal(countOf(h, INDEXABLE), 1, `${f}: one indexable robots tag`);
+    assert.ok(!/noindex/i.test(h), `${f}: no noindex in a normal build`);
+  }
+  assert.equal(robots({ noindex: false }), `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\n`);
+  assert.ok(fs.existsSync(path.join(outDir, "sitemap.xml")));
+});
+
+test("SITE_NOINDEX: only 1 turns it on, only 0 or nothing turns it off, anything else is refused", () => {
+  for (const v of [undefined, null, "", "0", " 0 "]) assert.equal(noindexFromEnv(v), false, String(v));
+  for (const v of ["1", " 1 "]) assert.equal(noindexFromEnv(v), true, String(v));
+  for (const v of ["true", "yes", "on", "2", "false", "off", "no"]) assert.throws(() => noindexFromEnv(v), /SITE_NOINDEX must be 1 or 0/, v);
+  assert.equal(SITE.noindex, noindexFromEnv(process.env.SITE_NOINDEX), "the site default follows the environment");
+});
+
+test("a bad SITE_NOINDEX stops the site build before it writes anything; 1 and 0 are accepted", () => {
+  const layout = new URL("../site/layout.mjs", import.meta.url).href;
+  const run = (v) => spawnSync(process.execPath, ["--input-type=module", "-e", `import(${JSON.stringify(layout)}).then((m) => console.log("noindex=" + m.SITE.noindex))`], { env: { ...process.env, SITE_NOINDEX: v }, encoding: "utf8" });
+  const bad = run("yes");
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /SITE_NOINDEX must be 1 or 0/);
+  const on = run("1"), off = run("0");
+  assert.equal(on.status, 0, on.stderr); assert.match(on.stdout, /noindex=true/);
+  assert.equal(off.status, 0, off.stderr); assert.match(off.stdout, /noindex=false/);
+});
+
+test("SITE_URL: a plain https address is used (without a trailing slash); anything else stops the build", () => {
+  for (const v of [undefined, null, "", "   "]) assert.equal(siteUrlFromEnv(v), DEFAULT_SITE_URL, String(v));
+  const good = [["https://zeninnov8.com", "https://zeninnov8.com"], ["https://zeninnov8.com/", "https://zeninnov8.com"], ["  https://zeninnov8.com  ", "https://zeninnov8.com"],
+    ["https://zeninnov8.com//", "https://zeninnov8.com"], ["https://example.org:8443", "https://example.org:8443"],
+    ["https://amitvprabhu-lang.github.io/Radar-around-you/", "https://amitvprabhu-lang.github.io/Radar-around-you"]];
+  for (const [given, want] of good) assert.equal(siteUrlFromEnv(given), want, given);
+  // the first one is a real slip: a stray 1 typed in front of the address in the hosting form
+  for (const bad of ["1https://zeninnov8.com", "HTTPS://ZENINNOV8.COM", "https://ZENINNOV8.COM", "zeninnov8.com", "http://zeninnov8.com", "https://", "https://exa mple.org",
+    "https://example.org?x=1", "https://example.org/#top", "https://user:pw@example.org", "ftp://example.org", "https://example.org/a b"]) {
+    assert.throws(() => siteUrlFromEnv(bad), /SITE_URL must be an https address/, bad);
+  }
+  assert.equal(SITE.url, siteUrlFromEnv(process.env.SITE_URL), "the site uses the checked address");
+});
+
+test("a bad SITE_URL stops the site build before it writes anything; a good one is accepted", () => {
+  const layout = new URL("../site/layout.mjs", import.meta.url).href;
+  const run = (v) => spawnSync(process.execPath, ["--input-type=module", "-e", `import(${JSON.stringify(layout)}).then((m) => console.log("url=" + m.SITE.url))`], { env: { ...process.env, SITE_URL: v }, encoding: "utf8" });
+  const bad = run("1https://zeninnov8.com");
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /SITE_URL must be an https address/);
+  const good = run("https://zeninnov8.com/");
+  assert.equal(good.status, 0, good.stderr);
+  assert.match(good.stdout, /url=https:\/\/zeninnov8\.com\n/);
+});
+
+test("with noindex on, no page can be indexed, robots.txt disallows everything and there is no sitemap", () => {
+  const out2 = path.join(tmp, "out-noindex");
+  const r2 = build({ outDir: out2, appFile, publicDir: null, noindex: true });
+  assert.equal(r2.noindex, true);
+  assert.equal(r2.pages, result.pages, "the same pages are still built, only the instructions to crawlers change");
+  const files = walk(out2).filter((f) => f.endsWith(".html")).map((f) => path.relative(out2, f));
+  assert.equal(files.length, r2.pages);
+  for (const f of files) {
+    const h = fs.readFileSync(path.join(out2, f), "utf8");
+    assert.equal(countOf(h, NOINDEX), 1, `${f}: one noindex robots tag`);
+    assert.ok(!h.includes('content="index,follow'), `${f}: no indexable robots tag left`);
+  }
+  assert.equal(fs.readFileSync(path.join(out2, "robots.txt"), "utf8"), "User-agent: *\nDisallow: /\n");
+  assert.ok(!fs.existsSync(path.join(out2, "sitemap.xml")), "no sitemap while noindex is on");
+  // canonical links still name the address the site was built for, so nothing else about the page changes
+  assert.ok(fs.readFileSync(path.join(out2, "moon-phases/index.html"), "utf8").includes(`<link rel="canonical" href="${SITE.url}/moon-phases/">`));
+  // the page text is identical apart from the robots tag
+  for (const f of ["moon-phases/index.html", "constellations/cru/index.html"]) {
+    assert.equal(fs.readFileSync(path.join(out2, f), "utf8").replace(NOINDEX, INDEXABLE), read(f), f);
+  }
+  assert.equal(robots({ noindex: true }), "User-agent: *\nDisallow: /\n");
+});
+
+test("the app page gets the noindex tag too, and everything else about it is unchanged", () => {
+  const on = wrapApp(APP, { noindex: true }), off = wrapApp(APP, { noindex: false });
+  assert.equal(countOf(on, NOINDEX), 1);
+  assert.ok(!on.includes("index,follow"));
+  assert.equal(countOf(off, INDEXABLE), 1);
+  assert.equal(on.replace(NOINDEX, INDEXABLE), off);
+  assert.equal(wrapApp(APP), wrapApp(APP, { noindex: SITE.noindex }), "the default follows the site setting");
 });
 
 test("house style: no em dashes and no emoji in any page", () => {
@@ -249,4 +344,18 @@ test("the star pages carry distances and planet counts from the details file, wi
   // a star with no usable distance says so instead of showing a made-up number
   assert.ok(Object.values(details.stars).some((v) => v[0] == null));
   assert.doesNotMatch(textOf(stars), /NaN|undefined|\bnull\b/);
+});
+
+test("every link the app shows to the content pages has a page, and the list has no repeats", () => {
+  assert.ok(GUIDE_LINKS.length >= 12);
+  assert.equal(new Set(GUIDE_LINKS.map((l) => l.href)).size, GUIDE_LINKS.length);
+  for (const l of GUIDE_LINKS) {
+    assert.match(l.href, /^[a-z0-9-]+(\/[a-z0-9-]+)*\/$/, `${l.href} is a relative folder address`);
+    assert.ok(pageFiles.includes(l.href + "index.html"), `${l.href} has no page`);
+    assert.ok(l.label.length > 3 && l.group);
+  }
+  // the pages the site's own navigation lists are all reachable from the app too
+  for (const nav of ["moon-phases/", "eclipses/", "meteor-showers/", "planets/", "sky/", "guides/", "methods/"]) {
+    assert.ok(GUIDE_LINKS.some((l) => l.href === nav) || nav === "guides/", `${nav} is linked from the app`);
+  }
 });

@@ -5,7 +5,7 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "build": "node build.mjs",
-    "e2e": "npm run build:snapshot && node e2e.mjs",
+    "e2e": "npm run build:snapshot && npm run build:sitepages && node e2e.mjs",
     "data": "python3 build_data.py",
     "preview": "node make-preview.mjs",
     "test:pipeline": "python3 -m unittest discover -s pipeline/tests -t .",
@@ -13,8 +13,9 @@
     "build:snapshot": "LIVE_BASE= node build.mjs src/main.js template.html dist/radar-snapshot.html",
     "e2e:live": "npm run build && node e2e-live.mjs",
     "site": "node site/build.mjs",
-    "build:hosting": "npm run build && npm run site",
-    "test:hosting": "php hosting/tests/run.php"
+    "build:hosting": "node build.mjs --site-pages && npm run site",
+    "test:hosting": "php hosting/tests/run.php",
+    "build:sitepages": "LIVE_BASE= node build.mjs --site-pages src/main.js template.html dist/radar-sitepages.html"
   },
   "type": "module",
   "dependencies": {

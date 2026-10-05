@@ -11,6 +11,9 @@ import { constellationAt, visibilityFrom, VISIBILITY_TEXT, bestMonth, wanderersI
 import { colourName, magnitudeRank, starDay, bayerName, detailsFor, distanceText, lightAgeText, luminosityText, planetText } from "./starinfo.js";
 import { sizeText, sigmaText, lunarText, kmCompact, whenFromNow, ASSUMED_ALBEDO } from "./asteroids.js";
 import * as L from "./launches.js";
+import { GUIDE_LINKS } from "./guidelinks.js";
+// true only in the build for the real site (build.mjs --site-pages), where the content pages exist next to the app
+const SITE_PAGES = typeof __SITE_PAGES__ !== "undefined" && __SITE_PAGES__;
 import { fmtDay } from "./tonight.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
@@ -353,20 +356,40 @@ export function createPanels(ctx) {
     const kids = [head];
     kids.push(h("p", { text: list.length ? `${g.firm.length} launch${g.firm.length === 1 ? "" : "es"} with a firm time and ${g.loose.length} planned only for a month or quarter, from The Space Devs' Launch Library 2.` : "The source lists no upcoming launches right now." }));
     kids.push(h("p", { class: "note", text: "Launch dates move often. The status is the source's own: \"Go for Launch\" means the current time is confirmed by official or reliable sources, and \"To Be Determined\" means the date is a placeholder or rough estimate. The source does not guarantee that its information is accurate." }));
+    const ticks = [];  // countdown updaters, run once a second while this screen is open
     const row = (l) => {
       const { vehicle, mission } = L.split(l), cd = L.countdown(l, now), dist = L.padDistanceKm(l, place());
-      return h("div", { class: "item near " + (l.webcast ? "watch" : "info") },
-        h("div", { class: "grow" }, h("b", { text: mission ? `${vehicle}: ${mission}` : vehicle }),
+      const live = L.isLive(l), watch = L.watchLinks(l);
+      const tm = L.tMinus(l, now) ? h("span", { class: "s mono tminus" }) : null;
+      if (tm) { const upd = () => { const t = L.tMinus(l, nowDate().getTime()); tm.textContent = t ? t.text : ""; }; upd(); ticks.push(upd); }
+      const player = h("div", { class: "player", hidden: true });
+      const playBtns = watch.filter((w) => w.embedId).map((w) => btn("Play here", "eye", () => {
+        const src = L.embedUrl(w.embedId);
+        if (!src) return;
+        player.replaceChildren(
+          h("p", { class: "note", text: "This loads YouTube's player, so YouTube (Google) is contacted from now on. Close it to stop." }),
+          h("div", { class: "frame" }, h("iframe", { src, title: `${mission || vehicle}: ${w.label}`, allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", referrerpolicy: "strict-origin-when-cross-origin", sandbox: "allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox" })),
+          btn("Close player", null, () => { player.replaceChildren(); player.hidden = true; }, "small"));
+        player.hidden = false;
+      }, "small"));
+      return h("div", { class: "item near " + (live ? "alert" : l.webcast ? "watch" : "info") },
+        h("div", { class: "grow" }, h("b", null, mission ? `${vehicle}: ${mission}` : vehicle, live ? h("span", { class: "tag live", style: { marginLeft: "8px" }, text: "Live now" }) : null),
           h("span", { class: "s", text: `${L.whenText(l, place().tz)}${L.isExact(l) ? ` (${place().tz})` : ""}${cd ? `, ${cd}` : ""}` }),
+          tm,
           h("span", { class: "s", text: `${l.location || l.pad || "Launch site not given"}${dist != null ? ` · ${L.distanceText(dist)}` : ""}` }),
-          h("span", { class: "s", text: [`${l.provider || "Provider not given"}`, L.statusLine(l), l.missionType, l.orbit, l.probability != null ? `${l.probability}% chance of good launch weather` : null, l.webcast ? "webcast live now" : null].filter(Boolean).join(" · ") })));
+          h("span", { class: "s", text: [`${l.provider || "Provider not given"}`, L.statusLine(l), l.missionType, l.orbit, l.probability != null ? `${l.probability}% chance of good launch weather` : null].filter(Boolean).join(" · ") }),
+          watch.length ? h("div", { class: "actions watchrow" }, ...watch.map((w) => link(`Watch: ${w.label}`, w.url, "link", "small")), ...playBtns) : null,
+          player));
     };
     if (g.firm.length) kids.push(h("h3", { text: "With a firm time" }), h("div", { class: "list" }, ...g.firm.map(row)));
     if (g.loose.length) kids.push(h("h3", { text: "Planned for a month or quarter" }), h("div", { class: "list" }, ...g.loose.map(row)));
-    kids.push(h("p", { class: "note", text: "Distance is a straight line from your place to the pad and says nothing about whether a launch can be seen from there. Times are shown in the place's time zone." }));
+    kids.push(h("p", { class: "note", text: "Watch links are the source's own, labelled in its words: an official webcast comes from the broadcaster, an unofficial one or a re-stream does not. They open in a new tab. Play here is offered only for official YouTube webcasts and loads nothing from YouTube until you tap it. Distance is a straight line from your place to the pad and says nothing about whether a launch can be seen from there. Times are shown in the place's time zone." }));
     kids.push(h("p", { class: "srcline", text: `Source: The Space Devs, Launch Library 2, as of ${fmtUtc(new Date(doc.generated))}.` }));
     kids.push(h("div", { class: "actions" }, link("The Space Devs", "https://thespacedevs.com/llapi", "link", "small")));
-    openSheet("launches", ...kids);
+    const root = openSheet("launches", ...kids);
+    if (ticks.length) {
+      const timer = setInterval(() => { if (S.sheet !== "launches" || !root.isConnected || !root.querySelector(".tminus")) { clearInterval(timer); return; } ticks.forEach((f) => f()); }, 1000);
+    }
   }
 
   // all 88 constellations, with the ones above the horizon first
@@ -844,6 +867,12 @@ export function createPanels(ctx) {
         h("li", { text: "Storms: NOAA National Hurricane Center. Fires: NASA FIRMS (LANCE). Solar wind and geomagnetic alerts: NOAA Space Weather Prediction Center. " + PLACES_CREDIT + "." }),
         h("li", { text: "Rocket launches: The Space Devs (Launch Library 2). Asteroid close approaches: NASA/JPL CNEOS. Star names and constellations: IAU." }),
         h("li", { text: "Star distances, spectral types and luminosities: HYG database v4.4 (astronexus), CC BY-SA 4.0. This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program." })),
+      ...(SITE_PAGES ? [
+        h("h3", { text: "Guides and reference" }),
+        h("p", { class: "note", text: "Plain pages that sit beside this app: sky reference for 2026 and 2027, the constellations and named stars, and guides to the data on these screens." }),
+        ...[...new Set(GUIDE_LINKS.map((l) => l.group))].map((g) => h("div", { class: "guidelinks" },
+          h("b", { class: "s", text: g }),
+          h("ul", null, ...GUIDE_LINKS.filter((l) => l.group === g).map((l) => h("li", null, h("a", { href: l.href, text: l.label }))))))] : []),
       h("h3", { text: "Data health" }),
       h("p", { text: `${num(m.health.recordsRead)} element sets read, ${num(m.health.kept)} kept. Duplicates dropped: ${m.health.duplicatesDropped}. Rejected as invalid: ${Object.values(m.health.invalidDropped).reduce((a, b) => a + b, 0)}. At the snapshot the median element set was ${m.health.ageHours.median} hours old and 90% were under ${m.health.ageHours.p90} hours. ${num(m.health.staleOver3d)} objects had data over 3 days old and ${num(m.health.staleOver7d)} over 7 days (each satellite card shows its own data age). Exact SGP4 orbits are used for ${m.preciseCount} objects: the stations, the brightest objects and everything launched in the last 30 days.` }),
       h("h3", { text: "Honest limits" }),

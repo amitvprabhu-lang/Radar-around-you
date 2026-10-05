@@ -1,12 +1,41 @@
 // Page shell for the content site: head metadata, structured data, navigation, footer and the small shared stylesheet.
 // Links between pages are relative, so the site works under any base path. Canonical URLs and the sitemap use SITE_URL.
 
+// OURS: the address canonical links and the sitemap use when SITE_URL is not set. It is a guess at a GitHub Pages address.
+export const DEFAULT_SITE_URL = "https://amitvprabhu-lang.github.io/Radar-around-you";
+
+// The address the site is published at, from SITE_URL. A wrong value would put wrong canonical links on every page without any
+// error (for example a stray character typed in front of https), so anything that is not a plain https address stops the build:
+// lowercase scheme and host, no spaces, no login, no query and no fragment. Trailing slashes are removed.
+export function siteUrlFromEnv(value) {
+  const v = (value === undefined || value === null ? "" : String(value).trim()).replace(/\/+$/, "");
+  if (v === "") return DEFAULT_SITE_URL;
+  let u = null;
+  try { u = new URL(v); } catch { /* reported below */ }
+  const ok = u && u.protocol === "https:" && u.host && !u.username && !u.password && !u.search && !u.hash && !/\s/.test(v) && v.startsWith(`https://${u.host}`);
+  if (!ok) throw new Error(`site: SITE_URL must be an https address in lowercase such as https://example.org (no spaces, login, query or fragment), got "${v}"`);
+  return v;
+}
+
+// Whether to tell search engines to stay away, for a temporary test address that must not be indexed.
+// Only "1" turns it on and only "0" or nothing turns it off. Anything else is a typo, and a typo must not decide this quietly.
+export function noindexFromEnv(value) {
+  const v = value === undefined || value === null ? "" : String(value).trim();
+  if (v === "" || v === "0") return false;
+  if (v === "1") return true;
+  throw new Error(`site: SITE_NOINDEX must be 1 or 0 (or not set), got "${v}"`);
+}
+
+export const ROBOTS_CONTENT = { index: "index,follow,max-image-preview:large", noindex: "noindex,nofollow" };
+export const robotsMeta = (noindex) => `<meta name="robots" content="${noindex ? ROBOTS_CONTENT.noindex : ROBOTS_CONTENT.index}">`;
+
 export const SITE = {
   name: "Radar Around You",
-  // OURS: the address of the site once it is published. Set SITE_URL when the domain is chosen. Until then canonical
-  // links point at the GitHub Pages address this repository would get, which is an assumption.
-  url: (process.env.SITE_URL || "https://amitvprabhu-lang.github.io/Radar-around-you").replace(/\/$/, ""),
+  // Set SITE_URL when the domain is chosen. Until then canonical links use DEFAULT_SITE_URL, which is an assumption.
+  url: siteUrlFromEnv(process.env.SITE_URL),
   repo: "https://github.com/amitvprabhu-lang/Radar-around-you",
+  // set SITE_NOINDEX=1 while the site is on a temporary address; remove it when the real domain goes live
+  noindex: noindexFromEnv(process.env.SITE_NOINDEX),
 };
 
 export const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -136,7 +165,7 @@ export function sources(list) {
 }
 
 // page: { file, title, description, h1, kicker, lead, body, type, updated, crumbs, jsonld, cta }
-export function renderPage(page) {
+export function renderPage(page, { noindex = SITE.noindex } = {}) {
   const here = page.file;
   const canonical = `${SITE.url}/${urlPath(here)}`;
   const crumbs = [{ name: "Home", file: "index.html" }, ...(page.crumbs || []), { name: page.crumbTitle || page.h1, file: here }];
@@ -158,7 +187,7 @@ export function renderPage(page) {
 <title>${esc(page.title)}</title>
 <meta name="description" content="${esc(page.description)}">
 <link rel="canonical" href="${esc(canonical)}">
-<meta name="robots" content="index,follow,max-image-preview:large">
+${robotsMeta(noindex)}
 <meta property="og:type" content="${page.type === "guide" ? "article" : "website"}">
 <meta property="og:site_name" content="${esc(SITE.name)}">
 <meta property="og:title" content="${esc(page.title)}">

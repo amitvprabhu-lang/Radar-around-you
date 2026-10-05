@@ -227,6 +227,10 @@
   .item b { display: block; font-weight: 600; font-size: 14.5px; }
   .item span.s { display: block; color: var(--muted); font-size: 12.5px; }
   .item .btn { margin-left: auto; }
+  .player { margin-top: 8px; } .player .frame { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 12px; overflow: hidden; background: #000; margin: 6px 0 8px; } .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .item.near .watchrow { margin-top: 8px; flex-wrap: wrap; gap: 6px; } .item.near .watchrow .btn { margin-left: 0; text-align: left; height: auto; min-height: 34px; padding-top: 6px; padding-bottom: 6px; line-height: 1.25; white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
+  .tminus { color: var(--ion); font-variant-numeric: tabular-nums; }
+  .guidelinks { margin: 8px 0; } .guidelinks ul { margin: 4px 0 0; padding-left: 18px; } .guidelinks li { margin: 3px 0; } .guidelinks a { color: var(--ion); } .guidelinks b { display: block; font: 500 11px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-top: 10px; }
 
   /* ---- tonight, strings and share ---- */
   .verdict { display: flex; gap: 16px; align-items: center; margin: 10px 0 14px; }

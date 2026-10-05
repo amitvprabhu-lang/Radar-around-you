@@ -458,6 +458,7 @@ async function main() {
       }
       hud.append(panel);
       skyHud.underPanel = panel;
+      updateUnderPanel();  // fill it in now, so the panel is never half empty until the next frame
     }
   }
   function updatePlanText() {
@@ -531,6 +532,7 @@ async function main() {
     el.replaceChildren(h("div", { class: "arrow" }, (() => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.innerHTML = '<path d="M12 2l7 11h-4.500v9h-5v-9H5z"/>'; return s; })()),
       h("div", { class: "grow" }, h("b", { id: "guideTitle", text: "" }), h("span", { id: "guideText", text: "" })),
       h("button", { class: "x", "aria-label": "Stop guiding", onclick: () => { S.guide = null; renderGuide(); } }, icon("close")));
+    updateGuide();  // fill it in now, so the panel is never blank until the next frame
   }
   function updateGuide() {
     if (!S.guide || S.view !== "sky") return;

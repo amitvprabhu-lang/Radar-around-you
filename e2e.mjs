@@ -44,10 +44,19 @@ async function suite(label, viewport, mobile) {
   check(L("Starlink toggle updates the swarm uniform"), await R(p, () => window.__radar.orbit.layers.starlink === false));
   check(L("chip reflects state"), (await p.getAttribute("#layerChips .chip >> nth=1", "aria-pressed")) === "false");
   await p.click("#layerChips .chip >> nth=1");
-  const t1 = await R(p, () => window.__radar.app.clock.now().getTime());
-  await p.click("#btnTime"); await p.waitForTimeout(1200);
-  const t2 = await R(p, () => window.__radar.app.clock.now().getTime());
-  check(L("time button speeds the clock up"), t2 - t1 > 20000, `advanced ${(t2 - t1) / 1000}s in about 1.2s`);
+  await p.click("#btnTime");
+  // The clock only advances when the page draws a frame, and the slow software renderer here can take over a second per frame.
+  // So the speed is measured against the clock's own tick times (how much simulated time passed between two of its ticks), not against a fixed wait.
+  const speed = await R(p, async () => {
+    const st = window.__radar.app.clock.state;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const nextTick = async (after) => { const end = performance.now() + 30000; while (st.lastReal <= after && performance.now() < end) await wait(50); return st.lastReal > after; };
+    if (!(await nextTick(st.lastReal))) return NaN;
+    const a0 = st.acc, r0 = st.lastReal;
+    if (!(await nextTick(r0 + 300))) return NaN;
+    return (st.acc - a0) / (st.lastReal - r0);
+  });
+  check(L("time button speeds the clock up"), speed > 20, `the clock ran at ${Number.isNaN(speed) ? "no measurable speed (no frames drawn)" : speed.toFixed(1) + " times real time"}`);
   for (let i = 0; i < 3; i++) await p.click("#btnTime");
   check(L("time button cycles back to live"), (await p.textContent("#clockText")).match(/LIVE|SNAPSHOT/));
 
@@ -56,8 +65,10 @@ async function suite(label, viewport, mobile) {
     const r = window.__radar; const idx = r.app.D.later.ids.indexOf(25544); const date = r.app.clock.now();
     const g = r.orbit.satGeo(idx, date);
     r.orbit.flyTo(g.lat, g.lon, 3.0, 10);
-    await new Promise((res) => setTimeout(res, 900));
     const canvas = document.getElementById("gl"); const rect = canvas.getBoundingClientRect();
+    // Wait until the camera has arrived (the ISS is at the middle of the screen and two more frames have been drawn). A fixed wait was not enough:
+    // the software renderer draws about 2.6 frames a second, and while the camera is still moving a satellite behind the Earth can be tapped by mistake.
+    await new Promise((res) => { const f0 = r.S.frames; const t = setInterval(() => { const q = r.orbit.project(r.orbit.satScenePos(idx, r.app.clock.now()), rect.width, rect.height); if (r.S.frames >= f0 + 2 && Math.hypot(q.x - rect.width / 2, q.y - rect.height / 2) < 12) { clearInterval(t); res(); } }, 100); setTimeout(() => { clearInterval(t); res(); }, 15000); });
     const sp = r.orbit.project(r.orbit.satScenePos(idx, r.app.clock.now()), rect.width, rect.height);
     const hit = r.orbit.pick(sp.x, sp.y, rect.width, rect.height, r.app.clock.now());
     return { idx, hit, onScreen: sp.x > 0 && sp.x < rect.width && sp.y > 0 && sp.y < rect.height };
@@ -109,6 +120,7 @@ async function suite(label, viewport, mobile) {
   check(L("scrubbing the replay moves the P front"), await R(p, () => window.__radar.orbit.replay.rPkm > 4000), String(await R(p, () => window.__radar.orbit.replay.rPkm)));
   await p.click("text=Under my feet"); await p.waitForTimeout(2500);
   check(L("Under view active with the same quake"), await R(p, () => window.__radar.S.view === "under" && window.__radar.under.st.q.id === window.__radar.S.underQuake.id));
+  await p.waitForFunction(() => /P wave/.test((document.getElementById("underPanel") || {}).textContent || ""), null, { timeout: 20000 }).catch(() => {});
   const ptxt = await p.textContent("#underPanel");
   check(L("Under panel reports wave arrival"), /P wave (reaches you in|reached you)/.test(ptxt), ptxt.slice(0, 200));
   check(L("Under geometry: chord shorter than surface path"), await R(p, () => window.__radar.under.st.chordKm < window.__radar.under.st.surfaceKm));
@@ -194,6 +206,7 @@ async function suite(label, viewport, mobile) {
   // ---- G. guide
   await R(p, () => { const r = window.__radar; const idx = r.app.D.later.ids.indexOf(25544); r.select({ kind: "sat", idx }); r.actions.guide({ kind: "sat", idx }); });
   await p.waitForTimeout(900);
+  await p.waitForFunction(() => { const t = document.getElementById("guideTitle"); return t && t.textContent.length > 0; }, null, { timeout: 15000 }).catch(() => {});
   check(L("guide panel appears"), await p.locator("#guide").isVisible());
   const gt = await p.textContent("#guide");
   check(L("guide says where the object is"), /below the horizon|Find|Found/.test(gt), gt.slice(0, 100));
@@ -295,8 +308,20 @@ async function suite(label, viewport, mobile) {
   const chips2 = await p.locator("#skyChips .chip").allTextContents();
   check(L("the sky chips offer Star lines and Boundaries"), chips2.includes("Star lines") && chips2.includes("Boundaries"), chips2.join());
   await p.click('#skyChips .chip:has-text("Star lines")'); await p.click('#skyChips .chip:has-text("Boundaries")'); await p.waitForTimeout(1500);
-  const lab = await R(p, () => ({ n: document.querySelectorAll("#labels .lbl.con").length, b: window.__radar.sky.overlayInfo() }));
-  check(L("constellation names are labelled in the sky and the 88 boundaries are drawn"), lab.n >= 3 && lab.b.boundariesBuilt && lab.b.boundariesVisible, JSON.stringify(lab));
+  // Turn to the constellation highest above the horizon and widen the view, so there is always something to label whatever the time of day
+  // (a fixed view showed 3 or more labels in the daytime run but 2 at other times). The labels on screen must then match what the app's own
+  // label list says is inside the screen.
+  const lab = await R(p, async () => {
+    const r = window.__radar, s = r.sky, w = document.getElementById("gl").clientWidth, hgt = document.getElementById("gl").clientHeight;
+    let best = null;
+    for (const c of r.app.D.later.constellations.list) { const aa = s.altAzOf({ kind: "constellation", abbr: c.abbr }, r.app.clock.now()); if (aa && (!best || aa.alt > best.alt)) best = aa; }
+    s.view.yaw = best.az; s.view.pitch = Math.max(10, Math.min(60, best.alt)); s.view.fov = 90;
+    const f0 = r.S.frames; while (r.S.frames < f0 + 3) await new Promise((res) => setTimeout(res, 100));
+    const expected = s.labelPoints().filter((l) => l.cls === "con").filter((l) => { const q = s.project(l.pos, w, hgt); return q.front && q.x >= -40 && q.x <= w + 40 && q.y >= -20 && q.y <= hgt + 20; }).length;
+    const shown = [...document.querySelectorAll("#labels .lbl.con")].filter((e) => !e.hidden).length;
+    return { expected, shown, highest: Math.round(best.alt), b: s.overlayInfo() };
+  });
+  check(L("constellation names are labelled in the sky and the 88 boundaries are drawn"), lab.shown >= 1 && lab.shown === lab.expected && lab.b.boundariesBuilt && lab.b.boundariesVisible, JSON.stringify(lab));
   await shot(p, "constellations");
   await R(p, () => { const el = [...document.querySelectorAll("#labels .lbl.con")].find((e) => !e.hidden); el.click(); }); await p.waitForTimeout(800);
   check(L("tapping a constellation name opens its card"), (await R(p, () => window.__radar.S.selected && window.__radar.S.selected.kind)) === "constellation");
@@ -504,6 +529,27 @@ async function suite(label, viewport, mobile) {
   await p.context().close();
 }
 
+// ---- links from the About screen to the content pages: only in the build for the real site
+{
+  const { GUIDE_LINKS } = await import("./src/guidelinks.js");
+  const aboutLinks = async (file) => {
+    const { p } = await openPage(browser, file, { viewport: { width: 390, height: 780 }, mobile: true, label: file, errors });
+    await p.goto("https://radar.test/", { waitUntil: "commit" });
+    await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+    await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 });
+    await p.waitForFunction(() => window.__radar.app.D.later, null, { timeout: 60000 });
+    await p.evaluate(() => window.__radar.panels.openAbout()); await p.waitForTimeout(400);
+    return { p, text: await p.textContent("#sheet"), links: await p.evaluate(() => [...document.querySelectorAll("#sheet .guidelinks a")].map((a) => [a.getAttribute("href"), a.textContent, a.href])) };
+  };
+  const plain = await aboutLinks("dist/radar-snapshot.html");
+  check("About: the bundled preview build shows no links to content pages that do not exist next to it", !/Guides and reference/.test(plain.text) && plain.links.length === 0, plain.links.length + " links");
+  const site = await aboutLinks("dist/radar-sitepages.html");
+  check("About: the build for the real site lists every guide and reference page, grouped", /Guides and reference/.test(site.text) && site.links.length === GUIDE_LINKS.length && GUIDE_LINKS.every((l, i) => site.links[i][0] === l.href && site.links[i][1] === l.label) && /Sky reference/.test(site.text) && /Stars and places/.test(site.text), JSON.stringify(site.links.slice(0, 3)));
+  check("About: the links are plain relative addresses that open in the same tab and resolve next to the app", site.links.every((l) => l[2] === `https://radar.test/${l[0]}`) && !(await site.p.evaluate(() => [...document.querySelectorAll("#sheet .guidelinks a")].some((a) => a.target === "_blank"))), JSON.stringify(site.links.slice(0, 2)));
+  check("About: the links section does not overflow the screen sideways", await site.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && [...document.querySelectorAll("#sheet .guidelinks a")].every((a) => a.getBoundingClientRect().right <= innerWidth)));
+  await site.p.evaluate(() => { const s = document.querySelector("#sheet .guidelinks"); s && s.scrollIntoView(); }); await site.p.waitForTimeout(300);
+  await shot(site.p, "about-guides");
+}
 await suite("phone", { width: 390, height: 780 }, true);
 await suite("desktop", { width: 1280, height: 800 }, false);
 

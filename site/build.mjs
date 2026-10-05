@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { allChecks } from "./verify.mjs";
-import { renderPage, SITE, NAV, urlPath, esc } from "./layout.mjs";
+import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
@@ -20,7 +20,7 @@ export function loadCities() {
 }
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
-export function wrapApp(appHtml) {
+export function wrapApp(appHtml, { noindex = SITE.noindex } = {}) {
   if (!appHtml.includes("<title>Radar Around You</title>")) throw new Error("site: the app page has no expected <title>; update wrapApp");
   if (!appHtml.includes('<div id="app"')) throw new Error("site: the app page has no #app element; update wrapApp");
   const canonical = `${SITE.url}/`;
@@ -32,7 +32,7 @@ export function wrapApp(appHtml) {
   const head = `<title>${esc(APP_TITLE)}</title>
 <meta name="description" content="${esc(APP_DESCRIPTION)}">
 <link rel="canonical" href="${esc(canonical)}">
-<meta name="robots" content="index,follow,max-image-preview:large">
+${robotsMeta(noindex)}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(SITE.name)}">
 <meta property="og:title" content="${esc(APP_TITLE)}">
@@ -49,7 +49,9 @@ export function sitemap(files) {
   const urls = files.map((f) => `  <url><loc>${esc(`${SITE.url}/${urlPath(f)}`)}</loc></url>`).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
-export const robots = () => `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\n`;
+// While the site is on a temporary address (noindex), robots.txt asks every crawler to stay out and there is no sitemap,
+// because a sitemap lists pages for search engines and would contradict the page tags.
+export const robots = ({ noindex = SITE.noindex } = {}) => (noindex ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\n`);
 
 function copyDir(from, to) {
   fs.mkdirSync(to, { recursive: true });
@@ -70,7 +72,7 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
-export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false } = {}) {
+export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex } = {}) {
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -86,16 +88,17 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   for (const p of pages) {
     const f = path.join(outDir, p.file);
     fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(f, renderPage(p));
+    fs.writeFileSync(f, renderPage(p, { noindex }));
   }
-  fs.writeFileSync(path.join(outDir, "index.html"), wrapApp(fs.readFileSync(appFile, "utf8")));
+  fs.writeFileSync(path.join(outDir, "index.html"), wrapApp(fs.readFileSync(appFile, "utf8"), { noindex }));
   const files = ["index.html", ...pages.map((p) => p.file)];
-  fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files));
-  fs.writeFileSync(path.join(outDir, "robots.txt"), robots());
-  return { outDir, pages: files.length, checks };
+  if (!noindex) fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files));
+  fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
+  return { outDir, pages: files.length, checks, noindex };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
   const r = build({ allowUnchecked: process.env.ALLOW_UNCHECKED === "1" });
   console.log(`site: ${r.pages} pages written to ${r.outDir} (canonical base ${SITE.url})`);
+  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away and robots.txt disallows everything. Remove SITE_NOINDEX before the real launch.");
 }

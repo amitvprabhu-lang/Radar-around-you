@@ -169,7 +169,7 @@ class Launches(HazardBase):
 
     def test_the_request_asks_for_what_the_validator_needs(self):
         url = config.FEEDS["launches"].url
-        self.assertIn("mode=normal", url)
+        self.assertIn("mode=detailed", url)  # only the detailed answer carries the webcast links
         self.assertIn("hide_recent_previous=true", url)
 
     def test_the_registry_entry_states_the_limit_and_asks_less_often_than_it_allows(self):

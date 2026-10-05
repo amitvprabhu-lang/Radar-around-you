@@ -325,6 +325,9 @@ class LaunchesTest(unittest.TestCase):
     def test_every_output_field_is_plain_data(self):
         for x in hazards.launches(fx("ll2_upcoming.json"), self.NOW)["launches"]:
             for k, v in x.items():
+                if k == "videos":  # a list of small records of plain values
+                    self.assertTrue(isinstance(v, list) and all(isinstance(r, dict) and all(w is None or isinstance(w, (str, bool)) for w in r.values()) for r in v))
+                    continue
                 self.assertTrue(v is None or isinstance(v, (str, int, float, bool)), k)
             self.assertNotIn("image", " ".join(x.keys()).lower())  # no image links: some are non-commercial licence
 
@@ -415,3 +418,87 @@ class LaunchDuplicatesTest(unittest.TestCase):
         d["results"].append(other)
         out = hazards.launches(json.dumps(d), self.NOW)
         self.assertEqual((out["duplicatesDropped"], len(out["launches"])), (0, 9))
+
+
+class LaunchVideosTest(unittest.TestCase):
+    NOW = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
+
+    def doc(self):
+        return json.loads(fx("ll2_detailed_5.json"))
+
+    def launches(self, d=None):
+        return hazards.launches(json.dumps(d or self.doc()), self.NOW)["launches"]
+
+    def test_real_links_are_kept_with_the_sources_own_words(self):
+        a = self.launches()
+        first = a[0]
+        self.assertEqual(first["name"], "Falcon 9 Block 5 | SDA Tranche 1 Transport Layer A")
+        v = first["videos"]
+        self.assertEqual(len(v), 3)
+        self.assertTrue(all(x["url"].startswith("https://") for x in v))
+        self.assertEqual({x["type"] for x in v}, {"Unofficial Re-stream", "Unofficial Webcast", "Official Webcast"})
+        self.assertTrue(v[0]["official"] and not v[1]["official"], "the official link is listed first")
+        self.assertTrue(all(x["publisher"] for x in v))
+        self.assertTrue(all(x["type"] and x["host"] for x in v))
+        starlink = next(x for x in a if "Starlink" in x["name"])
+        self.assertEqual(starlink["videos"][0]["type"], "Official Webcast")
+        self.assertEqual(starlink["videos"][0]["host"], "x.com")
+        self.assertTrue(starlink["videos"][0]["official"])
+        self.assertIsNone(starlink["videos"][0]["youtube"], "an x.com broadcast has no YouTube id")
+        for x in a:
+            if "Starlink" not in x["name"] and "Tranche" not in x["name"]:
+                self.assertEqual(x["videos"], [], x["name"])
+
+    def test_the_youtube_id_comes_only_from_real_youtube_addresses(self):
+        for url, want in [("https://www.youtube.com/watch?v=-SYfgSTJsyM", "-SYfgSTJsyM"), ("https://youtu.be/FJpcyVk9vaI", "FJpcyVk9vaI"), ("https://www.youtube.com/live/FJpcyVk9vaI", "FJpcyVk9vaI"),
+                          ("https://www.youtube.com/embed/FJpcyVk9vaI?x=1", "FJpcyVk9vaI"), ("https://www.youtube.com/shorts/FJpcyVk9vaI", "FJpcyVk9vaI"), ("https://m.youtube.com/watch?v=FJpcyVk9vaI&t=5", "FJpcyVk9vaI"),
+                          ("https://www.youtube.com/watch?v=short", None), ("https://www.youtube.com/watch?v=<script>aaaa", None), ("https://www.youtube.com/channel/UCabc", None), ("https://evil.example/watch?v=FJpcyVk9vaI", None),
+                          ("https://youtube.com.evil.example/watch?v=FJpcyVk9vaI", None), ("https://www.youtube.com/watch", None), ("https://youtu.be/", None), ("https://x.com/i/broadcasts/1yKAPwdemygxb", None)]:
+            self.assertEqual(hazards.youtube_id(url), want, url)
+
+    def test_unsafe_or_odd_addresses_are_dropped(self):
+        d = self.doc()
+        base = d["results"][1]["vid_urls"] = []
+        good = {"url": "https://www.youtube.com/watch?v=FJpcyVk9vaI", "type": {"name": "Official Webcast"}, "priority": 1, "source": "youtube.com", "publisher": "Someone", "live": False, "start_time": "2026-10-07T03:00:00Z"}
+        bad = [dict(good, url=u) for u in ["http://www.youtube.com/watch?v=FJpcyVk9vaI", "javascript:alert(1)", "data:text/html,hi", "https://user:pw@www.youtube.com/watch?v=FJpcyVk9vaI", "https://", "ftp://x.org/a", "https://exa mple.org/", "https://" + "a" * 400 + ".com/", "//www.youtube.com/x"]]
+        bad += [{"url": None}, {"url": 5}, "text", None, {}]
+        d["results"][1]["vid_urls"] = bad + [good]
+        v = self.launches(d)[1]["videos"]
+        self.assertEqual([x["url"] for x in v], [good["url"]])
+
+    def test_at_most_three_official_first_and_no_repeats(self):
+        d = self.doc()
+        mk = lambda i, t, p: {"url": f"https://www.youtube.com/watch?v=abcdefghi{i:02d}", "type": {"name": t}, "priority": p, "publisher": f"P{i}", "live": False}
+        d["results"][1]["vid_urls"] = [mk(1, "Unofficial Webcast", 1), mk(2, "Official Webcast", 9), mk(3, "Unofficial Re-stream", 2), mk(4, "Unofficial Webcast", 3), mk(2, "Official Webcast", 9), mk(5, "Official Webcast", 4)]
+        v = self.launches(d)[1]["videos"]
+        self.assertEqual(len(v), 3)
+        self.assertEqual([x["official"] for x in v], [True, True, False], "official links come first")
+        self.assertEqual(len({x["url"] for x in v}), 3)
+        self.assertEqual(v[0]["publisher"], "P5", "within official, the lower priority number comes first")
+
+    def test_live_flags_make_a_launch_live_now(self):
+        d = self.doc()
+        self.assertFalse(any(x["liveNow"] for x in self.launches(d)))
+        d["results"][1]["vid_urls"] = [{"url": "https://www.youtube.com/watch?v=abcdefghijk", "type": {"name": "Official Webcast"}, "live": True}]
+        self.assertTrue(self.launches(d)[1]["liveNow"])
+        d["results"][1]["vid_urls"] = []; d["results"][1]["webcast_live"] = True
+        self.assertTrue(self.launches(d)[1]["liveNow"])
+        d["results"][1]["webcast_live"] = "yes"
+        self.assertFalse(self.launches(d)[1]["liveNow"], "only a true boolean counts")
+
+    def test_a_normal_mode_answer_without_links_still_works(self):
+        for x in hazards.launches(fx("ll2_upcoming.json"), self.NOW)["launches"]:
+            self.assertEqual(x["videos"], [])
+            self.assertFalse(x["liveNow"])
+
+    def test_missing_or_odd_fields_inside_a_link_do_not_break_the_launch(self):
+        d = self.doc()
+        d["results"][1]["vid_urls"] = [{"url": "https://www.youtube.com/watch?v=abcdefghijk", "type": None, "start_time": "not a time", "priority": "x", "publisher": "A\nB"}]
+        v = self.launches(d)[1]["videos"][0]
+        self.assertIsNone(v["type"]); self.assertIsNone(v["start"]); self.assertFalse(v["official"]); self.assertEqual(v["publisher"], "A B")
+
+    def test_control_characters_in_a_title_or_publisher_are_cleaned(self):
+        d = self.doc()
+        d["results"][1]["vid_urls"] = [{"url": "https://x.com/i/broadcasts/abc", "type": {"name": "Official\x00 Webcast"}, "publisher": "Pub\x07lisher"}]
+        v = self.launches(d)[1]["videos"][0]
+        self.assertNotIn("\x00", v["type"]); self.assertNotIn("\x07", v["publisher"])

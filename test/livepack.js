@@ -10,7 +10,7 @@ export const isoNow = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 1
 
 // The hazard fixtures are real feed output from one moment (2026-10-04, about 19:45 UTC). Tests run at any time, so every
 // timestamp in them is moved by the same amount to make that moment "now". Relative ages and windows stay as they were.
-const TIME_KEYS = new Set(["t", "updated", "issued", "from", "until", "reached", "valid", "generated", "newest", "net", "windowStart", "windowEnd"]);
+const TIME_KEYS = new Set(["t", "updated", "issued", "from", "until", "reached", "valid", "generated", "newest", "net", "windowStart", "windowEnd", "start"]);
 const FIXTURE_NOW = Date.parse("2026-10-04T19:45:00Z");
 function shiftTimes(value, deltaMs) {
   if (Array.isArray(value)) return value.map((v) => shiftTimes(v, deltaMs));
@@ -37,7 +37,16 @@ export function livePack({ taken = "2026-10-04T19:00:00Z", withSatellites = true
     [dir("kp") + "kp.json"]: kp, [dir("clouds") + "clouds.json"]: clouds, [dir("planes") + "planes.json"]: planes,
     [dir("storms") + "storms.json"]: shiftTimes(JSON.parse(hz("storms.json")), Date.parse(taken) - FIXTURE_NOW), [dir("spaceweather") + "spaceweather.json"]: shiftTimes(JSON.parse(hz("spaceweather.json")), Date.parse(taken) - FIXTURE_NOW),
     [dir("closeapproaches") + "closeapproaches.json"]: shiftTimes(JSON.parse(hz("closeapproaches.json")), Date.parse(taken) - FIXTURE_NOW),
-    [dir("launches") + "launches.json"]: (() => { const d = JSON.parse(hz("launches.json")); return shiftTimes(d, Date.parse(taken) - Date.parse(d.generated)); })(),
+    [dir("launches") + "launches.json"]: (() => {
+      const d = JSON.parse(hz("launches.json"));
+      // The real answer (2026-10-05) has no official YouTube webcast and nothing live, so these two cases are added by hand for the tests:
+      // an official YouTube webcast (an invented but valid 11-character id) on the second launch, a live official X broadcast on the third.
+      const [, second, third] = d.launches;
+      second.videos = [{ url: "https://www.youtube.com/watch?v=TESTvideo01", host: "youtube.com", type: "Official Webcast", official: true, publisher: "Test broadcaster", live: false, start: null, youtube: "TESTvideo01" }];
+      third.videos = [{ url: "https://x.com/i/broadcasts/testlive", host: "x.com", type: "Official Webcast", official: true, publisher: "Test broadcaster", live: true, start: null, youtube: null }];
+      third.liveNow = true;
+      return shiftTimes(d, Date.parse(taken) - Date.parse(d.generated));
+    })(),
     [dir("fires") + "fires.bin"]: hz("fires.bin"), [dir("fires") + "fires.json"]: shiftTimes(JSON.parse(hz("fires.json")), Date.parse(taken) - FIXTURE_NOW),
   };
   const rel = (id, ...names) => Object.fromEntries(names.map((n) => [n, `${id}/${version}/${n}`]));

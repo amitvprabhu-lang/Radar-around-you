@@ -106,3 +106,88 @@ test("the home tile counts only firm launches in the next week", () => {
   assert.equal(soonCount(DOC, NOW, 0), 0);
   assert.equal(soonCount(null, NOW), 0);
 });
+
+// ---- webcasts, live badge, countdown, embed
+import { platformName, watchLinks, isLive, hasEmbed, embedUrl, tMinus } from "../src/launches.js";
+const vid = (o = {}) => ({ url: "https://www.youtube.com/watch?v=FJpcyVk9vaI", host: "youtube.com", type: "Official Webcast", official: true, publisher: "SpaceX", live: false, start: null, youtube: "FJpcyVk9vaI", ...o });
+
+test("platform names", () => {
+  assert.equal(platformName("youtube.com"), "YouTube");
+  assert.equal(platformName("www.youtube.com"), "YouTube");
+  assert.equal(platformName("x.com"), "X");
+  assert.equal(platformName("global.nasa.example"), "global.nasa.example");
+  assert.equal(platformName("nasa.gov"), "NASA");
+  assert.equal(platformName(""), "web");
+  assert.equal(platformName(null), "web");
+});
+
+test("watch links are labelled with the source's own words and keep their order", () => {
+  const w = watchLinks({ videos: [vid(), vid({ url: "https://www.youtube.com/watch?v=abcdefghijk", type: "Unofficial Re-stream", official: false, publisher: "SPACE AFFAIRS", youtube: "abcdefghijk" }), vid({ url: "https://x.com/i/broadcasts/1yKAPwdemygxb", host: "x.com", youtube: null, publisher: null })] });
+  assert.deepEqual(w.map((x) => x.label), ["Official Webcast (YouTube, SpaceX)", "Unofficial Re-stream (YouTube, SPACE AFFAIRS)", "Official Webcast (X)"]);
+  assert.deepEqual(w.map((x) => x.official), [true, false, true]);
+});
+
+test("links that are not https, or are not objects, are never shown", () => {
+  const w = watchLinks({ videos: [vid({ url: "http://www.youtube.com/watch?v=FJpcyVk9vaI" }), vid({ url: "javascript:alert(1)" }), vid({ url: "//evil.example/x" }), vid({ url: "https://" }), null, "x", { url: 5 }, vid()] });
+  assert.equal(w.length, 1);
+  assert.equal(watchLinks(null).length, 0);
+  assert.equal(watchLinks({}).length, 0);
+  assert.equal(watchLinks({ videos: "no" }).length, 0);
+});
+
+test("only an official YouTube webcast with a valid id can be played in the page", () => {
+  const w = watchLinks({ videos: [
+    vid(), vid({ official: false, type: "Unofficial Webcast" }), vid({ youtube: "bad id!" }), vid({ youtube: "short" }), vid({ youtube: "<script>aaaa" }),
+    vid({ url: "https://x.com/i/broadcasts/abc", host: "x.com" }), vid({ url: "https://evil.example/watch?v=FJpcyVk9vaI", host: "evil.example" }), vid({ youtube: null }),
+  ] });
+  assert.deepEqual(w.map((x) => x.embedId), ["FJpcyVk9vaI", null, null, null, null, null, null, null]);
+  assert.equal(hasEmbed({ videos: [vid()] }), true);
+  assert.equal(hasEmbed({ videos: [vid({ official: false })] }), false);
+  assert.equal(hasEmbed({}), false);
+});
+
+test("the player address is built only from a valid id and uses the no-cookie domain", () => {
+  assert.equal(embedUrl("FJpcyVk9vaI"), "https://www.youtube-nocookie.com/embed/FJpcyVk9vaI?autoplay=1&rel=0&playsinline=1");
+  for (const bad of ["", "short", "FJpcyVk9vaI1", "FJpcy k9vaI", "../../evil1234", "<script>aaa", null, undefined, 5, "FJpcyVk9va\"onload=1"]) assert.equal(embedUrl(bad), null, String(bad));
+});
+
+test("live now follows the source's flag and nothing else", () => {
+  assert.equal(isLive({ liveNow: true }), true);
+  for (const x of [{ liveNow: false }, { liveNow: "true" }, { webcast: true }, {}, null]) assert.equal(isLive(x), false);
+});
+
+test("the countdown ticks to the second for a minute-accurate time and says nothing beyond 24 hours", () => {
+  const at = Date.parse("2026-10-07T03:23:00Z");
+  const l = { net: "2026-10-07T03:23:00Z", precision: "MIN" };
+  assert.equal(tMinus(l, at - (3 * 3600 + 12 * 60 + 45) * 1000).text, "T-minus 03:12:45");
+  assert.equal(tMinus(l, at - 1000).text, "T-minus 00:00:01");
+  assert.equal(tMinus(l, at - 86399000).text, "T-minus 23:59:59");
+  assert.equal(tMinus(l, at - 86400000).text, "T-minus 24:00:00");
+  assert.equal(tMinus(l, at - 86401000), null);
+  assert.equal(tMinus(l, at - 3600e3).ticking, true);
+  // consecutive seconds count down
+  const a = tMinus(l, at - 100000).text, b = tMinus(l, at - 99000).text;
+  assert.equal(a, "T-minus 00:01:40"); assert.equal(b, "T-minus 00:01:39");
+});
+
+test("an hour-accurate time is not shown with false precision, and a vague date has no countdown", () => {
+  const hr = { net: "2026-10-09T19:25:00Z", precision: "HR" };
+  const t = tMinus(hr, Date.parse(hr.net) - 5.2 * 3600e3);
+  assert.match(t.text, /^About 5 h to go \(the time is only accurate to the hour\)$/);
+  assert.equal(t.ticking, false);
+  assert.doesNotMatch(t.text, /\d\d:\d\d/);
+  assert.equal(tMinus({ net: "2026-10-31T00:00:00Z", precision: "M" }, Date.parse("2026-10-30T12:00:00Z")), null);
+  assert.equal(tMinus({ net: "2026-12-31T00:00:00Z", precision: "Q4" }, Date.parse("2026-12-30T12:00:00Z")), null);
+  assert.equal(tMinus(null, 0), null);
+  assert.equal(tMinus({ net: "nonsense", precision: "MIN" }, 0), null);
+});
+
+test("a time that has just passed does not claim the launch happened, and goes quiet after six hours", () => {
+  const l = { net: "2026-10-07T03:23:00Z", precision: "MIN" }, at = Date.parse(l.net);
+  const t = tMinus(l, at + 12 * 60000);
+  assert.match(t.text, /^The planned time passed 12 min ago\. Waiting for the source to update\.$/);
+  assert.doesNotMatch(t.text, /launched|T\+/i);
+  assert.equal(t.ticking, false);
+  assert.equal(tMinus(l, at + 6 * 3600e3 + 1000), null);
+  assert.match(tMinus(l, at + 100).text, /1 min ago/);
+});

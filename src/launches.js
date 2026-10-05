@@ -57,3 +57,48 @@ export const statusLine = (l) => l.statusName || l.status || "status not given";
 export function soonCount(doc, nowMs, days = 7) {
   return upcoming(doc, nowMs).filter((l) => isExact(l) && Date.parse(l.net) <= nowMs + days * 86400e3).length;
 }
+
+// ---- webcasts. The collector keeps up to three https links per launch with the source's own words for what each one is.
+// Everything from the feed is treated as untrusted: a link is used only if it is https, and a player is built only from an 11-character
+// YouTube video id that passes a strict pattern, for an official YouTube webcast, and only after the person taps Play.
+const PLATFORM = { "youtube.com": "YouTube", "youtu.be": "YouTube", "x.com": "X", "twitter.com": "X", "nasa.gov": "NASA", "vimeo.com": "Vimeo", "facebook.com": "Facebook", "twitch.tv": "Twitch" };
+export const platformName = (host) => { const h = String(host || "").toLowerCase().replace(/^(www|m)\./, ""); return PLATFORM[h] || h || "web"; };
+const YT_ID = /^[A-Za-z0-9_-]{11}$/;
+
+// [{ url, label, official, live, start, embedId }], in the order the collector gave them (official first)
+export function watchLinks(l) {
+  const out = [];
+  for (const v of (l && Array.isArray(l.videos) ? l.videos : [])) {
+    if (!v || typeof v.url !== "string" || !/^https:\/\/[^\s/]+/.test(v.url)) continue;
+    const type = typeof v.type === "string" && v.type ? v.type : "Webcast link";
+    const where = [platformName(v.host), typeof v.publisher === "string" && v.publisher ? v.publisher : null].filter(Boolean).join(", ");
+    const official = v.official === true;
+    out.push({ url: v.url, label: `${type} (${where})`, official, live: v.live === true, start: v.start || null,
+      embedId: official && v.youtube && YT_ID.test(v.youtube) && /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//.test(v.url) ? v.youtube : null });
+  }
+  return out;
+}
+export const isLive = (l) => !!(l && l.liveNow === true);
+export const hasEmbed = (l) => watchLinks(l).some((w) => w.embedId);
+
+// The privacy-friendly YouTube address, built only from a valid id. Returns null for anything else.
+export function embedUrl(id) {
+  return typeof id === "string" && YT_ID.test(id) ? `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1` : null;
+}
+
+// The countdown for a launch with a firm time in the next 24 hours. SEC and MIN times tick to the second; an HR time is only right to the hour,
+// so it is not shown with seconds. A time that has just passed says so and does not claim the launch happened.
+const p2 = (n) => String(n).padStart(2, "0");
+export function tMinus(l, nowMs) {
+  if (!l || !isExact(l)) return null;
+  const diff = Date.parse(l.net) - nowMs;
+  if (!isFinite(diff)) return null;
+  if (diff > 24 * 3600e3) return null;
+  if (diff <= 0) {
+    if (diff < -6 * 3600e3) return null;
+    return { text: `The planned time passed ${Math.max(1, Math.round(-diff / 60000))} min ago. Waiting for the source to update.`, ticking: false };
+  }
+  if (l.precision === "HR") return { text: `About ${Math.max(1, Math.round(diff / 3600e3))} h to go (the time is only accurate to the hour)`, ticking: false };
+  const s = Math.floor(diff / 1000);
+  return { text: `T-minus ${p2(Math.floor(s / 3600))}:${p2(Math.floor((s % 3600) / 60))}:${p2(s % 60)}`, ticking: true };
+}

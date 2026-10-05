@@ -9,6 +9,7 @@ import re
 import struct
 import zipfile
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 from .validate import ValidationError, _json, _num, iso, parse_iso
 
@@ -356,6 +357,9 @@ def close_approaches(body, now):
 
 # ---------------------------------------------------------------- The Space Devs: Launch Library 2 upcoming launches
 LL2_MAX_LAUNCHES = 40          # OURS: the app lists at most this many
+LL2_MAX_VIDEOS = 3             # OURS: webcast links kept per launch
+YT_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com")
+YT_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 LL2_DATE_WINDOW_DAYS = (-3, 800)  # OURS: a launch date outside this range around today means a broken answer
 
 
@@ -375,6 +379,58 @@ def _coord(v, limit):
         except ValueError:
             return None
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and -limit <= v <= limit else None
+
+
+def youtube_id(url):
+    """The 11-character video id of a YouTube watch, live, embed or short link, or None. Only the id is kept, because only the id is ever used to build a player."""
+    try:
+        u = urlparse(url)
+    except ValueError:
+        return None
+    host = (u.hostname or "").lower()
+    if host not in YT_HOSTS:
+        return None
+    cand = None
+    if host == "youtu.be":
+        cand = u.path.lstrip("/").split("/")[0]
+    elif u.path == "/watch":
+        cand = (parse_qs(u.query).get("v") or [None])[0]
+    else:
+        m = re.fullmatch(r"/(?:live|embed|shorts)/([^/]+)", u.path)
+        cand = m.group(1) if m else None
+    return cand if cand and YT_ID.fullmatch(cand) else None
+
+
+def _videos(r):
+    """Webcast links of a launch from the source's vid_urls: https only, no credentials in the address, at most three, official ones first.
+    Each keeps the source's own words for what it is (its type and publisher), because a re-stream is not an official stream."""
+    out, seen = [], set()
+    for v in r.get("vid_urls") or []:
+        if not isinstance(v, dict) or not isinstance(v.get("url"), str):
+            continue
+        url = v["url"].strip()
+        try:
+            u = urlparse(url)
+        except ValueError:
+            continue
+        host = (u.hostname or "").lower()
+        if u.scheme != "https" or not host or not re.fullmatch(r"[a-z0-9.-]+", host) or u.username or u.password or len(url) > 300 or url in seen:
+            continue
+        seen.add(url)
+        t = v.get("type")
+        typ = _text(t.get("name") if isinstance(t, dict) else t, 40)
+        try:
+            start = iso(parse_iso(v["start_time"])) if v.get("start_time") else None
+        except (ValueError, TypeError):
+            start = None
+        pr = v.get("priority")
+        out.append({"url": url, "host": host[4:] if host.startswith("www.") else host, "type": typ, "official": bool(typ and typ.lower().startswith("official")),
+                    "publisher": _text(v.get("publisher"), 60), "live": v.get("live") is True, "start": start, "youtube": youtube_id(url),
+                    "_p": pr if isinstance(pr, (int, float)) and not isinstance(pr, bool) else 99})
+    out.sort(key=lambda x: (not x["official"], x["_p"]))
+    for x in out:
+        del x["_p"]
+    return out[:LL2_MAX_VIDEOS]
 
 
 def _one_per(items, key):
@@ -423,6 +479,7 @@ def launches(body, now):
         mission = r.get("mission") if isinstance(r.get("mission"), dict) else {}
         orbit = mission.get("orbit") if isinstance(mission.get("orbit"), dict) else {}
         prob = r.get("probability")
+        videos = _videos(r)
         out.append({
             "id": lid, "name": name, "net": iso(net),
             "windowStart": iso(ws) if ws else None, "windowEnd": iso(we) if we else None,
@@ -432,7 +489,7 @@ def launches(body, now):
             "mission": _text(mission.get("name"), 120), "missionType": _text(mission.get("type"), 60), "orbit": _text(orbit.get("name"), 60),
             "pad": _text(pad.get("name"), 100), "location": _text(loc.get("name") or pad.get("name"), 120),
             "country": _text(country.get("alpha_2_code"), 3), "lat": lat, "lon": lon,
-            "webcast": r.get("webcast_live") is True,
+            "webcast": r.get("webcast_live") is True, "videos": videos, "liveNow": r.get("webcast_live") is True or any(v["live"] for v in videos),
             "probability": int(prob) if isinstance(prob, (int, float)) and not isinstance(prob, bool) and 0 <= prob <= 100 else None,
             "updated": iso(parse_iso(r["last_updated"])) if r.get("last_updated") else None,
         })
