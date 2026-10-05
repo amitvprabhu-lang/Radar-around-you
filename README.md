@@ -36,7 +36,7 @@ npm test                # 393 unit tests for the app and the content site, no br
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
-npm run test:hosting    # 308 checks of the PHP hosting scripts (needs php)
+npm run test:hosting    # 369 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 113 pages (112 static pages and the app as index.html), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
 npm run e2e             # 290 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
 npm run e2e:site        # 17 browser checks (last recorded run) of the built content site served raw, the way a web host serves it (builds it first)
@@ -125,7 +125,7 @@ test/       unit tests, checked against satellite.js, astronomy-engine and the r
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
 site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs;
             satcount.mjs, satcountry.mjs, svgmap.mjs and build-live.mjs for the live satellite pages
-hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 308 checks; see hosting/README.md
+hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 369 checks; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
 e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts
