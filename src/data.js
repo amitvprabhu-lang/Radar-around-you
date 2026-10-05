@@ -178,7 +178,7 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
 export async function loadLater(live = null) {
   const sat = live && live.used && live.used.satellites ? live.sources.satellites.paths : null;
   const P = (name) => (sat ? sat[name] : name);
-  const [names, ids, details, impact, routes, airlines, precise, consDoc, starNames, starIdsBuf] = await Promise.all([
+  const [names, ids, details, impact, routes, airlines, precise, consDoc, starNames, starIdsBuf, starDetails] = await Promise.all([
     text(P("names.txt")).then(decodeNames),
     bytes(P("ids.bin")).then(decodeIds),
     bytes(P("details.bin")).then((b) => new Uint8Array(b)),
@@ -189,9 +189,10 @@ export async function loadLater(live = null) {
     json("constellations.json"),
     json("starnames.json"),
     bytes("starids.bin"),
+    json("stardetails.json").catch(() => null),  // distances, types and planets: the star cards still work without it
   ]);
   // constellations: the 88 IAU constellations; starInfo: IAU names by catalogue index; starIds: the Hipparcos number of every catalogue star
-  return { names, ids, details, impact, routes, airlines, precise, constellations: indexConstellations(consDoc), starInfo: new Map(starNames.stars.map((x) => [x.i, x])), starNamesDoc: starNames, starIds: new Uint32Array(starIdsBuf) };
+  return { names, ids, details, impact, routes, airlines, precise, constellations: indexConstellations(consDoc), starInfo: new Map(starNames.stars.map((x) => [x.i, x])), starNamesDoc: starNames, starDetails, starIds: new Uint32Array(starIdsBuf) };
 }
 
 export function expandSwarm(core) {

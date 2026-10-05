@@ -77,7 +77,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   assertChecks(checks, allowUnchecked);
   const consIdx = indexConstellations(readJson("public/constellations.json"));
   const starsDoc = readJson("public/starnames.json");
-  const pages = buildPages({ cities, consIdx, starsDoc, checks });
+  const details = fs.existsSync(path.join(root, "public/stardetails.json")) ? readJson("public/stardetails.json") : null;
+  const pages = buildPages({ cities, consIdx, starsDoc, checks, details });
   const seen = new Set();
   for (const p of pages) { if (seen.has(p.file)) throw new Error(`site: duplicate page ${p.file}`); seen.add(p.file); }
   fs.rmSync(outDir, { recursive: true, force: true });

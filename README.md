@@ -18,6 +18,9 @@ This is a standalone project.
 - **Aurora**: Kp now with NOAA's geomagnetic storm scale in NOAA's own words, the NOAA warnings in force, your chance of aurora from NOAA's 30 to 90 minute forecast, and the last six hours of solar wind speed and magnetic field (Bz) drawn from live spacecraft data.
 - **Storms**: every storm NHC is tracking, with its position, wind in knots, km/h and mph, pressure, movement, a map with NHC's forecast track and cone of uncertainty (the cone's own caveat is quoted), Saffir-Simpson category, and distance to you. Cyclones outside NHC's areas are listed from GDACS with a warning that its wind figure is one number for the whole storm.
 - **Fires**: heat detections from three VIIRS satellites in the last 24 hours (about 190,000), grouped in 0.25 degree cells and drawn on the globe, with counts within 25, 50 and 100 km of you and the strongest clusters worldwide. A detection is a heat signal, not a confirmed wildfire.
+- **Launches**: the upcoming rocket launches from The Space Devs' Launch Library 2, a firm time first and then those planned only for a month or quarter, each worded to match how exact the source says the time is (a month or quarter never gets a clock time or a countdown). Pad, provider, status in the source's own words, distance from your place to the pad. One call an hour against a limit of 15; a duplicate launch is dropped. Facts and terms in `docs/star-sources.md`.
+- **Star details**: a star's card also gives its distance in light-years and parsecs, how long ago the light you see left it, spectral type, luminosity as a multiple of the Sun, absolute magnitude and, for 103 of the 5,041 matched stars, its confirmed planets. Distances from the HYG database v4.4 (CC BY-SA 4.0, so `public/stardetails.json` is under the same licence), planets from the NASA Exoplanet Archive. Matched by Hipparcos number and checked by position and magnitude; a star with no reliable distance shows none rather than a made-up number, and its luminosity is dropped with it.
+- **Sky Lens**: in the sky view the Camera button puts the phone's rear camera behind the sky, so stars, constellations and satellites sit over the real sky. It turns the motion sensors on, shows the picture only on the device (never recorded or sent), stops when the page leaves the screen or the sky view, and says in plain words why it could not start. Pinch to zoom until the sky matches the picture: the start value of 60 degrees is a guess. Tested in a real browser with a fake camera, not on a phone.
 - **Around you**: the storms, fires, hazards, quakes and aurora that are near your place, most serious first. Each has its source and "as of" time. It links things only by distance and time and never claims one caused another; nothing in it is predicted by this app.
 - **Phone and night use**: deep links (`#sky`, `#aurora`, `#storms`, `#fires`, `#calendar`, `#tonight`, `#place=pune&sky`, `#place=pos_-12.05_-77.04`) so any screen and place can be shared or bookmarked; a Red light mode that leaves only red light on the screen; the screen stays on in the Sky view where the browser allows it; the app can be installed to a home screen and opens offline (a service worker keeps the page and bundled data, and always asks the network first for live data). The installable and offline parts are tested with the worker's real code against fake caches, but have not been tried on a real phone.
 - **Share cards**: a 1080 by 1350 picture and a text version for an earthquake, a satellite pass, a Starlink string or Tonight. Saved through the viewer's download permission when the host gives it, else the phone's share sheet, else press and hold.
@@ -29,13 +32,13 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 210 unit tests for the app, no browser needed
-npm run test:pipeline   # 125 tests for the data pipeline (Python, standard library only)
+npm test                # 251 unit tests for the app, no browser needed
+npm run test:pipeline   # 169 tests for the data pipeline (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
 npm run site            # the content site into dist/site: 111 pages, the app as index.html, sitemap.xml, robots.txt (run npm run build first)
-npm run e2e             # 262 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:live        # 84 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
+npm run e2e             # 282 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:live        # 92 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
 ```
@@ -146,7 +149,9 @@ CelesTrak (orbits and the satellite catalogue), USGS (quakes, ShakeMap, PAGER), 
 - Aircraft and satellite 3D models are generic and not to scale. The Moon is drawn 3.5 times larger so its phase is visible.
 - Sky glow is estimated from NASA night-light imagery, not measured.
 - The cloud layer is a NASA daily composite from 3 Oct 2026 and shows swath seams.
-- Phone-sensor look-around is implemented and its maths is tested with synthetic readings, but it has not been tried on a real phone.
+- Phone-sensor look-around and Sky Lens are implemented and tested with synthetic sensor readings and a fake camera, but neither has been tried on a real phone. Compass accuracy varies between phones and the camera's field of view is not known to the app.
+- Launch dates move often and the source does not guarantee accuracy. The planet list is a snapshot of the Exoplanet Archive from 2026-10-05, rebuilt by hand, not a live feed.
+- The same storm in NHC and GDACS is shown once (NHC wins); fire detections from different satellites are not merged, and the Fires screen says a fire can count twice.
 
 ## To verify before a public launch
 

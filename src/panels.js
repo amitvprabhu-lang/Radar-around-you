@@ -8,7 +8,7 @@ import { agoText, STATE_LABEL } from "./live.js";
 import { createWatch } from "./watch.js";
 import { searchPlaces, placeFromRecord, countryName, PLACES_CREDIT } from "./places.js";
 import { constellationAt, visibilityFrom, VISIBILITY_TEXT, bestMonth, wanderersIn } from "./constellations.js";
-import { colourName, magnitudeRank, starDay, bayerName } from "./starinfo.js";
+import { colourName, magnitudeRank, starDay, bayerName, detailsFor, distanceText, lightAgeText, luminosityText, planetText } from "./starinfo.js";
 import { sizeText, sigmaText, lunarText, kmCompact, whenFromNow, ASSUMED_ALBEDO } from "./asteroids.js";
 import * as L from "./launches.js";
 import { fmtDay } from "./tonight.js";
@@ -412,9 +412,18 @@ export function createPanels(ctx) {
     const day = starDay(ra, dec, place().lat, place().lon, nowDate());
     const t = (d) => (d ? fmtTime(d, tz()) : "none");
     const dayText = day.state === "never" ? "Never rises above the horizon from here." : day.state === "circumpolar" ? `Never sets from here. Highest at ${t(day.transit)}, ${Math.round(day.transitAlt)}° up.` : `Rises ${t(day.rise)} · highest ${t(day.transit)} (${Math.round(day.transitAlt)}° up) · sets ${t(day.set)}`;
+    const det = detailsFor(L && L.starDetails, i);
     kids.push(h("dl", { class: "facts" },
       kv("Brightness", `magnitude ${mag.toFixed(1)}, ${rank === 1 ? "the brightest" : `number ${num(rank)} of ${num(D.stars.n)}`} in this catalogue`, { mono: true, wide: true }),
       kv("Colour", colourName(bv) ? `${colourName(bv)} (B-V ${bv.toFixed(2)})` : "Not available", { mono: true }),
+      ...(det ? [
+        kv("Distance", distanceText(det.pc) || "Not known: the catalogue's parallax for this star is missing or unreliable", { wide: true }),
+        det.pc != null ? kv("Light age", lightAgeText(det.pc), { wide: true }) : null,
+        det.spect ? kv("Spectral type", det.spect, { mono: true }) : null,
+        luminosityText(det.lum) ? kv("Luminosity", luminosityText(det.lum), { wide: true }) : null,
+        det.absMag != null ? kv("Absolute magnitude", `${det.absMag.toFixed(1)} (its brightness from 10 parsecs away)`, { mono: true, wide: true }) : null,
+        det.planets ? kv("Known planets", planetText(det.planets), { wide: true }) : null,
+      ].filter(Boolean) : []),
       kv("Constellation", con ? h("button", { class: "linkbtn", onclick: () => actions.openConstellation(con.abbr) }, con.name) : "Not available"),
       kv("Right ascension", `${(ra / 15).toFixed(2)} h`, { mono: true }), kv("Declination", `${dec.toFixed(1)}°`, { mono: true }),
       kv("Now", nowText(), { mono: true, live: nowText }),
@@ -446,7 +455,8 @@ export function createPanels(ctx) {
       text = "Names and boundaries: IAU. Stick figures: d3-celestial project. Which stars and planets are inside is worked out on your device with astronomy-engine.";
       href = "https://www.iau.org/public/themes/constellations/"; label = "IAU constellations";
     } else if (sel.kind === "star") {
-      text = "Source: star names from the IAU Working Group on Star Names; positions and brightness from a Hipparcos-based catalogue; constellation boundaries from the IAU. Rise and set times are computed on your device.";
+      const has = D.later && D.later.starDetails && detailsFor(D.later.starDetails, sel.i);
+      text = `Source: star names from the IAU Working Group on Star Names; positions and brightness from a Hipparcos-based catalogue; constellation boundaries from the IAU.${has ? " Distance, spectral type and luminosity: HYG database v4.4 (CC BY-SA 4.0)." + (has.planets ? " Planets: NASA Exoplanet Archive." : "") : ""} Rise and set times are computed on your device.`;
       href = "https://www.iau.org/public/themes/naming_stars/"; label = "IAU star names";
     } else {
       text = "Computed on your device with the astronomy-engine library, whose positions we checked against NASA JPL Horizons and the US Naval Observatory.";
@@ -831,7 +841,9 @@ export function createPanels(ctx) {
         h("li", { text: "Earthquakes, shaking maps, PAGER: USGS. Hazards: GDACS." }),
         h("li", { text: "Aurora and Kp: NOAA Space Weather Prediction Center. Clouds: NASA GIBS imagery from 3 Oct 2026, so the cloud layer is a day old and has visible swath seams." }),
         h("li", { text: "Aircraft and routes: adsb.lol. Airlines: OpenFlights. Cloud forecasts: MET Norway. Stars: Hipparcos-based catalogue. Earth imagery: NASA Blue Marble." }),
-        h("li", { text: "Storms: NOAA National Hurricane Center. Fires: NASA FIRMS (LANCE). Solar wind and geomagnetic alerts: NOAA Space Weather Prediction Center. " + PLACES_CREDIT + "." })),
+        h("li", { text: "Storms: NOAA National Hurricane Center. Fires: NASA FIRMS (LANCE). Solar wind and geomagnetic alerts: NOAA Space Weather Prediction Center. " + PLACES_CREDIT + "." }),
+        h("li", { text: "Rocket launches: The Space Devs (Launch Library 2). Asteroid close approaches: NASA/JPL CNEOS. Star names and constellations: IAU." }),
+        h("li", { text: "Star distances, spectral types and luminosities: HYG database v4.4 (astronexus), CC BY-SA 4.0. This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program." })),
       h("h3", { text: "Data health" }),
       h("p", { text: `${num(m.health.recordsRead)} element sets read, ${num(m.health.kept)} kept. Duplicates dropped: ${m.health.duplicatesDropped}. Rejected as invalid: ${Object.values(m.health.invalidDropped).reduce((a, b) => a + b, 0)}. At the snapshot the median element set was ${m.health.ageHours.median} hours old and 90% were under ${m.health.ageHours.p90} hours. ${num(m.health.staleOver3d)} objects had data over 3 days old and ${num(m.health.staleOver7d)} over 7 days (each satellite card shows its own data age). Exact SGP4 orbits are used for ${m.preciseCount} objects: the stations, the brightest objects and everything launched in the last 30 days.` }),
       h("h3", { text: "Honest limits" }),

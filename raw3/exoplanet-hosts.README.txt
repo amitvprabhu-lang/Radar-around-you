@@ -1,0 +1,9 @@
+raw3/exoplanet-hosts.csv: NASA Exoplanet Archive, table pscomppars (Planetary Systems Composite Parameters), the planets whose host
+star has a Hipparcos name. Fetched 2026-10-05 with the TAP service:
+
+https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=select+pl_name,hostname,hip_name,sy_pnum,sy_dist,disc_year,discoverymethod+from+pscomppars+where+hip_name+is+not+null+order+by+hip_name,pl_name&format=csv
+
+Acknowledgement the Archive asks for (https://exoplanetarchive.ipac.caltech.edu/docs/acknowledge.html): "This research has made use of the NASA
+Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space
+Administration under the Exoplanet Exploration Program." The Archive's page did not state a data licence in the text read.
+The archive's column list says hip_name is the star's name in the Hipparcos Catalog and sy_pnum the number of confirmed planets.

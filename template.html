@@ -24,6 +24,10 @@
   [hidden] { display: none !important; }
   #app { position: fixed; inset: 0; background: radial-gradient(120% 90% at 50% 40%, #0a1226 0%, var(--ink) 70%); touch-action: none; user-select: none; -webkit-user-select: none; }
   canvas#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  /* Sky Lens: the camera picture sits behind the canvas; a screen blend lets its dark parts show the camera and its bright parts add to it */
+  video#lens { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
+  body[data-lens="on"] video#lens { display: block; }
+  body[data-lens="on"] canvas#gl { mix-blend-mode: screen; }
   .glass { background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(16px) saturate(1.25); -webkit-backdrop-filter: blur(16px) saturate(1.25); }
   .mono { font-family: var(--f-mono); }
   :focus-visible { outline: 2px solid var(--ion); outline-offset: 2px; }
@@ -122,6 +126,8 @@
   .btn.warn { background: var(--signal); color: #1a1200; border-color: transparent; }
   .btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   .btn.small { height: 34px; padding: 0 12px; font-size: 13px; }
+  /* on a phone the sky panel has four buttons (Sensors, Camera, Guide, More); tighter ones keep them on one line */
+  @media (max-width: 440px) { .hudhead { flex: 1 1 100% !important; } .hudbtns { gap: 4px !important; } .hudbtns .btn.small { padding: 0 9px; font-size: 12px; } }
   .tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font: 500 11px/1 var(--f-mono); letter-spacing: .03em; background: rgba(255, 255, 255, .07); color: var(--muted); }
   .tag.new { background: rgba(255, 209, 102, .16); color: var(--signal); }
   .tag.live { background: rgba(98, 230, 195, .15); color: var(--ion); }
@@ -287,6 +293,7 @@
 
 <div id="app" data-view="globe">
   <div id="nightveil" aria-hidden="true"></div>
+  <video id="lens" playsinline muted autoplay aria-hidden="true" tabindex="-1"></video>
   <canvas id="gl" tabindex="0" aria-label="Interactive 3D view. Drag to look around, pinch or scroll to zoom."></canvas>
   <div id="labels" aria-hidden="true"></div>
 

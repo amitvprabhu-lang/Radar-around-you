@@ -19,6 +19,7 @@ import { skyCalendar, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
 import { soonCount } from "./launches.js";
+import { createLens, LENS_DEFAULT_FOV } from "./lens.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -100,6 +101,22 @@ async function main() {
     auroraChance: () => { const a = sky.info.aurora; return a ? a.chance : null; },
   });
   const { toast } = panels;
+  // Sky Lens: the camera behind the sky view. The picture is only shown on this device.
+  let lensFovBefore = null;
+  const lens = createLens({
+    video: $("lens"),
+    ensureSensors: async () => sky.view.sensor || (await sky.sensor.enable()),
+    setLook: (on) => {
+      document.body.dataset.lens = on ? "on" : "";
+      sky.setLens(on);
+      if (on) { lensFovBefore = sky.view.fov; sky.view.fov = LENS_DEFAULT_FOV; } else if (lensFovBefore != null) { sky.view.fov = lensFovBefore; lensFovBefore = null; }
+    },
+    onChange: (on, why) => {
+      if (skyHud.cam) skyHud.cam.textContent = on ? "Stop camera" : "Camera";
+      if (!on && (why === "hidden" || why === "ended")) toast("Camera turned off", { sub: why === "hidden" ? "It stops when the page is not on screen." : "Another app took the camera.", plain: true, ms: 4000 });
+    },
+  });
+  window.__lens = lens;
   // the sky calendar for the place: 90 days from the start of today, recomputed when the place or the day changes
   let calCache = { key: "", value: null };
   function calendarModel() {
@@ -401,6 +418,13 @@ async function main() {
         const ok = await sky.sensor.enable();
         if (ok) sensorBtn.textContent = "Stop sensors"; else toast("Sensors are not available here", { sub: "On a phone, allow motion access. The preview window may block it. Drag to look instead.", plain: true });
       } }, "Sensors");
+      const camBtn = h("button", { class: "btn small", onclick: async () => {
+        if (lens.active) { lens.stop(); return; }
+        const r = await lens.start();
+        if (r.ok) toast("Camera on", { sub: "Pinch to zoom until the stars match the picture. The picture stays on your phone and is not recorded.", plain: true, ms: 7000 });
+        else if (r.reason !== "busy") toast("Camera not started", { sub: r.message, plain: true, ms: 6000 });
+      } }, lens.active ? "Stop camera" : "Camera");
+      skyHud.cam = camBtn;
       const slider = h("input", { type: "range", min: "0", max: "1440", step: "10", value: String(S.skyOffsetMin), "aria-label": "Show the sky at a later time, up to a day ahead" });
       const sliderOut = h("output", { class: "mono", text: S.skyOffsetMin === 0 ? "Now" : `+${durText(S.skyOffsetMin * 60)}` });
       const plan = h("p", { id: "planText" });
@@ -414,7 +438,7 @@ async function main() {
       const more = h("div", { id: "skyMore", hidden: !S.skyMore }, h("div", { class: "row", style: { margin: "6px 0" } }, h("button", { class: "btn small", onclick: () => sky.faceDefault() }, "Reset view")), info, plan);
       const moreBtn = h("button", { class: "btn small", "aria-expanded": String(!!S.skyMore), onclick: () => { S.skyMore = !S.skyMore; more.hidden = !S.skyMore; moreBtn.setAttribute("aria-expanded", String(S.skyMore)); moreBtn.textContent = S.skyMore ? "Less" : "More"; } }, S.skyMore ? "Less" : "More");
       hud.append(h("div", { class: "panel glass", style: { padding: "10px 12px" } },
-        h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "nowrap" } }, h("div", { class: "grow", style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, headEl), h("div", { class: "row", style: { flex: "none", gap: "6px" } }, sensorBtn, h("button", { class: "btn small", onclick: () => actions.openConstellations() }, "Guide"), moreBtn)),
+        h("div", { class: "row", style: { justifyContent: "space-between", flexWrap: "wrap", rowGap: "6px" } }, h("div", { class: "grow hudhead", style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, headEl), h("div", { class: "row hudbtns", style: { flex: "0 1 auto", gap: "6px", marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 } }, sensorBtn, camBtn, h("button", { class: "btn small", onclick: () => actions.openConstellations() }, "Guide"), moreBtn)),
         h("div", { class: "row", style: { marginTop: "2px" } }, h("span", { class: "mono", style: { fontSize: "12px", color: "var(--muted)" }, text: "Tonight" }), h("div", { class: "grow" }, slider), sliderOut),
         more));
       skyHud.heading = headEl; skyHud.info = info; skyHud.plan = plan;
@@ -481,6 +505,7 @@ async function main() {
     panels.closeSheet();
     if (v === S.view) { syncTabs(); return; }
     const prev = S.view;
+    if (v !== "sky") lens.stop("left");
     S.view = v;
     $("toasts").replaceChildren();
     S.guide = null; renderGuide();

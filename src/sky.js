@@ -128,6 +128,7 @@ export function createSky(ctx) {
   api.sats = sats;
 
   // ------------------------------------------------------------------ ground and horizon
+  const horizonMeshes = [];  // hills and ground, hidden when the camera is behind the sky
   const horizonU = { base: { value: new THREE.Vector3(0.02, 0.025, 0.03) }, glow: { value: new THREE.Vector3(1, 0.7, 0.4) }, glowAmt: { value: 0.3 } };
   {
     const N = 180;
@@ -146,10 +147,12 @@ export function createSky(ctx) {
     ring.renderOrder = 10;
     ring.frustumCulled = false;
     scene.add(ring);
+    horizonMeshes.push(ring);
     const ground = new THREE.Mesh(new THREE.SphereGeometry(29.5, 48, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.ShaderMaterial({ vertexShader: S.HORIZON_VERT, fragmentShader: S.HORIZON_FRAG, uniforms: horizonU, side: THREE.DoubleSide }));
     ground.renderOrder = 10;
     ground.frustumCulled = false;
     scene.add(ground);
+    horizonMeshes.push(ground);
   }
 
   // ------------------------------------------------------------------ aurora curtains
@@ -734,6 +737,9 @@ export function createSky(ctx) {
     camera.setViewOffset(w, h, 0, px, w, h);
   };
   api.resize = (w, h) => { camera.aspect = w / h; camera.updateProjectionMatrix(); };
+  // Sky Lens: with the camera behind, the painted sky and the made-up hills would hide the real ones
+  api.setLens = (on) => { dome.visible = !on; for (const m of horizonMeshes) m.visible = !on; api.lens = !!on; };
+  api.lens = false;
   api.setLayers = (l) => { satU.show.value.set(l.sats ? 1 : 0, l.starlink ? 1 : 0, l.debris ? 1 : 0, 1); };
   return api;
 }

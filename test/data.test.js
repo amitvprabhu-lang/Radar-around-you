@@ -131,6 +131,19 @@ test("the second stage reads the live satellite files when the swarm came from l
   assert.ok(net.requested.includes("impact.json"), "static data still comes from the bundle");
 });
 
+test("the second stage reads the star details, and the app still works when that file is missing", async () => {
+  const net = network({});
+  const c = await core(net);
+  const later = await loadLater(c.live);
+  assert.ok(net.requested.includes("stardetails.json"));
+  assert.ok(later.starDetails && Object.keys(later.starDetails.stars).length > 5000);
+  const broken = network({}, { fail: ["stardetails.json"] });
+  const later2 = await loadLater((await core(broken)).live);
+  assert.equal(later2.starDetails, null, "no details, but nothing else is lost");
+  assert.equal(later2.starInfo.size, later.starInfo.size);
+  assert.equal(later2.names.length, baseMeta.count);
+});
+
 test("the poller's decoders return what the app expects", async () => {
   const net = network(livePackFiles());
   globalThis.fetch = net.fetchFn;

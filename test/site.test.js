@@ -202,7 +202,7 @@ test("city pages: polar text appears only where the Sun can stay up or down all 
 
 test("the star index lists every IAU-named star in the catalogue, brightest first", () => {
   const t = read("stars/index.html");
-  const rows = [...t.matchAll(/<tr><td><strong>([^<]+)<\/strong><\/td><td>[^<]*<\/td><td>(?:<a [^>]*>)?[^<]*(?:<\/a>)?<\/td><td class="num">(-?[\d.]+)<\/td><\/tr>/g)];
+  const rows = [...t.matchAll(/<tr><td><strong>([^<]+)<\/strong><\/td><td>[^<]*<\/td><td>(?:<a [^>]*>)?[^<]*(?:<\/a>)?<\/td><td class="num">(-?[\d.]+)<\/td>(?:<td class="num">[^<]*<\/td>)*<\/tr>/g)];
   assert.equal(rows.length, starsDoc.stars.length);
   assert.equal(rows.length, 331);
   const mags = rows.map((m) => Number(m[2]));
@@ -228,4 +228,25 @@ test("the build writes the data files next to the app when a public folder is gi
   build({ outDir: out2, appFile, publicDir: pub });
   assert.ok(fs.existsSync(path.join(out2, "cities.json")) && fs.existsSync(path.join(out2, "icons", "a.svg")));
   assert.ok(fs.existsSync(path.join(out2, "index.html")));
+});
+
+test("the star pages carry distances and planet counts from the details file, with both credits", () => {
+  const details = readJson("public/stardetails.json");
+  const stars = read("stars/index.html");
+  assert.match(stars, /Distance \(light-years\)/);
+  assert.match(stars, /Confirmed planets/);
+  assert.match(stars, /HYG database v4\.4/);
+  assert.match(stars, /CC BY-SA 4\.0/);
+  assert.match(stars, /operated by the California Institute of Technology/);
+  const withPlanets = starsDoc.stars.filter((s) => details.planets[String(s.i)]).length;
+  assert.ok(withPlanets > 20);
+  assert.ok(textOf(stars).includes(`${withPlanets} of them have confirmed planets`));
+  // the Sirius row: 8.6 light-years and no planets listed
+  assert.match(stars, /<strong>Sirius<\/strong><\/td><td>α Canis Majoris<\/td><td><a [^>]*>Canis Major<\/a><\/td><td class="num">-1\.44<\/td><td class="num">8\.6<\/td><td class="num">none listed<\/td>/);
+  // Pollux has one planet
+  assert.match(stars, /<strong>Pollux<\/strong>[\s\S]*?<td class="num">1<\/td><\/tr>/);
+  assert.match(read("constellations/cma/index.html"), /Distance \(light-years\)/);
+  // a star with no usable distance says so instead of showing a made-up number
+  assert.ok(Object.values(details.stars).some((v) => v[0] == null));
+  assert.doesNotMatch(textOf(stars), /NaN|undefined|\bnull\b/);
 });

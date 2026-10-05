@@ -1,0 +1,10 @@
+raw3/hyg_v44_extract.csv holds the rows of the HYG database v4.4 whose Hipparcos number is in this app's star catalogue
+(5,041 of the 119,614 stars), with these columns only: id, hip, ra, dec, dist, mag, absmag, spect, ci, lum.
+
+HYG database v4.4, https://codeberg.org/astronexus/hyg (astronexus), file data/hyg/CURRENT/hyg_v44.csv.gz (served through the
+repository's Git LFS media address), read 2026-10-05. Licence: Creative Commons Attribution-ShareAlike 4.0 International
+(http://creativecommons.org/licenses/by-sa/4.0/), stated in the repository's README. This extract and public/stardetails.json,
+which is built from it, are adaptations and are offered under the same licence. The rest of this project's code is MIT.
+
+Column meanings are from the HYG readme: dist is in parsecs and a value of 100000 or more means missing or dubious parallax;
+lum is the luminosity as a multiple of the Sun's; absmag is the absolute visual magnitude; spect the spectral type.

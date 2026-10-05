@@ -5,10 +5,13 @@ import * as Astro from "astronomy-engine";
 import { esc, table, sources, href } from "./layout.mjs";
 import { sunDay, darkHours, polarSpans, eclipses, SHOWERS, maxAltitude } from "./data.mjs";
 import { visibilityFrom, bestMonth, constellationAt } from "../src/constellations.js";
+import { detailsFor, distanceText, lightYears, planetText } from "../src/starinfo.js";
 import { Y0, Y1, ENGINE } from "./pages-data.mjs";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const IAU_CONS = { title: "IAU: The Constellations", url: "https://www.iau.org/public/themes/constellations/", note: "Names, meanings, pronunciations and boundaries" };
+const HYG = { title: "HYG database v4.4 (astronexus)", url: "https://codeberg.org/astronexus/hyg", note: "Distances, spectral types and luminosities, licence CC BY-SA 4.0" };
+const EXOARCHIVE = { title: "NASA Exoplanet Archive", url: "https://exoplanetarchive.ipac.caltech.edu/docs/pscp_about.html", note: "Confirmed planets by host star. This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program." };
 const IAU_STARS = { title: "IAU Working Group on Star Names", url: "https://www.iau.org/public/themes/naming_stars/", note: "The official names of stars" };
 const num = (n, d = 0) => n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 const lat = (v) => `${num(Math.abs(v), 1)}°${v >= 0 ? "N" : "S"}`;
@@ -139,7 +142,7 @@ export function citiesIndex(cities) {
 }
 
 // ---------------------------------------------------------------- constellation pages
-export function constellationPage(c, consIdx, starsDoc, cities) {
+export function constellationPage(c, consIdx, starsDoc, cities, details = null) {
   const rank = [...consIdx.list].sort((a, b) => b.areaDeg2 - a.areaDeg2).findIndex((x) => x.abbr === c.abbr) + 1;
   const best = bestMonth(c.centre.ra);
   const named = starsDoc.stars.filter((s) => s.con === c.abbr).sort((a, b) => a.mag - b.mag);
@@ -148,7 +151,8 @@ export function constellationPage(c, consIdx, starsDoc, cities) {
   const b = c.stars.brightest;
   const bName = b ? (b.name || `star HIP ${b.hip}`) : "none";
   const cityRows = cities.map((city) => { const v = visibilityFrom(c, city.lat); return [esc(city.name), lat(city.lat), SHORT[v.state], v.state === "never" || v.maxAltCentre <= 0 ? "below the horizon" : `${Math.round(v.maxAltCentre)}°`]; });
-  const starRows = named.map((s) => [`<strong>${esc(s.name)}</strong>`, esc([s.bayer, s.bayer ? c.genitive : null].filter(Boolean).join(" ") || s.designation || ""), num(s.mag, 2)]);
+  const ly = (s) => { const d = detailsFor(details, s.i); const v = d && lightYears(d.pc); return v == null ? "not known" : v < 100 ? num(v, 1) : num(Math.round(Number(v.toPrecision(2)))); };
+  const starRows = named.map((s) => [`<strong>${esc(s.name)}</strong>`, esc([s.bayer, s.bayer ? c.genitive : null].filter(Boolean).join(" ") || s.designation || ""), num(s.mag, 2), ...(details ? [ly(s)] : [])]);
   const file = `constellations/${slug(c)}/index.html`;
   const body = `
 <h2 id="glance">${esc(c.name)} at a glance</h2>
@@ -163,10 +167,10 @@ ${table({ caption: `${c.name}: facts from the IAU boundaries and star catalogue`
 <h2 id="cities">From six cities</h2>
 ${table({ caption: `${c.name} from six cities. Altitude is how high its middle gets.`, head: ["City", "Latitude", "Visibility", "Middle at its highest"], rows: cityRows, numeric: [1, 3] })}
 <h2 id="stars">${esc(c.name)}'s named stars</h2>
-${named.length ? `<p>These stars in ${esc(c.name)} have names approved by the IAU Working Group on Star Names. Magnitude is brightness: a lower number is brighter, and the faintest stars seen with the naked eye on a dark night are about magnitude 6.</p>${table({ caption: `IAU-named stars in ${c.name}`, head: ["Star", "Designation", "Magnitude"], rows: starRows, numeric: [2] })}` : `<p>None of the stars brighter than magnitude 6 in ${esc(c.name)} has a name approved by the IAU Working Group on Star Names.</p>`}
+${named.length ? `<p>These stars in ${esc(c.name)} have names approved by the IAU Working Group on Star Names. Magnitude is brightness: a lower number is brighter, and the faintest stars seen with the naked eye on a dark night are about magnitude 6.</p>${table({ caption: `IAU-named stars in ${c.name}`, head: ["Star", "Designation", "Magnitude", ...(details ? ["Distance (light-years)"] : [])], rows: starRows, numeric: details ? [2, 3] : [2] })}${details ? `<p>Distances are about, from the HYG database (Hipparcos parallax), and "not known" means the catalogue has no reliable parallax for that star.</p>` : ""}` : `<p>None of the stars brighter than magnitude 6 in ${esc(c.name)} has a name approved by the IAU Working Group on Star Names.</p>`}
 <h2 id="how">How these facts were found</h2>
 <p>The name, meaning and boundaries are the IAU's. Area, borders and the latitude ranges are computed from those boundaries; the brightest star and the star count come from a magnitude-6 star catalogue; star names are matched to the catalogue by Hipparcos number and checked by position. The month is when ${esc(c.name)}'s middle crosses the north-south line of the sky at 9 pm local solar time. See <a href="${href(file, "methods/index.html")}">How we know</a>.</p>
-${sources([IAU_CONS, IAU_STARS, ENGINE])}`;
+${sources([IAU_CONS, IAU_STARS, ENGINE, ...(details ? [HYG] : [])])}`;
   return {
     file, crumbs: [{ name: "Constellations", file: "constellations/index.html" }], crumbTitle: c.name,
     title: `${c.name} constellation: brightest star, size and when to see it`,
@@ -194,18 +198,23 @@ ${sources([IAU_CONS, IAU_STARS, ENGINE])}`,
   };
 }
 
-export function starsIndex(starsDoc, consIdx) {
-  const rows = starsDoc.stars.map((s) => { const c = consIdx.byAbbr.get(s.con); return [`<strong>${esc(s.name)}</strong>`, esc([s.bayer, s.bayer && c ? c.genitive : null].filter(Boolean).join(" ") || s.designation || ""), c ? `<a href="${href("stars/index.html", `constellations/${slug(c)}/index.html`)}">${esc(c.name)}</a>` : esc(s.con || ""), num(s.mag, 2)]; });
+export function starsIndex(starsDoc, consIdx, details = null) {
+  const lyText = (s) => { const d = detailsFor(details, s.i); const v = d && lightYears(d.pc); return v == null ? "not known" : v < 100 ? num(v, 1) : num(Math.round(Number(v.toPrecision(2)))); };
+  const planets = (s) => { const d = detailsFor(details, s.i); return d && d.planets ? String(d.planets.n) : "none listed"; };
+  const withPlanets = details ? starsDoc.stars.filter((s) => { const d = detailsFor(details, s.i); return d && d.planets; }) : [];
+  const rows = starsDoc.stars.map((s) => { const c = consIdx.byAbbr.get(s.con); return [`<strong>${esc(s.name)}</strong>`, esc([s.bayer, s.bayer && c ? c.genitive : null].filter(Boolean).join(" ") || s.designation || ""), c ? `<a href="${href("stars/index.html", `constellations/${slug(c)}/index.html`)}">${esc(c.name)}</a>` : esc(s.con || ""), num(s.mag, 2), ...(details ? [lyText(s), planets(s)] : [])]; });
   return {
     file: "stars/index.html", crumbTitle: "Named stars",
-    title: `${starsDoc.stars.length} stars with official IAU names: brightness and constellation`,
-    description: `The ${starsDoc.stars.length} naked-eye stars that have names approved by the International Astronomical Union, brightest first, with their constellation and magnitude.`,
+    title: `${starsDoc.stars.length} stars with official IAU names: brightness, distance and planets`,
+    description: `The ${starsDoc.stars.length} naked-eye stars that have names approved by the International Astronomical Union, brightest first, with constellation, magnitude${details ? ", distance in light-years and known planets" : ""}.`,
     h1: "Stars with official names", kicker: "Reference",
-    lead: `${starsDoc.stars.length} of the stars you can see without a telescope have a name approved by the IAU Working Group on Star Names. Here they are, brightest first.`,
-    body: `${table({ caption: "IAU-named stars brighter than about magnitude 6", head: ["Star", "Designation", "Constellation", "Magnitude"], rows, numeric: [3] })}
+    lead: `${starsDoc.stars.length} of the stars you can see without a telescope have a name approved by the IAU Working Group on Star Names. Here they are, brightest first${details ? `. ${withPlanets.length} of them have confirmed planets in the NASA Exoplanet Archive` : ""}.`,
+    body: `${table({ caption: "IAU-named stars brighter than about magnitude 6", head: ["Star", "Designation", "Constellation", "Magnitude", ...(details ? ["Distance (light-years)", "Confirmed planets"] : [])], rows, numeric: details ? [3, 4, 5] : [3] })}
+${details ? `<p>Distances are about, from Hipparcos parallax as collected in the HYG database; "not known" means that catalogue has no reliable parallax for the star. "None listed" means the NASA Exoplanet Archive has no confirmed planet for it, which says nothing about planets not yet found.</p>` : ""}
 <h2 id="how">Where the list comes from</h2>
 <p>The IAU's catalogue of star names lists ${starsDoc.counts.inFile} names. ${starsDoc.counts.inCatalogue} of them belong to stars bright enough to be in this magnitude-6 catalogue; the rest are fainter stars, such as those that host planets. Each name is matched to its star by Hipparcos number and checked against the star's position, and every one agrees. The IAU file was last updated on ${esc(starsDoc.listUpdated || "an unknown date")}, so very recent names may be missing.</p>
-${sources([IAU_STARS, { title: "IAU Catalog of Star Names", url: "https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt", note: "The list itself, kept by the working group" }])}`,
+${details ? `<p>Distances come from the HYG database (version 4.4, licence CC BY-SA 4.0), matched to the same catalogue by Hipparcos number and checked by position. Planet counts come from the Archive's composite table, where several names for one star, such as components of a double, are counted as one star and a planet listed twice is counted once.${details.counts && details.counts.hostDistanceDiffers === 0 ? " As a check, wherever both the Archive and HYG give a distance for a planet-hosting star in the catalogue, the two agree to within 15 percent." : ""}</p>` : ""}
+${sources([IAU_STARS, { title: "IAU Catalog of Star Names", url: "https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt", note: "The list itself, kept by the working group" }, ...(details ? [HYG, EXOARCHIVE] : [])])}`,
     cta: { label: "Tap a star in the live sky", query: "#sky" },
   };
 }

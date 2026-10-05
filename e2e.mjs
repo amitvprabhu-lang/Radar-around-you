@@ -138,6 +138,34 @@ async function suite(label, viewport, mobile) {
   check(L("sensor: alpha 180 looks south"), ang(sens.south.yaw, 180) < 1.5, JSON.stringify(sens.south));
   check(L("sensor: tilting the top back looks up"), Math.abs(sens.up45.pitch - 45) < 1.5, JSON.stringify(sens.up45));
   check(L("sensor: tilting forward looks below the horizon"), sens.down30.pitch < -20, JSON.stringify(sens.down30));
+  // ---- Sky Lens: the camera behind the sky (the browser is started with a fake camera, so this tests the real browser path)
+  const clickBtn = (label) => R(p, (l) => { const b = [...document.querySelectorAll("#hud button")].find((x) => x.textContent === l); if (b) b.click(); return !!b; }, label);
+  const lensState = () => R(p, () => { const v = document.getElementById("lens"), c = document.getElementById("gl"); return { on: document.body.dataset.lens, blend: getComputedStyle(c).mixBlendMode, display: getComputedStyle(v).display, hasStream: !!v.srcObject, ready: v.readyState, w: v.videoWidth, skyLens: window.__radar.sky.lens, fov: window.__radar.sky.view.fov, sensor: window.__radar.sky.view.sensor, btn: [...document.querySelectorAll("#hud button")].map((b) => b.textContent).filter((t) => /camera/i.test(t)) }; });
+  const fovBefore = await R(p, () => window.__radar.sky.view.fov);
+  check(L("Sky Lens: the sky view has a Camera button"), (await lensState()).btn.join() === "Camera");
+  const hudFit = () => R(p, () => { const pan = document.querySelector("#hud .panel").getBoundingClientRect(); return [...document.querySelectorAll("#hud .panel button")].filter((b) => b.offsetParent).filter((b) => b.getBoundingClientRect().right > pan.right - 1 || b.getBoundingClientRect().left < pan.left).map((b) => b.textContent); });
+  check(L("Sky Lens: every button in the sky panel stays inside it (before the camera is on)"), (await hudFit()).length === 0, JSON.stringify(await hudFit()));
+  await clickBtn("Camera"); await p.waitForFunction(() => document.body.dataset.lens === "on" && document.getElementById("lens").readyState >= 2, null, { timeout: 8000 }).catch(() => {});
+  let ls = await lensState();
+  check(L("Sky Lens: the camera picture shows behind the sky, which blends over it with the painted sky and hills hidden"), ls.on === "on" && ls.display === "block" && ls.hasStream && ls.ready >= 2 && ls.w > 0 && ls.blend === "screen" && ls.skyLens === true, JSON.stringify(ls));
+  check(L("Sky Lens: it turns the sensors on, sets the field of view, and the button now says Stop camera"), ls.sensor === true && ls.fov === 60 && ls.btn.join() === "Stop camera", JSON.stringify(ls));
+  check(L("Sky Lens: and with the camera on, so Stop camera is as wide as Camera was"), (await hudFit()).length === 0, JSON.stringify(await hudFit()));
+  await shot(p, "sky-lens");
+  await R(p, () => { window.__track = document.getElementById("lens").srcObject.getTracks()[0]; });
+  await clickBtn("Stop camera"); await p.waitForTimeout(300);
+  ls = await lensState();
+  check(L("Sky Lens: stopping releases the camera, brings the sky back and restores the field of view"), ls.on === "" && ls.display === "none" && !ls.hasStream && ls.skyLens === false && ls.blend === "normal" && Math.abs(ls.fov - fovBefore) < 0.01 && (await R(p, () => window.__track.readyState)) === "ended", JSON.stringify({ ...ls, fovBefore }));
+  await R(p, () => { window.__radar.sky.sensor.disable(); window.__gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("denied", "NotAllowedError"); }; });
+  await clickBtn("Camera"); await p.waitForTimeout(600);
+  ls = await lensState();
+  check(L("Sky Lens: a refused camera shows a plain message and leaves everything off"), ls.on === "" && !ls.hasStream && ls.btn.join() === "Camera" && /Camera not started/.test(await p.textContent("#toasts")) && /refused/.test(await p.textContent("#toasts")), JSON.stringify(ls) + (await p.textContent("#toasts")));
+  await R(p, () => { navigator.mediaDevices.getUserMedia = window.__gum; });
+  await clickBtn("Camera"); await p.waitForFunction(() => document.body.dataset.lens === "on", null, { timeout: 8000 }).catch(() => {});
+  await R(p, () => window.__radar.setView("globe")); await p.waitForTimeout(400);
+  ls = await lensState();
+  check(L("Sky Lens: leaving the sky view turns the camera off"), ls.on === "" && !ls.hasStream && ls.display === "none", JSON.stringify(ls));
+  await R(p, () => window.__radar.setView("sky")); await p.waitForTimeout(600);
+  await R(p, () => window.__radar.sky.sensor.disable());
   // pick an aircraft by tapping it
   const planePick = await R(p, () => {
     const s = window.__radar.sky; const canvas = document.getElementById("gl"); const rect = canvas.getBoundingClientRect();
@@ -245,6 +273,13 @@ async function suite(label, viewport, mobile) {
   await R(p, (i) => window.__radar.actions.focusItem({ kind: "star", i: i.i, name: "Sirius" }), sirius); await p.waitForTimeout(900);
   let card = await p.textContent("#card");
   check(L("a star card gives its IAU name, Bayer designation, constellation meaning and rank"), /Sirius/.test(card) && /α Canis Majoris/.test(card) && /the Great Dog/.test(card) && /the brightest in this catalogue/.test(card) && /IAU name/.test(card), card.slice(0, 220));
+
+  check(L("the Sirius card gives distance in light-years and parsecs, the light's age, spectral type and luminosity, and credits the HYG database"), /Distance.*about 8\.6 light-years \(2\.64 parsecs\)/.test(card) && /left it about 8\.6 years ago/.test(card) && /Spectral type/.test(card) && /Luminosity.*about 23 times the Sun's/.test(card) && /HYG database v4\.4 \(CC BY-SA 4\.0\)/.test(card), card.slice(0, 400));
+  const pollux = await R(p, () => [...window.__radar.app.D.later.starInfo.values()].find((x) => x.name === "Pollux"));
+  await R(p, (i) => window.__radar.actions.focusItem({ kind: "star", i: i.i, name: "Pollux" }), pollux); await p.waitForTimeout(700);
+  const pcard = await p.textContent("#card");
+  check(L("the Pollux card lists its confirmed planet and credits the NASA Exoplanet Archive"), /Known planets.*1 confirmed planet: HD 62509 b/.test(pcard) && /NASA Exoplanet Archive/.test(pcard), pcard.slice(0, 400));
+  await R(p, (i) => window.__radar.actions.focusItem({ kind: "star", i: i.i, name: "Sirius" }), sirius); await p.waitForTimeout(500);
   check(L("it gives colour, rise and set times for the place, and where it is now"), /white \(B-V/.test(card) && /(Rises|Never)/.test(card) && /(up,|below the horizon)/.test(card), card.slice(220, 600));
   await R(p, () => window.__radar.actions.closeCard());
   const unnamed = await R(p, () => { const D = window.__radar.app.D; for (let i = 0; i < D.stars.n; i++) if (D.stars.mag[i] < 3 && !D.later.starInfo.has(i)) return i; return -1; });
