@@ -292,6 +292,14 @@ function radar_sync_pages(string $base, string $destRoot, ?callable $http = null
 // submit the same URL many times a day, so each page is sent at most once every RADAR_INDEXNOW_EVERY seconds.
 const RADAR_INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';
 const RADAR_INDEXNOW_EVERY = 6 * 3600;   // OURS: at most one ping per page every 6 hours
+const RADAR_INDEXNOW_RETRY_FIRST = 3600;      // OURS: after a failed send, wait 1 hour before trying that page again,
+const RADAR_INDEXNOW_RETRY_MAX = 12 * 3600;   // OURS: doubling on each further failure, up to 12 hours
+
+// The wait after the n-th failure in a row: 1, 2, 4, 8, then 12 hours.
+function radar_indexnow_retry_delay(int $failures): int
+{
+    return min(RADAR_INDEXNOW_RETRY_FIRST * (2 ** min(max($failures, 1) - 1, 4)), RADAR_INDEXNOW_RETRY_MAX);
+}
 
 // The throttle state lives next to the log as indexnow.json; without a log there is nowhere sensible to keep it.
 function radar_indexnow_state_file(?string $logFile): ?string
@@ -312,16 +320,19 @@ function radar_indexnow_sender(?callable $transport = null): callable
     return function ($m, $u, $h, $b) use ($transport) { return $transport($m, $u, $h, $b, 30, false); };
 }
 
-// The state file: {"sent": {"<page>": <Unix time of the last accepted send>}, "pending": ["<page>", ...]}. A page is pending when it
-// changed but was not accepted yet (throttled, failed, or the key file was missing). Anything that is not this shape counts as empty,
-// send times for paths that are not allowed pages, that are not integers or that lie in the future are dropped, and radar_indexnow drops
-// pending entries that are not allowed pages, so the file never grows beyond the allowed list.
+// The state file: {"sent": {"<page>": <Unix time of the last accepted send>}, "pending": ["<page>", ...],
+// "retry": {"<page>": {"failures": <failed sends in a row>, "retryAt": <Unix time>}}}. A page is pending when it changed but was not
+// accepted yet (throttled, failed, or the key file was missing); it has a retry record only after a failed send. Anything that is not this
+// shape counts as empty. Send times for paths that are not allowed pages, that are not integers or that lie in the future are dropped; a
+// retry record with a failure count that is not a positive integer, or a retry time that is not an integer or lies more than 12 hours
+// ahead, counts as no record; radar_indexnow drops pending entries that are not allowed pages and records for pages that are not pending,
+// so the file never grows beyond the allowed list.
 function radar_indexnow_read_state(string $stateFile, int $now): array
 {
-    $sent = []; $pending = [];
+    $sent = []; $pending = []; $retry = [];
     $d = is_file($stateFile) ? json_decode((string) @file_get_contents($stateFile), true) : null;
     if (!is_array($d)) {
-        return [$sent, $pending];
+        return [$sent, $pending, $retry];
     }
     if (isset($d['sent']) && is_array($d['sent'])) {
         foreach ($d['sent'] as $p => $t) {
@@ -337,22 +348,34 @@ function radar_indexnow_read_state(string $stateFile, int $now): array
             }
         }
     }
-    return [$sent, array_keys($pending)];
+    if (isset($d['retry']) && is_array($d['retry'])) {
+        foreach ($d['retry'] as $p => $rec) {
+            if (is_array($rec) && isset($rec['failures'], $rec['retryAt']) && is_int($rec['failures']) && $rec['failures'] >= 1
+                && is_int($rec['retryAt']) && $rec['retryAt'] <= $now + RADAR_INDEXNOW_RETRY_MAX) {
+                $retry[(string) $p] = ['failures' => $rec['failures'], 'retryAt' => $rec['retryAt']];
+            }
+        }
+    }
+    return [$sent, array_keys($pending), $retry];
 }
 
-function radar_indexnow_write_state(string $stateFile, array $sent, array $pending): bool
+function radar_indexnow_write_state(string $stateFile, array $sent, array $pending, array $retry): bool
 {
     ksort($sent);
     $pending = array_values(array_unique($pending));
     sort($pending);
-    return radar_write_atomic($stateFile, json_encode(['sent' => (object) $sent, 'pending' => $pending], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
+    $retry = array_intersect_key($retry, array_flip($pending));  // a record lives only as long as its page is pending
+    ksort($retry);
+    return radar_write_atomic($stateFile, json_encode(['sent' => (object) $sent, 'pending' => $pending, 'retry' => (object) $retry], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
 }
 
 // Ping IndexNow for the pages in $changedPaths and the pages still pending from earlier runs, those not sent in the last 6 hours.
 // $index is the parsed pages/index.json (siteUrl, indexnowKey, noindex), $destRoot the site's public folder, $http a function
 // (method, url, headers, body) -> [status, body, error] (the default sends for real), $now a Unix time (default: the current time).
-// Writes exactly one log line and never throws. A page leaves pending, and gets its send time, only after a 200 or 202; any failure
-// keeps it pending, so a later run tries again without it having to change again. There is no retry inside one run.
+// Writes exactly one log line and never throws. A page is due when it was not sent in the last 6 hours and, if its last send failed, its
+// retry time has come (a change does not shorten that wait). A page leaves pending, gets its send time and loses its retry record only
+// after a 200 or 202; any failed send keeps it pending and sets its retry time 1, 2, 4, 8, then 12 hours ahead, so a later run tries
+// again without it having to change again, but never every run. There is no retry inside one run.
 // Returns ['sent' => number of URLs accepted, 'reason' => short word, 'status' => HTTP status or null].
 function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?callable $http = null, ?string $logFile = null, ?string $stateFile = null, ?int $now = null): array
 {
@@ -377,7 +400,7 @@ function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?ca
         return $done('site', 'the site address in the pages index is not a plain https host, nothing sent');
     }
     $host = $m[1];
-    [$sent, $pending] = radar_indexnow_read_state($stateFile, $now);
+    [$sent, $pending, $retry] = radar_indexnow_read_state($stateFile, $now);
     // the candidates: what changed now and what is still pending, only pages (never the sitemap or anything the page sync would refuse), each once
     $wanted = [];
     foreach (array_merge($changedPaths, $pending) as $p) {
@@ -394,8 +417,17 @@ function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?ca
     if (!is_dir($dir) || !is_writable($dir) || (file_exists($stateFile) && !is_writable($stateFile))) {
         return $done('state', 'state file not writable, nothing sent');
     }
-    $due = array_values(array_filter($wanted, function ($p) use ($sent, $now) { return !isset($sent[$p]) || $now - $sent[$p] >= RADAR_INDEXNOW_EVERY; }));
-    $note = function () use ($stateFile, $sent, $wanted) { return radar_indexnow_write_state($stateFile, $sent, $wanted) ? '' : ', and could not write ' . $stateFile; };
+    $due = array_values(array_filter($wanted, function ($p) use ($sent, $retry, $now) {
+        return (!isset($sent[$p]) || $now - $sent[$p] >= RADAR_INDEXNOW_EVERY) && (!isset($retry[$p]) || $now >= $retry[$p]['retryAt']);
+    }));
+    // after a failed send every page that was in it waits longer; all wanted pages stay pending
+    $failed = function () use (&$retry, $due, $now) {
+        foreach ($due as $p) {
+            $f = isset($retry[$p]) ? $retry[$p]['failures'] + 1 : 1;
+            $retry[$p] = ['failures' => $f, 'retryAt' => $now + radar_indexnow_retry_delay($f)];
+        }
+    };
+    $note = function () use ($stateFile, $sent, $wanted, &$retry) { return radar_indexnow_write_state($stateFile, $sent, $wanted, $retry) ? '' : ', and could not write ' . $stateFile; };
     if (!$due) {
         return $done('none', 'nothing due' . $note());
     }
@@ -412,18 +444,21 @@ function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?ca
     try {
         $r = $http('POST', RADAR_INDEXNOW_ENDPOINT, ['Content-Type: application/json; charset=utf-8'], $body);
     } catch (Throwable $e) {
-        return $done('error', 'the request failed (' . $e->getMessage() . '), ' . count($urls) . ' url(s) kept pending; a later run tries again' . $note());
+        $failed();
+        return $done('error', 'the request failed (' . $e->getMessage() . '), ' . count($urls) . ' url(s) kept pending; tried again after a wait' . $note());
     }
     $status = is_array($r) && isset($r['status']) && is_int($r['status']) ? $r['status'] : 0;
     if ($status !== 200 && $status !== 202) {
+        $failed();
         $why = [400 => 'bad request', 403 => 'the key was not accepted', 422 => 'the URLs do not match the host or the key', 429 => 'too many requests'];
         $err = is_array($r) && !empty($r['error']) ? ' ' . $r['error'] : '';
-        return $done('http', 'HTTP ' . $status . ' ' . ($why[$status] ?? ($status === 0 ? 'no answer' : 'unexpected answer')) . $err . ', ' . count($urls) . ' url(s) kept pending; a later run tries again' . $note(), $status);
+        return $done('http', 'HTTP ' . $status . ' ' . ($why[$status] ?? ($status === 0 ? 'no answer' : 'unexpected answer')) . $err . ', ' . count($urls) . ' url(s) kept pending; tried again after a wait' . $note(), $status);
     }
     foreach ($due as $p) {
         $sent[$p] = $now;
     }
-    $saved = radar_indexnow_write_state($stateFile, $sent, array_diff($wanted, $due));
+    // the sent pages leave pending, and with it their retry records (radar_indexnow_write_state keeps records only for pending pages)
+    $saved = radar_indexnow_write_state($stateFile, $sent, array_diff($wanted, $due), $retry);
     return $done('sent', 'sent ' . count($urls) . ' url(s) (HTTP ' . $status . ')' . ($saved ? '' : ', but could not write ' . $stateFile), $status, count($urls));
 }
 
