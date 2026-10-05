@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
+import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
@@ -36,8 +37,8 @@ const read = (f) => fs.readFileSync(path.join(outDir, f), "utf8");
 const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ");
 
 test("the site has the expected pages and no duplicates", () => {
-  // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1);
+  // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1);
   assert.equal(pageFiles.length, result.pages);
   assert.equal(cities.length, 6);
 });
@@ -93,13 +94,20 @@ test("href() builds relative links between page files", () => {
   assert.equal(href("index.html", "index.html"), "./");
 });
 
-test("the sitemap lists every page once and robots.txt points to it", () => {
+test("the sitemap lists every page once except the live page, which has its own sitemap with an accurate last modified time", () => {
   const xml = fs.readFileSync(path.join(outDir, "sitemap.xml"), "utf8");
   const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  assert.equal(locs.length, pageFiles.length);
+  const listed = pageFiles.filter((f) => f !== SATCOUNT_FILE);
+  assert.equal(locs.length, listed.length);
   assert.equal(new Set(locs).size, locs.length);
-  for (const f of pageFiles) assert.ok(locs.includes(`${SITE.url}/${urlPath(f)}`), f);
-  assert.match(fs.readFileSync(path.join(outDir, "robots.txt"), "utf8"), new RegExp(`Sitemap: ${SITE.url}/sitemap.xml`));
+  for (const f of listed) assert.ok(locs.includes(`${SITE.url}/${urlPath(f)}`), f);
+  assert.ok(!locs.some((l) => l.includes("how-many-satellites")), "the live page is not in the main sitemap");
+  const live = fs.readFileSync(path.join(outDir, "sitemap-live.xml"), "utf8");
+  assert.ok(live.includes(`<loc>${SITE.url}/how-many-satellites-in-orbit/</loc>`));
+  assert.match(live, /<lastmod>\d{4}-\d\d-\d\dT[\d:.]+Z<\/lastmod>/);
+  const robotsTxt = fs.readFileSync(path.join(outDir, "robots.txt"), "utf8");
+  assert.match(robotsTxt, new RegExp(`Sitemap: ${SITE.url}/sitemap.xml`));
+  assert.match(robotsTxt, new RegExp(`Sitemap: ${SITE.url}/sitemap-live.xml`));
   assert.equal(sitemap(["index.html", "a/index.html"]).includes("<loc>" + SITE.url + "/a/</loc>"), true);
   assert.ok(robots().includes("Allow: /"));
 });
@@ -117,7 +125,7 @@ test("the normal build still tells search engines to index every page, exactly a
     assert.equal(countOf(h, INDEXABLE), 1, `${f}: one indexable robots tag`);
     assert.ok(!/noindex/i.test(h), `${f}: no noindex in a normal build`);
   }
-  assert.equal(robots({ noindex: false }), `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\n`);
+  assert.equal(robots({ noindex: false }), `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\nSitemap: ${SITE.url}/sitemap-live.xml\n`);
   assert.ok(fs.existsSync(path.join(outDir, "sitemap.xml")));
 });
 
@@ -397,4 +405,13 @@ test("every link the app shows to the content pages has a page, and the list has
   for (const nav of ["moon-phases/", "eclipses/", "meteor-showers/", "planets/", "sky/", "guides/", "methods/"]) {
     assert.ok(GUIDE_LINKS.some((l) => l.href === nav) || nav === "guides/", `${nav} is linked from the app`);
   }
+});
+
+test("a noindex build writes no sitemaps at all, as before", () => {
+  const dir = path.join(tmp, "out-noindex");
+  build({ outDir: dir, appFile, publicDir: null, noindex: true });
+  assert.ok(!fs.existsSync(path.join(dir, "sitemap.xml")));
+  assert.ok(!fs.existsSync(path.join(dir, "sitemap-live.xml")));
+  assert.equal(fs.readFileSync(path.join(dir, "robots.txt"), "utf8"), "User-agent: *\nDisallow: /\n");
+  assert.ok(fs.readFileSync(path.join(dir, SATCOUNT_FILE), "utf8").includes('<meta name="robots" content="noindex,nofollow">'));
 });

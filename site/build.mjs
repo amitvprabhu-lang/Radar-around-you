@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { allChecks } from "./verify.mjs";
 import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
+import { countSatellites, assertPlausible } from "./satcount.mjs";
+import { SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -18,6 +20,16 @@ export const APP_DESCRIPTION = "A free live 3D view of what is above, around and
 // The six places the data pages work out in detail. They come from the snapshot so the site and the app use the same coordinates.
 export function loadCities() {
   return readJson("snapshot.json").cities.map(({ id, name, country, lat, lon, tz }) => ({ id, name, country, lat, lon, tz }));
+}
+
+// The satellite snapshot bundled with the repository (public/), used for the deploy-time copy of the satellite count page so the address
+// never returns 404 after a redeploy. The live copy replaces it within minutes, built on GitHub from the collector's data.
+export function loadSatellites() {
+  return {
+    meta: readJson("public/meta.json"),
+    details: fs.readFileSync(path.join(root, "public/details.bin")),
+    swarm: fs.readFileSync(path.join(root, "public/swarm.bin")),
+  };
 }
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
@@ -66,7 +78,7 @@ export function sitemap(files) {
 }
 // While the site is on a temporary address (noindex), robots.txt asks every crawler to stay out and there is no sitemap,
 // because a sitemap lists pages for search engines and would contradict the page tags.
-export const robots = ({ noindex = SITE.noindex } = {}) => (noindex ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\n`);
+export const robots = ({ noindex = SITE.noindex } = {}) => (noindex ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\n\nSitemap: ${SITE.url}/sitemap.xml\nSitemap: ${SITE.url}/sitemap-live.xml\n`);
 
 function copyDir(from, to) {
   fs.mkdirSync(to, { recursive: true });
@@ -87,7 +99,7 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
-export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex } = {}) {
+export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites() } = {}) {
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -95,7 +107,9 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   const consIdx = indexConstellations(readJson("public/constellations.json"));
   const starsDoc = readJson("public/starnames.json");
   const details = fs.existsSync(path.join(root, "public/stardetails.json")) ? readJson("public/stardetails.json") : null;
-  const pages = buildPages({ cities, consIdx, starsDoc, checks, details });
+  const satcount = countSatellites(satellites);
+  assertPlausible(satcount);
+  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now });
   const seen = new Set();
   for (const p of pages) { if (seen.has(p.file)) throw new Error(`site: duplicate page ${p.file}`); seen.add(p.file); }
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -107,7 +121,10 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   }
   fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex })));
   const files = ["index.html", ...pages.map((p) => p.file)];
-  if (!noindex) fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files));
+  if (!noindex) {
+    fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => f !== SATCOUNT_FILE)));
+    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString()));
+  }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
   return { outDir, pages: files.length, checks, noindex };
 }

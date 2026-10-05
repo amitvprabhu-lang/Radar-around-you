@@ -62,6 +62,7 @@ export const NAV = [
   ["eclipses/", "Eclipses"],
   ["meteor-showers/", "Meteor showers"],
   ["planets/", "Planets"],
+  ["how-many-satellites-in-orbit/", "Satellite count"],
   ["sky/", "Sky by city"],
   ["guides/", "Guides"],
   ["methods/", "How we know"],
