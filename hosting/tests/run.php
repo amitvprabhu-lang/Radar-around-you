@@ -140,7 +140,13 @@ $lines = file($lf, FILE_IGNORE_NEW_LINES); ok(count($lines) === 300 && substr($l
 // ---- finished pages (pages/ on the data branch, copied to the site root)
 ok(radar_safe_page_path('how-many-satellites-in-orbit/index.html'), 'the satellite count page is allowed');
 ok(radar_safe_page_path('sitemap-live.xml'), 'the live sitemap is allowed');
-foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-many-satellites-in-orbit/index.html.bak', 'how-many-satellites-in-orbit/index.htm', "sitemap-live.xml\n", '../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html'] as $bad) {
+ok(radar_safe_page_path('satellites-by-country/index.html'), 'the satellites by country hub is allowed');
+foreach (['united-states', 'china', 'united-kingdom', 'cis-former-ussr', 'japan'] as $slug) { ok(radar_safe_page_path("satellites-by-country/$slug/index.html"), "the country page '$slug' is allowed"); }
+foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-many-satellites-in-orbit/index.html.bak', 'how-many-satellites-in-orbit/index.htm', "sitemap-live.xml\n", '../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html',
+    'satellites-by-country/a/b/index.html', 'satellites-by-country/UPPER/index.html', 'satellites-by-country/x.php', 'satellites-by-country//index.html',
+    'satellites-by-country/../about/index.html', 'satellites-by-country/-japan/index.html', 'satellites-by-country/japan-/index.html', 'satellites-by-country/united--states/index.html',
+    'satellites-by-country/japan2/index.html', 'satellites-by-country/japan/index.html.bak', "satellites-by-country/japan/index.html\n", 'satellites-by-country/japan/', 'satellites-by-country/japan/x.html',
+    'satellites-by-country/index.html.bak', 'satellites-by-country', 'satellites-by-country/', 'Satellites-by-country/japan/index.html', 'x/satellites-by-country/japan/index.html'] as $bad) {
     ok(!radar_safe_page_path($bad), 'unsafe page path rejected: ' . json_encode($bad));
 }
 $PAGE = '<!doctype html><title>t</title><p>7 active satellites</p>'; $SITEMAP = '<?xml version="1.0"?><urlset/>';
@@ -182,6 +188,21 @@ ok(!$r['ok'] && $r['reason'] === 'invalid', 'an index with the wrong schema is r
 $nope = sys_get_temp_dir() . '/radar-test-nope-' . bin2hex(random_bytes(4));
 $r = radar_sync_pages(BASE, $nope, $srv($P1, $log));
 ok(!$r['ok'] && $r['reason'] === 'dest' && !is_dir($nope), 'a site folder that does not exist is not created');
+
+// the satellites by country pages live in nested folders that do not exist yet on the site; the sync creates them inside the site folder
+$root3 = tmpdir(); $log = [];
+$P3 = $P1 + ['satellites-by-country/index.html' => '<p>hub</p>', 'satellites-by-country/japan/index.html' => '<p>japan</p>', 'satellites-by-country/cis-former-ussr/index.html' => '<p>cis</p>'];
+$r = radar_sync_pages(BASE, $root3, $srv($P3, $log));
+ok($r['ok'] && $r['fetched'] === 5, 'the hub and the country pages are fetched with the count page and the sitemap');
+same(file_get_contents($root3 . '/satellites-by-country/japan/index.html'), '<p>japan</p>', 'a country page is written into a new nested folder');
+same(file_get_contents($root3 . '/satellites-by-country/index.html'), '<p>hub</p>', 'the hub is written');
+same(files($root3), ['how-many-satellites-in-orbit/index.html', 'satellites-by-country/cis-former-ussr/index.html', 'satellites-by-country/index.html', 'satellites-by-country/japan/index.html', 'sitemap-live.xml'], 'nothing else is written and no temporary files are left');
+$log = []; $r = radar_sync_pages(BASE, $root3, $srv($P3, $log));
+ok($r['ok'] && $r['fetched'] === 0, 'a second sync of the nested pages fetches nothing');
+$evil3 = $P1 + ['satellites-by-country/a/b/index.html' => 'x', 'satellites-by-country/UPPER/index.html' => 'x'];
+$root4 = tmpdir(); $r = radar_sync_pages(BASE, $root4, $srv($evil3, $log));
+ok(!$r['ok'] && count($r['failed']) === 2, 'deeper or uppercase country paths are refused');
+ok(!is_dir($root4 . '/satellites-by-country'), 'and no folder is made for them');
 
 ob_end_clean();
 echo "\n" . $GLOBALS['passed'] . " passed, " . count($GLOBALS['failed']) . " failed\n";

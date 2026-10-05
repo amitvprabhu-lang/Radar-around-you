@@ -208,17 +208,19 @@ function radar_prune(string $dest, array $keep): int
 
 // ------------------------------------------------------------------ finished pages
 // The collector's GitHub job also writes finished HTML pages into pages/ on the data branch, with pages/index.json listing each file and
-// its sha256. Only two exact paths are ever fetched or written: "how-many-satellites-in-orbit/index.html" and "sitemap-live.xml", so a
-// damaged or hostile index cannot overwrite any other page of the site (such as about/index.html) or write anywhere else. \z (not $)
-// is used so a trailing newline cannot slip through.
-const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the satellite count page is far smaller than this
+// its sha256. Only these paths are ever fetched or written: "how-many-satellites-in-orbit/index.html", "sitemap-live.xml",
+// "satellites-by-country/index.html" and "satellites-by-country/<slug>/index.html" where the slug is lowercase words joined by single
+// hyphens. So a damaged or hostile index cannot overwrite any other page of the site (such as about/index.html) or write anywhere else.
+// \z (not $) is used so a trailing newline cannot slip through.
+const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the largest live page (the United States page with its map) is about 240 KB
 
 function radar_safe_page_path(string $p): bool
 {
-    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml)\z#', $p);
+    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/[a-z]+(?:-[a-z]+)*/index\.html)\z#', $p);
 }
 
-// Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist). Files whose hash
+// Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist; the folders inside it,
+// such as satellites-by-country/japan/, are created as needed). Files whose hash
 // already matches are skipped. Each file is written through a temporary name and renamed, so a visitor never sees half a page, and a
 // download that does not match its hash is refused so the previous page stays.
 function radar_sync_pages(string $base, string $destRoot, ?callable $http = null, ?string $logFile = null): array
