@@ -10,7 +10,7 @@ const RADAR_MAX_RUN_BYTES = 80 * 1024 * 1024;    // OURS: one run never download
 const RADAR_DEFAULT_BASE = 'https://raw.githubusercontent.com/amitvprabhu-lang/Radar-around-you/data/';
 
 // ------------------------------------------------------------------ HTTP (returns status, body, error; never throws)
-function radar_http(string $method, string $url, array $headers = [], ?string $body = null, int $timeout = 40): array
+function radar_http(string $method, string $url, array $headers = [], ?string $body = null, int $timeout = 40, bool $follow = true): array
 {
     if (strpos($url, 'https://') !== 0) {
         return ['status' => 0, 'body' => '', 'error' => 'only https addresses are used'];
@@ -19,7 +19,7 @@ function radar_http(string $method, string $url, array $headers = [], ?string $b
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
-            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => $follow, CURLOPT_MAXREDIRS => 3,
             CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_HTTPHEADER => $headers,
         ]);
         if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
@@ -35,7 +35,7 @@ function radar_http(string $method, string $url, array $headers = [], ?string $b
         curl_close($ch);
         return ['status' => $status, 'body' => $out === false ? '' : (string) $out, 'error' => $err];
     }
-    $ctx = stream_context_create(['http' => ['method' => $method, 'header' => implode("\r\n", $headers), 'content' => $body === null ? '' : $body, 'timeout' => $timeout, 'ignore_errors' => true, 'follow_location' => 1, 'max_redirects' => 3]]);
+    $ctx = stream_context_create(['http' => ['method' => $method, 'header' => implode("\r\n", $headers), 'content' => $body === null ? '' : $body, 'timeout' => $timeout, 'ignore_errors' => true, 'follow_location' => $follow ? 1 : 0, 'max_redirects' => 3]]);
     $out = @file_get_contents($url, false, $ctx);
     $status = 0;
     if (isset($http_response_header[0]) && preg_match('#^HTTP/\S+\s+(\d{3})#', $http_response_header[0], $m)) {
@@ -299,10 +299,61 @@ function radar_indexnow_state_file(?string $logFile): ?string
     return ($logFile === null || $logFile === '') ? null : dirname($logFile) . '/indexnow.json';
 }
 
-// Ping IndexNow for the pages in $changedPaths that are due. $index is the parsed pages/index.json (siteUrl, indexnowKey, noindex),
-// $destRoot the site's public folder, $http a function (method, url, headers, body) -> [status, body, error] (the default sends for
-// real), $now a Unix time (default: the current time). Writes exactly one log line and never throws; a failure only means the pages are
-// tried again on a later run. Returns ['sent' => number of URLs accepted, 'reason' => short word, 'status' => HTTP status or null].
+// A page IndexNow may be told about: an allowed page path (never the sitemap).
+function radar_indexnow_page(string $p): bool
+{
+    return radar_safe_page_path($p) && substr($p, -11) === '/index.html';
+}
+
+// The real sender: a 30 second POST that does not follow redirects, so a redirect answer counts as a failure. $transport is for tests.
+function radar_indexnow_sender(?callable $transport = null): callable
+{
+    $transport = $transport ?: 'radar_http';
+    return function ($m, $u, $h, $b) use ($transport) { return $transport($m, $u, $h, $b, 30, false); };
+}
+
+// The state file: {"sent": {"<page>": <Unix time of the last accepted send>}, "pending": ["<page>", ...]}. A page is pending when it
+// changed but was not accepted yet (throttled, failed, or the key file was missing). Anything that is not this shape counts as empty,
+// send times for paths that are not allowed pages, that are not integers or that lie in the future are dropped, and radar_indexnow drops
+// pending entries that are not allowed pages, so the file never grows beyond the allowed list.
+function radar_indexnow_read_state(string $stateFile, int $now): array
+{
+    $sent = []; $pending = [];
+    $d = is_file($stateFile) ? json_decode((string) @file_get_contents($stateFile), true) : null;
+    if (!is_array($d)) {
+        return [$sent, $pending];
+    }
+    if (isset($d['sent']) && is_array($d['sent'])) {
+        foreach ($d['sent'] as $p => $t) {
+            if (is_int($t) && $t <= $now && radar_indexnow_page((string) $p)) {
+                $sent[(string) $p] = $t;
+            }
+        }
+    }
+    if (isset($d['pending']) && is_array($d['pending'])) {
+        foreach ($d['pending'] as $p) {
+            if (is_string($p)) {
+                $pending[$p] = true;  // filtered with the changed paths in radar_indexnow, so a hostile entry is dropped there
+            }
+        }
+    }
+    return [$sent, array_keys($pending)];
+}
+
+function radar_indexnow_write_state(string $stateFile, array $sent, array $pending): bool
+{
+    ksort($sent);
+    $pending = array_values(array_unique($pending));
+    sort($pending);
+    return radar_write_atomic($stateFile, json_encode(['sent' => (object) $sent, 'pending' => $pending], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
+}
+
+// Ping IndexNow for the pages in $changedPaths and the pages still pending from earlier runs, those not sent in the last 6 hours.
+// $index is the parsed pages/index.json (siteUrl, indexnowKey, noindex), $destRoot the site's public folder, $http a function
+// (method, url, headers, body) -> [status, body, error] (the default sends for real), $now a Unix time (default: the current time).
+// Writes exactly one log line and never throws. A page leaves pending, and gets its send time, only after a 200 or 202; any failure
+// keeps it pending, so a later run tries again without it having to change again. There is no retry inside one run.
+// Returns ['sent' => number of URLs accepted, 'reason' => short word, 'status' => HTTP status or null].
 function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?callable $http = null, ?string $logFile = null, ?string $stateFile = null, ?int $now = null): array
 {
     $log = function ($m) use ($logFile) { radar_log('indexnow: ' . $m, $logFile); };
@@ -326,56 +377,53 @@ function radar_indexnow(array $index, string $destRoot, array $changedPaths, ?ca
         return $done('site', 'the site address in the pages index is not a plain https host, nothing sent');
     }
     $host = $m[1];
-    // only pages (never the sitemap or anything the page sync would refuse), each once
-    $pages = [];
-    foreach ($changedPaths as $p) {
-        if (is_string($p) && radar_safe_page_path($p) && substr($p, -11) === '/index.html') {
-            $pages[$p] = true;
+    [$sent, $pending] = radar_indexnow_read_state($stateFile, $now);
+    // the candidates: what changed now and what is still pending, only pages (never the sitemap or anything the page sync would refuse), each once
+    $wanted = [];
+    foreach (array_merge($changedPaths, $pending) as $p) {
+        if (is_string($p) && radar_indexnow_page($p)) {
+            $wanted[$p] = true;
         }
     }
-    $pages = array_keys($pages);
-    if (!$pages) {
+    $wanted = array_keys($wanted);
+    if (!$wanted) {
         return $done('none', 'nothing due');
     }
-    $sent = [];
-    $old = is_file($stateFile) ? json_decode((string) @file_get_contents($stateFile), true) : null;
-    if (is_array($old) && isset($old['sent']) && is_array($old['sent'])) {
-        foreach ($old['sent'] as $p => $t) {
-            if (is_int($t) && $t <= $now && radar_safe_page_path((string) $p)) {
-                $sent[(string) $p] = $t;  // anything else (a corrupt file, a time in the future) counts as never sent
-            }
-        }
+    // without a state that can be saved the throttle would not hold, so nothing is sent
+    $dir = dirname($stateFile);
+    if (!is_dir($dir) || !is_writable($dir) || (file_exists($stateFile) && !is_writable($stateFile))) {
+        return $done('state', 'state file not writable, nothing sent');
     }
-    $due = array_values(array_filter($pages, function ($p) use ($sent, $now) { return !isset($sent[$p]) || $now - $sent[$p] >= RADAR_INDEXNOW_EVERY; }));
+    $due = array_values(array_filter($wanted, function ($p) use ($sent, $now) { return !isset($sent[$p]) || $now - $sent[$p] >= RADAR_INDEXNOW_EVERY; }));
+    $note = function () use ($stateFile, $sent, $wanted) { return radar_indexnow_write_state($stateFile, $sent, $wanted) ? '' : ', and could not write ' . $stateFile; };
     if (!$due) {
-        return $done('none', 'nothing due');
+        return $done('none', 'nothing due' . $note());
     }
     $proof = $destRoot . '/' . $key . '.txt';
     if (!is_file($proof) || (string) @file_get_contents($proof) !== $key) {
-        return $done('keyfile', 'key file missing or different, nothing sent');
+        return $done('keyfile', 'key file missing or different, nothing sent' . $note());
     }
     $urls = [];
     foreach ($due as $p) {
         $urls[] = $site . '/' . substr($p, 0, -strlen('index.html'));
     }
     $body = json_encode(['host' => $host, 'key' => $key, 'keyLocation' => $site . '/' . $key . '.txt', 'urlList' => $urls], JSON_UNESCAPED_SLASHES);
-    $http = $http ?: function ($m, $u, $h, $b) { return radar_http($m, $u, $h, $b, 30); };
+    $http = $http ?: radar_indexnow_sender();
     try {
         $r = $http('POST', RADAR_INDEXNOW_ENDPOINT, ['Content-Type: application/json; charset=utf-8'], $body);
     } catch (Throwable $e) {
-        return $done('error', 'the request failed (' . $e->getMessage() . '), nothing recorded; a later run tries again');
+        return $done('error', 'the request failed (' . $e->getMessage() . '), ' . count($urls) . ' url(s) kept pending; a later run tries again' . $note());
     }
     $status = is_array($r) && isset($r['status']) && is_int($r['status']) ? $r['status'] : 0;
     if ($status !== 200 && $status !== 202) {
         $why = [400 => 'bad request', 403 => 'the key was not accepted', 422 => 'the URLs do not match the host or the key', 429 => 'too many requests'];
         $err = is_array($r) && !empty($r['error']) ? ' ' . $r['error'] : '';
-        return $done('http', 'HTTP ' . $status . ' ' . ($why[$status] ?? ($status === 0 ? 'no answer' : 'unexpected answer')) . $err . ', ' . count($urls) . ' url(s) not recorded; a later run tries again', $status);
+        return $done('http', 'HTTP ' . $status . ' ' . ($why[$status] ?? ($status === 0 ? 'no answer' : 'unexpected answer')) . $err . ', ' . count($urls) . ' url(s) kept pending; a later run tries again' . $note(), $status);
     }
     foreach ($due as $p) {
         $sent[$p] = $now;
     }
-    ksort($sent);
-    $saved = radar_write_atomic($stateFile, json_encode(['sent' => $sent], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n");
+    $saved = radar_indexnow_write_state($stateFile, $sent, array_diff($wanted, $due));
     return $done('sent', 'sent ' . count($urls) . ' url(s) (HTTP ' . $status . ')' . ($saved ? '' : ', but could not write ' . $stateFile), $status, count($urls));
 }
 
