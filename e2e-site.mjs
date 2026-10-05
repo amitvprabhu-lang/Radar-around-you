@@ -130,6 +130,24 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   check(`${label}: the first screen is laid out exactly as without the text section (stats strip, tab bar, canvas, top bar, layer chips, no scrollbar)`, JSON.stringify(before) === JSON.stringify(after), `${JSON.stringify(before)} against ${JSON.stringify(after)}`);
   const s0 = await textState(pg);
   check(`${label}: the section is in the page below the first screen and not in view at load`, s0.top !== null && s0.y === 0 && s0.top >= s0.vh, JSON.stringify(s0));
+  if (!mobile) {
+    // the keyboard: Tab from the start of the page reaches the read-more link first, Enter brings the text into view, and Shift+Tab out
+    // of the text moves focus into the app and brings the first screen back, so focus is never hidden under the text
+    const active = () => pg.evaluate(() => { const e = document.activeElement; return { cls: e && e.className, inApp: !!(e && e.closest && e.closest("#app")), id: e && e.id }; });
+    await pg.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
+    await pg.keyboard.press("Tab");
+    const first = await active();
+    check(`${label}: Tab from the start of the page reaches "What is this? Read more" first`, first.cls === "home-more", JSON.stringify(first));
+    await pg.keyboard.press("Enter"); await settle(pg);
+    const k1 = await textState(pg);
+    check(`${label}: Enter on the read-more link brings the section into view`, k1.y > 0 && k1.top >= 0 && k1.top < k1.vh, JSON.stringify(k1));
+    await pg.focus(".home-back a"); await pg.keyboard.press("Shift+Tab"); await settle(pg);
+    const k2 = await textState(pg), back = await active();
+    check(`${label}: Shift+Tab from the section's first link moves focus into the app and brings the first screen back`, k2.y === 0 && back.inApp, JSON.stringify({ k2, back }));
+    // Ctrl with the wheel is the browser's own zoom: the page's wheel guard leaves it alone, and still cancels a plain wheel there
+    const ctrl = await pg.evaluate(() => { const t = document.querySelector(".tabs"); const go = (ctrlKey) => t.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, ctrlKey, bubbles: true, cancelable: true })); return { plain: go(false), ctrl: go(true) }; });
+    check(`${label}: a wheel with Ctrl over the app is not cancelled (browser zoom), a plain one is`, ctrl.plain === false && ctrl.ctrl === true, JSON.stringify(ctrl));
+  }
   // the wheel on the globe still zooms, and the page does not scroll
   await pg.mouse.move(viewport.width / 2, viewport.height / 2);
   await pg.mouse.wheel(0, 400); await pg.waitForTimeout(700); await settle(pg);
@@ -157,7 +175,9 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
     check(`${label}: a wheel up over the section scrolls the page back towards the globe`, backUp < s2.y, JSON.stringify({ before: s2.y, after: backUp }));
     await pg.click(".home-back a"); await settle(pg);
     const s3 = await textState(pg);
-    check(`${label}: "Back to the globe" returns the page to the top`, s3.y === 0, JSON.stringify(s3));
+    await pg.waitForFunction(() => document.activeElement && document.activeElement.id === "top", null, { timeout: 5000 }).catch(() => {});
+    const focusTop = await pg.evaluate(() => document.activeElement && document.activeElement.id);
+    check(`${label}: "Back to the globe" returns the page to the top and focus to the top of the page`, s3.y === 0 && focusTop === "top", JSON.stringify({ s3, focusTop }));
   } else {
     check(`${label}: the read-more link is not shown on a phone (the About sheet carries the way in)`, !more.shown, JSON.stringify(more));
   }
@@ -187,6 +207,19 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   }
   const words = await pg.evaluate(() => (document.getElementById("about-home").innerText.match(/\b[\w'-]+\b/g) || []).length);
   check(`${label}: the section shows its text (500 to 700 words) with no page errors`, words >= 500 && words <= 700 && errs.length === 0, `${words} words; ${errs.join(" | ")}`);
+  await c.close();
+}
+
+// with JavaScript off the app cannot start: the read-more link shows (on a phone too) and leads to the text
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 780 }, javaScriptEnabled: false, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serve(c, { missing: [] });
+  const pg = await c.newPage();
+  await pg.goto("https://radar.test/", { waitUntil: "load", timeout: 60000 });
+  const shown = await pg.evaluate(() => { const m = document.querySelector(".home-more"), b = m.getBoundingClientRect(); return getComputedStyle(m).display !== "none" && getComputedStyle(m).visibility === "visible" && b.width > 0 && b.bottom <= innerHeight; });
+  await pg.click(".home-more"); await pg.waitForTimeout(500);
+  const st = await pg.evaluate(() => ({ y: Math.round(scrollY), top: Math.round(document.getElementById("about-home").getBoundingClientRect().top), vh: innerHeight }));
+  check("with JavaScript off, the read-more link is shown on a phone and brings the text into view", shown && st.y > 0 && st.top >= 0 && st.top < st.vh, JSON.stringify({ shown, st }));
   await c.close();
 }
 

@@ -10,7 +10,7 @@ import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
-import { HOME_STYLE, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
+import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -47,7 +47,8 @@ export function loadSatellites() {
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
 // homeText adds the text section below the first screen (site/home-text.mjs): its style block goes just before the noscript block, so
-// asDocument moves it into <head> after the template's own styles, and the section goes at the end of the page. countryHub says
+// asDocument moves it into <head> after the template's own styles; the top focus target and the read-more link go between the noscript
+// block and the app, first in the tab order; the section and its script go at the end of the page. countryHub says
 // whether the build has the satellites by country hub, so the section links it only when the page exists.
 export function wrapApp(appHtml, { noindex = SITE.noindex, homeText = true, countryHub = false } = {}) {
   if (!appHtml.includes("<title>Radar Around You</title>")) throw new Error("site: the app page has no expected <title>; update wrapApp");
@@ -74,7 +75,7 @@ ${robotsMeta(noindex)}
   const nav = NAV.filter(([f]) => f !== "").map(([f, label]) => `<li><a href="${f}">${esc(label)}</a></li>`).join("");
   const features = APP_FEATURES.map((f) => `<li>${esc(f)}</li>`).join("");
   const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><h1>${esc(SITE.name)}</h1><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
-  const wrapped = appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => (homeText ? HOME_STYLE : "") + noscript + '<div id="app"');
+  const wrapped = appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => (homeText ? HOME_STYLE : "") + noscript + (homeText ? HOME_PRE_APP : "") + '<div id="app"');
   return homeText ? wrapped + homeBodyHtml({ countryHub }) : wrapped;
 }
 
