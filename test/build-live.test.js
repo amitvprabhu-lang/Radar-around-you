@@ -65,6 +65,20 @@ test("a new satellites version rebuilds and moves the last modified time", () =>
   assert.ok(fs.readFileSync(path.join(out, "sitemap-live.xml"), "utf8").includes("<lastmod>2026-10-05T11:00:00.000Z</lastmod>"));
 });
 
+test("a corrupt or non-object index.json counts as no previous build and is overwritten", () => {
+  for (const bad of ['{"schema":1,"satellitesVersion":"V1","fil', "null"]) {
+    const out = mk(), dir = dataDir("V1");
+    buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });
+    fs.writeFileSync(path.join(out, "index.json"), bad);
+    const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds });
+    assert.deepEqual(r, { changed: true, version: "V1" }, bad);
+    const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+    assert.equal(index.satellitesVersion, "V1");
+    for (const [p, info] of Object.entries(index.files)) assert.equal(info.sha256, sha(path.join(out, p)), p);
+    assert.ok(fs.existsSync(path.join(out, SATCOUNT_FILE)));
+  }
+});
+
 test("noindex builds the page with a noindex tag, writes no sitemap and removes an old one; switching modes rebuilds", () => {
   const out = mk(), dir = dataDir("V1");
   buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });

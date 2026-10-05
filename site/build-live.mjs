@@ -21,7 +21,12 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   for (const f of NEED) if (!feed.files[f]) throw new Error(`build-live: the manifest does not name ${f}`);
 
   const indexPath = path.join(outDir, "index.json");
-  const prev = fs.existsSync(indexPath) ? JSON.parse(fs.readFileSync(indexPath, "utf8")) : null;
+  // Only this read is forgiving: a corrupt or truncated index.json (say, a crash while it was written) counts as no previous build, so the next run rebuilds and overwrites it.
+  let prev = null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+    if (parsed && typeof parsed === "object" && typeof parsed.satellitesVersion === "string") prev = parsed;
+  } catch { /* missing, unreadable or invalid: no previous build */ }
   const pagePath = path.join(outDir, SATCOUNT_FILE);
   if (prev && prev.satellitesVersion === feed.version && prev.noindex === noindex && prev.siteUrl === SITE.url && fs.existsSync(pagePath)) {
     return { changed: false, version: feed.version };
