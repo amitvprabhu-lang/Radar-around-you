@@ -9,6 +9,7 @@ import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
+import { buildLlmsTxt } from "./llms.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -138,6 +139,7 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   if (!noindex) {
     fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => f !== SATCOUNT_FILE)));
     fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString()));
+    fs.writeFileSync(path.join(outDir, "llms.txt"), buildLlmsTxt({ pages, url: SITE.url, name: SITE.name, summary: APP_DESCRIPTION }));
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
   return { outDir, pages: files.length, checks, noindex };

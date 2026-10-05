@@ -433,3 +433,22 @@ test("the About page is built, is in the main sitemap and the navigation, and ca
   assert.ok(read("moon-phases/index.html").includes('href="../about/"'), "every page's navigation links to About");
   assert.ok(read("index.html").includes('href="about/"'));
 });
+
+test("an indexable build writes llms.txt whose every link is a built page", () => {
+  const txt = fs.readFileSync(path.join(outDir, "llms.txt"), "utf8");
+  assert.ok(txt.startsWith("# Radar Around You\n"));
+  const links = [...txt.matchAll(/\]\((https:\/\/[^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(links.length >= 15, String(links.length));
+  for (const l of links) {
+    if (l === `${SITE.url}/`) continue;
+    assert.ok(l.startsWith(`${SITE.url}/`), l);
+    assert.ok(pageFiles.includes(l.slice(SITE.url.length + 1) + "index.html"), `${l} is not a built page`);
+  }
+  assert.ok(!/[\u2013\u2014]/.test(txt));
+});
+
+test("a noindex build writes no llms.txt, like it writes no sitemap", () => {
+  const dir = path.join(tmp, "out-noindex-llms");
+  build({ outDir: dir, appFile, publicDir: null, noindex: true });
+  assert.ok(!fs.existsSync(path.join(dir, "llms.txt")));
+});
