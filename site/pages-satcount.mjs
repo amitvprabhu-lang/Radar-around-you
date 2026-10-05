@@ -1,7 +1,7 @@
 // The "How many satellites are in orbit?" page. Pure: takes the counts from site/satcount.mjs and returns a page object for renderPage.
 // Every figure on the page comes from the one `counts` value, so the lead, description, FAQ, tables and structured data cannot disagree.
 import { esc, table, sources, SITE, urlPath } from "./layout.mjs";
-import { ORBIT_BOUNDS } from "./satcount.mjs";
+import { ORBIT_BOUNDS, ORBIT_CHART_LABELS } from "./satcount.mjs";
 
 export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
 
@@ -56,7 +56,7 @@ export function satelliteCountPage(c, { updated }) {
   const url = `${SITE.url}/${urlPath(SATCOUNT_FILE)}`;
 
   const ownerRows = c.owners.map((o) => ({ label: o.name, value: o.count }));
-  const orbitRows = c.orbits.map((o) => ({ label: o.label, value: o.count }));
+  const orbitRows = c.orbits.map((o) => ({ label: ORBIT_CHART_LABELS[o.key] || o.label, value: o.count }));
   const purposeRows = c.purposes.slice(0, 10).map((p) => ({ label: p.name, value: p.count }));
   const keep = c.launchYears.slice(-15);
   const earlier = c.launchYears.slice(0, -15).reduce((s, y) => s + y.count, 0);

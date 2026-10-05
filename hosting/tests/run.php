@@ -138,9 +138,9 @@ ob_end_clean();
 $lines = file($lf, FILE_IGNORE_NEW_LINES); ok(count($lines) === 300 && substr($lines[299], -8) === 'line 349' && substr($lines[0], -7) === 'line 50', 'the log keeps the last 300 lines'); unlink($lf);
 
 // ---- finished pages (pages/ on the data branch, copied to the site root)
-ok(radar_safe_page_path('how-many-satellites-in-orbit/index.html'), 'a page folder with index.html is allowed');
+ok(radar_safe_page_path('how-many-satellites-in-orbit/index.html'), 'the satellite count page is allowed');
 ok(radar_safe_page_path('sitemap-live.xml'), 'the live sitemap is allowed');
-foreach (['../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html'] as $bad) {
+foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-many-satellites-in-orbit/index.html.bak', 'how-many-satellites-in-orbit/index.htm', "sitemap-live.xml\n", '../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html'] as $bad) {
     ok(!radar_safe_page_path($bad), 'unsafe page path rejected: ' . json_encode($bad));
 }
 $PAGE = '<!doctype html><title>t</title><p>7 active satellites</p>'; $SITEMAP = '<?xml version="1.0"?><urlset/>';

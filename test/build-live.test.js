@@ -54,6 +54,37 @@ test("the same satellites version builds nothing and touches nothing", () => {
   assert.equal(fs.statSync(path.join(out, SATCOUNT_FILE)).mtimeMs, mtime);
 });
 
+test("the index records a generator hash over the files that shape the page", () => {
+  const out = mk();
+  buildLive({ dataDir: dataDir("V1"), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });
+  const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+  assert.match(index.generator, /^[0-9a-f]{64}$/);
+});
+
+test("the same version and the same generator skips; a different generator rebuilds", () => {
+  const out = mk(), dir = dataDir("V1");
+  buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds, generator: "G1" });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8")).generator, "G1");
+  const same = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds, generator: "G1" });
+  assert.deepEqual(same, { changed: false, version: "V1" });
+  const other = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T11:00:00Z"), noindex: false, bounds, generator: "G2" });
+  assert.deepEqual(other, { changed: true, version: "V1" });
+  const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+  assert.equal(index.generator, "G2");
+  assert.equal(index.files[SATCOUNT_FILE].changed, "2026-10-05T11:00:00.000Z");
+});
+
+test("an old index without a generator rebuilds", () => {
+  const out = mk(), dir = dataDir("V1");
+  buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds, generator: "G1" });
+  const old = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+  delete old.generator;
+  fs.writeFileSync(path.join(out, "index.json"), JSON.stringify(old));
+  const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds, generator: "G1" });
+  assert.deepEqual(r, { changed: true, version: "V1" });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8")).generator, "G1");
+});
+
 test("a new satellites version rebuilds and moves the last modified time", () => {
   const out = mk();
   buildLive({ dataDir: dataDir("V1"), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });

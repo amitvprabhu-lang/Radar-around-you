@@ -75,7 +75,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
 <p>The page ${a("methods/index.html", "How we know")} lists the checks made and the things we could not confirm. Data keeps the terms of its source; each source's page, linked above or named in the app's credits, has them.</p>
 
 <h2 id="fresh">How fresh is the data?</h2>
-<p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes depends on its source, from every minute for earthquakes to every two hours for satellite orbits.</p>
+<p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes at its source depends on the source, from every minute for earthquakes to every two hours for satellite orbits, and the app checks each feed on its own schedule.</p>
 
 <h2 id="limits">What does it not do?</h2>
 <ul>
@@ -97,7 +97,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
 
 <h2 id="faq">Frequently asked questions</h2>
 <h3>What is Radar Around You?</h3>
-<p>A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.</p>
+<p>A free live feed of what is above, around and under you: satellites and the ISS, aircraft over six cities, tonight's sky, earthquakes, aurora, storms and fires, for any place on Earth.</p>
 <h3>Is it free?</h3>
 <p>Yes. The code is open source under the MIT licence.</p>
 <h3>Where does the data come from?</h3>
@@ -119,7 +119,7 @@ ${sources([
     title: "What Radar Around You is and does: a live feed of satellites, quakes and aurora",
     description: DESCRIPTION,
     h1: "What is Radar Around You?", kicker: "About",
-    lead: "A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.",
+    lead: "A free live feed of what is above, around and under you: satellites and the ISS, aircraft over six cities, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.",
     body,
     jsonld: [{ "@context": "https://schema.org", "@type": "AboutPage", name: "What Radar Around You is and does", description: DESCRIPTION, url: `${SITE.url}/about/`, about: { "@type": "WebApplication", name: SITE.name, url: `${SITE.url}/` } }],
   };

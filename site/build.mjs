@@ -16,7 +16,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
 
 export const APP_TITLE = "Radar Around You: live feed of satellites, ISS, quakes, aurora and storms";
-export const APP_DESCRIPTION = "A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.";
+export const APP_DESCRIPTION = "A free live feed of what is above, around and under you: satellites and the ISS, aircraft over six cities, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.";
 
 // OURS: the short feature list the home page's noscript text and structured data share. Each line is a statement from README.md.
 export const APP_FEATURES = [

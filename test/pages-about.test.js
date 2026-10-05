@@ -92,3 +92,15 @@ test("the FAQ is visible text with the questions as headings", () => {
   const questions = [...faq.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
   assert.deepEqual(questions, ["What is Radar Around You?", "Is it free?", "Where does the data come from?", "Does it work for my town?", "Does it know where I am?", "Is it a forecast or a warning service?"]);
 });
+
+test("the summary names aircraft as covering six cities, so 'any place on Earth' is not read as covering aircraft", () => {
+  const summary = "A free live feed of what is above, around and under you: satellites and the ISS, aircraft over six cities, tonight's sky, earthquakes, aurora, storms and fires";
+  assert.equal(page.lead, `${summary}, in 3D, for any place on Earth.`);
+  const faq = html.slice(html.indexOf('id="faq"'));
+  assert.ok(faq.includes(`<h3>What is Radar Around You?</h3>\n<p>${summary.replace(/'/g, "&#39;")}, for any place on Earth.</p>`) || faq.includes(`<h3>What is Radar Around You?</h3>\n<p>${summary}, for any place on Earth.</p>`));
+});
+
+test("the freshness sentence separates how often a source changes from how often the app checks it", () => {
+  assert.match(text, /How often a feed changes at its source depends on the source, from every minute for earthquakes to every two hours for satellite orbits, and the app checks each feed on its own schedule\./);
+  assert.ok(!text.includes("How often a feed changes depends on its source"));
+});

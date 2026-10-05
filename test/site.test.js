@@ -165,6 +165,7 @@ test("every built page is a complete document that declares its encoding, so a h
 test("the home page head positions the site as a live feed", () => {
   assert.equal(APP_TITLE, "Radar Around You: live feed of satellites, ISS, quakes, aurora and storms");
   assert.match(APP_DESCRIPTION, /^A free live feed of what is above, around and under you/);
+  assert.equal(APP_DESCRIPTION, "A free live feed of what is above, around and under you: satellites and the ISS, aircraft over six cities, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.");
   const full = asDocument(wrapApp(APP, { noindex: false }));
   assert.ok(full.includes(`<title>${APP_TITLE}</title>`));
   assert.ok(full.includes(`<meta name="description" content="${APP_DESCRIPTION.replace(/'/g, "&#39;")}">`) || full.includes(`<meta name="description" content="${APP_DESCRIPTION}">`));
@@ -255,7 +256,7 @@ test("house style: no em dashes and no emoji in any page", () => {
   for (const f of pageFiles) {
     if (f === "index.html") continue;
     const t = read(f);
-    assert.ok(!t.includes("—"), `${f}: em dash`);
+    assert.ok(!t.includes("\u2014") && !t.includes("\u2013"), `${f}: em or en dash`);
     assert.ok(!/\p{Extended_Pictographic}/u.test(t), `${f}: emoji`);
   }
 });

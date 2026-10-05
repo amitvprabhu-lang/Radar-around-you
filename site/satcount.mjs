@@ -20,6 +20,14 @@ export const ORBIT_LABELS = {
   highElliptical: `High elliptical (eccentricity ${ORBIT_BOUNDS.ellipticalAt} or more)`,
   beyond: "Beyond the geostationary belt",
 };
+// Short forms for the orbit chart, whose labels must stay under 36 characters to fit. Built from the same bounds as ORBIT_LABELS.
+export const ORBIT_CHART_LABELS = {
+  low: `Low (below ${km(ORBIT_BOUNDS.lowBelow)} km)`,
+  medium: `Medium (${km(ORBIT_BOUNDS.lowBelow)} to ${km(ORBIT_BOUNDS.mediumBelow - 1)} km)`,
+  geostationary: "Geostationary belt",
+  highElliptical: `High elliptical (e ${ORBIT_BOUNDS.ellipticalAt}+)`,
+  beyond: "Beyond geostationary",
+};
 
 // OURS: working definitions, not a cited standard. High elliptical is checked first; the mean altitude is the semi-major axis minus the
 // equatorial radius the swarm decoder uses.

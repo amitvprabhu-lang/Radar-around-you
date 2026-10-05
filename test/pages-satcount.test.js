@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { countSatellites, ORBIT_BOUNDS, ORBIT_LABELS } from "../site/satcount.mjs";
+import { countSatellites, ORBIT_BOUNDS, ORBIT_LABELS, ORBIT_CHART_LABELS, ORBIT_ORDER } from "../site/satcount.mjs";
 import { satelliteCountPage, SATCOUNT_FILE, sitemapLive, barChartSvg, columnChartSvg } from "../site/pages-satcount.mjs";
 import { renderPage, SITE } from "../site/layout.mjs";
 import { buildFixture, STANDARD } from "./helpers/satfixture.mjs";
@@ -102,6 +102,23 @@ test("the orbit boundaries on the page come from the counter's one definition", 
   const text = textOf(html);
   const n = (x) => x.toLocaleString("en-GB");
   for (const v of [n(ORBIT_BOUNDS.lowBelow), n(ORBIT_BOUNDS.mediumBelow - 1), n(ORBIT_BOUNDS.geoUpTo), String(ORBIT_BOUNDS.ellipticalAt)]) assert.ok(text.includes(v), v);
+  const orbitTable = html.match(/aria-label="Active satellites by orbit"[\s\S]*?<\/table>/)[0];
+  for (const label of Object.values(ORBIT_LABELS)) assert.ok(orbitTable.includes(label), label);
+});
+
+test("the orbit chart uses short labels built from the orbit bounds, never cut off, while the table keeps the full labels", () => {
+  const n = (x) => x.toLocaleString("en-GB");
+  assert.deepEqual(Object.keys(ORBIT_CHART_LABELS), ORBIT_ORDER);
+  for (const key of ORBIT_ORDER) assert.ok(ORBIT_CHART_LABELS[key].length < 36, ORBIT_CHART_LABELS[key]);
+  assert.ok(ORBIT_CHART_LABELS.low.includes(n(ORBIT_BOUNDS.lowBelow)));
+  assert.ok(ORBIT_CHART_LABELS.medium.includes(n(ORBIT_BOUNDS.lowBelow)) && ORBIT_CHART_LABELS.medium.includes(n(ORBIT_BOUNDS.mediumBelow - 1)));
+  assert.ok(ORBIT_CHART_LABELS.highElliptical.includes(String(ORBIT_BOUNDS.ellipticalAt)));
+  const chart = html.match(/<svg[^>]*aria-labelledby="chart-orbits-t[\s\S]*?<\/svg>/)[0];
+  const labels = [...chart.matchAll(/<text[^>]*text-anchor="end"[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ORBIT_ORDER.map((k) => ORBIT_CHART_LABELS[k]));
+  for (const l of labels) assert.ok(!l.endsWith("..."), l);
+  const chartText = textOf(chart);
+  for (const v of [n(ORBIT_BOUNDS.lowBelow), n(ORBIT_BOUNDS.mediumBelow - 1), String(ORBIT_BOUNDS.ellipticalAt)]) assert.ok(chartText.includes(v), v);
   const orbitTable = html.match(/aria-label="Active satellites by orbit"[\s\S]*?<\/table>/)[0];
   for (const label of Object.values(ORBIT_LABELS)) assert.ok(orbitTable.includes(label), label);
 });

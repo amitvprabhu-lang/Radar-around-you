@@ -208,13 +208,14 @@ function radar_prune(string $dest, array $keep): int
 
 // ------------------------------------------------------------------ finished pages
 // The collector's GitHub job also writes finished HTML pages into pages/ on the data branch, with pages/index.json listing each file and
-// its sha256. Only two shapes are ever fetched or written: "<folder>/index.html" one level deep, and "sitemap-live.xml". \z (not $)
-// is used so a trailing newline cannot slip through. A damaged or hostile index cannot make the script write anywhere else.
+// its sha256. Only two exact paths are ever fetched or written: "how-many-satellites-in-orbit/index.html" and "sitemap-live.xml", so a
+// damaged or hostile index cannot overwrite any other page of the site (such as about/index.html) or write anywhere else. \z (not $)
+// is used so a trailing newline cannot slip through.
 const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the satellite count page is far smaller than this
 
 function radar_safe_page_path(string $p): bool
 {
-    return (bool) preg_match('#^(?:[a-z0-9][a-z0-9-]{0,80}/index\.html|sitemap-live\.xml)\z#', $p);
+    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml)\z#', $p);
 }
 
 // Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist). Files whose hash
