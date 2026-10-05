@@ -18,13 +18,15 @@ const tmps = [];
 const mk = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), "bl-")); tmps.push(d); return d; };
 test.after(() => tmps.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
 
-function dataDir(version, fx = buildFixture(STANDARD, { newIdx: [1] })) {
+function dataDir(version, fx = buildFixture(STANDARD, { newIdx: [1] }), { names = null } = {}) {
   const dir = mk(), base = `satellites/${version}`;
   fs.mkdirSync(path.join(dir, base), { recursive: true });
   fs.writeFileSync(path.join(dir, base, "details.bin"), fx.details);
   fs.writeFileSync(path.join(dir, base, "swarm.bin"), fx.swarm);
   fs.writeFileSync(path.join(dir, base, "satmeta.json"), JSON.stringify(fx.meta));
-  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ schema: 1, feeds: { satellites: { version, files: { "details.bin": `${base}/details.bin`, "satmeta.json": `${base}/satmeta.json`, "swarm.bin": `${base}/swarm.bin` } } } }));
+  const files = { "details.bin": `${base}/details.bin`, "satmeta.json": `${base}/satmeta.json`, "swarm.bin": `${base}/swarm.bin` };
+  if (names !== null) { fs.writeFileSync(path.join(dir, base, "names.txt"), names); files["names.txt"] = `${base}/names.txt`; }
+  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ schema: 1, feeds: { satellites: { version, files } } }));
   return dir;
 }
 const sha = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -232,4 +234,17 @@ test("the command line prints a message for a skipped page and still succeeds", 
   assert.match(r.stdout, /skipped satellites-by-country\/japan\/index\.html: Japan is not in the feed/);
   assert.match(r.stdout, /built the live pages for satellites version VCLI/);
   assert.ok(fs.existsSync(path.join(out, HUB_FILE)) && !fs.existsSync(path.join(out, "satellites-by-country/japan/index.html")));
+});
+
+test("names.txt named in the manifest feeds the name families, and one of the wrong length stops the build before anything is written", () => {
+  const fx = countryFixture(), out = mk();
+  buildLive({ dataDir: dataDir("V1", fx, { names: fx.names.join("\n") }), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 } });
+  const us = fs.readFileSync(path.join(out, COUNTRY_FILES[0]), "utf8");
+  assert.ok(us.includes('id="names"') && us.includes(">STARLINK<"), "families from names.txt");
+  const before = fs.readFileSync(path.join(out, "index.json"), "utf8");
+  assert.throws(() => buildLive({ dataDir: dataDir("V2", fx, { names: fx.names.slice(1).join("\n") }), outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 } }), /names\.txt has 403 lines, expected 404/);
+  assert.equal(fs.readFileSync(path.join(out, "index.json"), "utf8"), before, "the previous set stays");
+  const plain = mk();
+  buildLive({ dataDir: dataDir("V1", fx), outDir: plain, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 } });
+  assert.ok(!fs.readFileSync(path.join(plain, COUNTRY_FILES[0]), "utf8").includes('id="names"'), "without names.txt the section is left out");
 });

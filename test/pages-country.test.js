@@ -9,7 +9,8 @@ import { SATCOUNT_FILE, satelliteCountPage } from "../site/pages-satcount.mjs";
 import { countSatellites, ORBIT_ORDER, ORBIT_CHART_LABELS } from "../site/satcount.mjs";
 import { renderPage, SITE, NAV, urlPath } from "../site/layout.mjs";
 import { decodeCoast } from "../src/data.js";
-import { countryFixture } from "./helpers/satfixture.mjs";
+import { countryFixture, buildFixture } from "./helpers/satfixture.mjs";
+import { launchDayFromIso } from "../src/core.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const coastBuf = fs.readFileSync(path.join(root, "public/coast.bin"));
@@ -91,15 +92,20 @@ test("the numbers on each country page match countOwners", () => {
     assert.equal(sum(rows.map((r) => r[1])), o.active, `${p.slug}: orbits add up`);
     assert.deepEqual(rows.map((r) => r[3]), used.map((k) => pct(counts.orbits[k] / counts.active)), `${p.slug}: catalogue shares`);
     assert.equal(sum(tableNums(h, "By purpose, largest first")), o.active, `${p.slug}: purposes`);
-    const yearDesc = h.match(/<desc id="chart-years-d">([^<]*)<\/desc>/)[1];
-    assert.equal([...yearDesc.matchAll(/: ([\d,]+)/g)].reduce((s, m) => s + Number(m[1].replace(/,/g, "")), 0) + o.unknownYear, o.active, `${p.slug}: launch years`);
+    assert.match(h, /<desc id="chart-years-d">[^<]*table below gives the numbers/, `${p.slug}: the chart points to its table`);
     assert.ok(t.includes(textOf(mapSummaryText(ownerPositions(fx, p.owner)))), `${p.slug}: map summary`);
     assert.match(h, /<svg [^>]*class="map" role="img"/, `${p.slug}: map`);
     assert.ok(t.includes(`Recorded as "${p.owner}", ${p.slug === "united-states" ? "the largest fleet" : `the ${["", "", "2nd", "3rd", "4th", "5th"][COUNTRY_PAGES.indexOf(p) + 1]} largest fleet`} among 6 owners.`), `${p.slug}: rank`);
   }
   assert.equal(sum(tableNums(bySlug("united-states"), "Largest name families")), 130);
   assert.deepEqual(tableNums(bySlug("china"), "Largest name families", 0), ["YAOGAN", "BEIDOU"]);
-  assert.ok(textOf(bySlug("united-states")).includes("Launched in the 30 days before 5 October 2026 and active: FLOCK 4Y-75, STARLINK-1000, STARLINK-1001."));
+  assert.deepEqual(tableCells(bySlug("united-states"), "Recent launches by launch date (two launches on one day share a row)").map((r) => r.map(textOf)),
+    [["1 May 2011", "1", "FLOCK 4Y-75", "None"], ["1 March 2020", "1", "STARLINK-1000", "None"], ["1 March 2021", "1", "STARLINK-1001", "None"]]);
+  for (const p of COUNTRY_PAGES) {
+    const o = owner(p.owner), h = html.get(p.file);
+    assert.equal(sum(tableNums(h, "By launch year")), o.active, `${p.slug}: the launch year table adds up`);
+    assert.equal(sum(tableNums(h, "Largest name families")), o.active, `${p.slug}: families and the unnamed add up`);
+  }
   assert.ok(textOf(bySlug("united-states")).includes("Starlink makes up 70 of them; the other 60 are not Starlink."));
   assert.ok(!textOf(bySlug("china")).includes("Starlink"), "no Starlink text when there are none");
 });
@@ -107,19 +113,98 @@ test("the numbers on each country page match countOwners", () => {
 test("the FAQ is chosen and answered from each owner's own numbers", () => {
   const q = (slug) => faqOf(bySlug(slug));
   assert.deepEqual(q("united-states"), [
-    ["Where does the United States rank among satellite owners?", "First. People's Republic of China follows with 90."],
+    ["Where does the United States rank among satellite owners?", "First. China follows with 90."],
     ["How much of this fleet is Starlink?", `${pct(70 / 130)} percent. Starlink alone is ${pct(70 / 402)} percent of our whole count.`],
-    ["How many were launched in the last 30 days?", "3 of the 6 recent launches still active in our count."]]);
+    ["How many were launched in the last 30 days?", "3 of the 6 active satellites launched in the 30 days before the data time."]]);
   assert.deepEqual(q("china"), [
-    ["Where does China rank among satellite owners?", "2nd. United States is ahead with 130; United Kingdom follows with 66."],
-    ["Which China satellite family is largest?", "YAOGAN, with 68, ahead of BEIDOU with 22."],
-    ["How many were launched in the last 30 days?", "1 of the 6 recent launches still active in our count."]]);
+    ["Where does China rank among satellite owners?", "2nd. The United States is ahead with 130; the United Kingdom follows with 66."],
+    ["Which name family is largest among satellites the catalogue records for China?", "YAOGAN, with 68, ahead of BEIDOU with 22."],
+    ["How many were launched in the last 30 days?", "1 of the 6 active satellites launched in the 30 days before the data time."]]);
+  // Japan's two families tie at 26, so there is no "largest family" answer; its largest recorded purpose is asked instead
+  assert.deepEqual(q("japan")[1], ["What are most satellites the catalogue records for Japan used for?", "Weather and climate, the largest recorded purpose (18)."]);
   const uk = owner("United Kingdom");
   assert.deepEqual(q("united-kingdom")[2], ["Which orbit group stands out for the United Kingdom?", `Low Earth orbit: ${pct(1)} percent of this fleet, catalogue ${pct(counts.orbits.low / counts.active)}.`]);
   assert.equal(uk.last30, 0);
   assert.ok(!q("china").some(([x]) => /Starlink/.test(x)), "no Starlink question without Starlink");
   const texts = COUNTRY_PAGES.map((p) => JSON.stringify(q(p.slug).map((x) => x[1])));
   assert.equal(new Set(texts).size, 5, "no two pages have the same answers");
+});
+
+test("the 30 day answer counts satellites, never launches", () => {
+  for (const p of [...set.pages, ...realSet.pages].slice(0)) {
+    const h = renderPage(p), t = textOf(h);
+    assert.ok(!/recent launches/.test(t), `${p.file}: says launches`);
+    for (const m of t.matchAll(/How many were launched in the last 30 days\? ([^?]*?\.)/g)) assert.match(m[1], /^[\d,]+ of the [\d,]+ active satellites launched in the 30 days before the data time\.$/, p.file);
+  }
+  assert.ok(textOf(renderPage(realSet.pages[2])).includes("of the 160 active satellites launched in the 30 days before the data time."), "the real figure names satellites");
+});
+
+// a small owner with chosen names, launch dates and recent satellites, for the name based sections
+const D = launchDayFromIso;
+function namedFleet(objs, newIdx) {
+  const base = Array.from({ length: 52 - objs.length }, (_, j) => ({ type: 0, status: 1, owner: 1, alt: 600, purpose: 4, launchDay: D("2015-01-01"), name: `ALPHA-${j}` }));
+  const fxN = buildFixture([...objs.map((o) => ({ type: 0, status: 1, owner: 1, alt: 600, purpose: 4, ...o })), ...base], { owners: ["Japan"], ref: Date.parse("2026-10-05T08:14:54Z"), newIdx });
+  const c = countOwners(fxN);
+  return { c, h: renderPage(countryPage(c, COUNTRY_PAGES[4], { updated, coast, positions: [] })) };
+}
+
+test("recent launches: named satellites are listed by launch date and those with only a launch designator are counted, never shown as names", () => {
+  const mixed = namedFleet([{ name: "STRIX-10", launchDay: D("2026-09-19") }, { name: "2026-205A", launchDay: D("2026-09-10") }, { name: "2026-205B", launchDay: D("2026-09-10") }, { name: "2026-220A", launchDay: D("2026-09-21") }], [0, 1, 2, 3]);
+  const t = textOf(mixed.h);
+  assert.ok(t.includes("4 of these satellites were launched in the 30 days before the data time. 1 has a name in the catalogue and 3 have only a launch designator so far, for example 2026-205A."), t);
+  assert.deepEqual(tableCells(mixed.h, "Recent launches by launch date (two launches on one day share a row)").map((r) => r.map(textOf)),
+    [["10 September 2026", "2", "None", "2 (2026-205)"], ["19 September 2026", "1", "STRIX-10", "None"], ["21 September 2026", "1", "None", "1 (2026-220)"]]);
+  const only = textOf(namedFleet([{ name: "2026-205A", launchDay: D("2026-09-10") }, { name: "2026-205B", launchDay: D("2026-09-10") }], [0, 1]).h);
+  assert.ok(only.includes("2 of these satellites were launched in the 30 days before the data time. Both have only a launch designator so far, for example 2026-205A, so they are not named in the catalogue yet."), only);
+  const none = namedFleet([], []).h;
+  assert.ok(!none.includes('id="recent"'), "no section without recent satellites");
+  const many = namedFleet(Array.from({ length: 5 }, (_, k) => ({ name: `QPS-SAR ${k}`, launchDay: D("2026-09-19") })), [0, 1, 2, 3, 4]).h;
+  assert.ok(textOf(many).includes("QPS-SAR 0, QPS-SAR 1, QPS-SAR 2 and 2 more"));
+});
+
+test("name families count the unnamed, and the largest-family answer appears only when the unnamed cannot change it and nobody ties", () => {
+  const fam = (n, name) => Array.from({ length: n }, (_, k) => ({ name: `${name}-${k}` }));
+  // a 5 satellite lead and 5 unnamed: the unnamed could reverse it, so no family answer
+  const close = namedFleet([...fam(22, "QPS"), ...fam(17, "STRIX"), ...fam(8, "ZZ"), ...Array.from({ length: 5 }, (_, k) => ({ name: `2026-1${k}0A` }))], []);
+  const tc = textOf(close.h);
+  assert.ok(tc.includes("Our own grouping by the letters that start each catalogue name"), "the grouping is described as ours");
+  assert.ok(tc.includes("5 of these satellites (9.6 percent) have no name family: their catalogue name is only a launch designator, so they are not named yet, or does not start with letters."), tc);
+  assert.ok(!/Which name family is largest/.test(tc));
+  assert.deepEqual(tableCells(close.h, "Largest name families").at(-1).slice(0, 3).map(textOf), ["No name family", "5", "9.6"]);
+  // a lead bigger than the unnamed: answered, with every runner-up that ties named
+  const clear = namedFleet([...fam(30, "QPS"), ...fam(5, "STRIX"), ...fam(5, "GRUS"), ...fam(4, "AA"), ...fam(4, "BB"), ...fam(3, "CC"), { name: "2026-150A" }], []);
+  assert.ok(textOf(clear.h).includes("Which name family is largest among satellites the catalogue records for Japan? QPS, with 30, ahead of GRUS and STRIX with 5 each; 1 has no name family, too few to change that order."), textOf(clear.h));
+  // a tie for first: no ranking
+  const tie = namedFleet([...fam(26, "GRUS"), ...fam(26, "JCSAT")], []);
+  assert.ok(!/Which name family is largest/.test(textOf(tie.h)));
+  assert.ok(textOf(tie.h).includes("Every one of these satellites has a name family."));
+});
+
+test("the earliest launches name every satellite of the earliest days, up to three each", () => {
+  const h = namedFleet([{ name: "OLD-A", launchDay: D("1990-01-01") }, { name: "OLD-B", launchDay: D("1990-01-01") }, { name: "OLD-C", launchDay: D("1990-01-01") }, { name: "OLD-D", launchDay: D("1990-01-01") }, { name: "MID", launchDay: D("1995-06-01") }], []).h;
+  assert.ok(textOf(h).includes("Earliest launches among satellites the catalogue lists as active:"));
+  assert.deepEqual(tableCells(h, "Earliest launches still listed as active").map((r) => r.map(textOf)),
+    [["1 January 1990", "OLD-A, OLD-B, OLD-C and 1 more launched the same day"], ["1 June 1995", "MID"], ["1 January 2015", "ALPHA-0, ALPHA-1, ALPHA-10 and 44 more launched the same day"]]);
+  assert.ok(!/oldest still active|Newest/i.test(textOf(h)));
+});
+
+test("without names.txt every name based section is left out cleanly and the rest of the page is unchanged in shape", () => {
+  const plain = countryPageSet({ ...fx, names: null }, { coast, updated });
+  assert.equal(plain.pages.length, 6);
+  for (const p of plain.pages.slice(1)) {
+    const h = renderPage(p), t = textOf(h);
+    for (const id of ["names", "recent"]) assert.ok(!h.includes(` id="${id}"`), `${p.file}: ${id}`);
+    assert.ok(!t.includes("Earliest launches") && !t.includes("name family"), p.file);
+    for (const id of ["answer", "orbits", "map", "purpose", "growth", "how", "faq", "sources"]) assert.ok(h.includes(` id="${id}"`), `${p.file}: ${id}`);
+    assert.ok(!/NaN|undefined|null/.test(t), p.file);
+  }
+});
+
+test("each statement is a full sentence, not a fragment", () => {
+  const t = textOf(renderPage(realSet.pages[2]));
+  assert.match(t, /Satellites closer than 0\.1 degree share a dot, so the map has [\d,]+ dots\./);
+  assert.match(t, /After it come [A-Za-z ]+ \([\d,]+\), [A-Za-z ]+ \([\d,]+\) and [A-Za-z ]+ \([\d,]+\)\./);
+  assert.ok(!/ Next: |Peak \d|Undated:/.test(t));
 });
 
 test("the map text never decides north or south from satellites within one degree of the equator, and says how many there are", () => {
@@ -151,9 +236,9 @@ test("an owner whose largest purpose is Unspecified, or that leans towards an or
   const changed = { ...jp, purposes: [{ name: "Unspecified", count: 30 }, { name: "Communications", count: 22 }], orbits: { low: 30, medium: 22, geostationary: 0, highElliptical: 0, beyond: 0 } };
   const c2 = { ...counts, owners: counts.owners.map((o) => (o === jp ? changed : o)) };
   const t = textOf(renderPage(countryPage(c2, COUNTRY_PAGES[4], { updated, coast, positions: [] })));
-  assert.ok(t.includes(`No grouping recorded for ${pct(30 / 52)} percent. Top recorded purpose: Communications, ${pct(22 / 52)} percent.`), t);
+  assert.ok(t.includes(`The catalogue records no purpose grouping for ${pct(30 / 52)} percent of them. The most common recorded purpose is Communications, with 22 satellites, ${pct(22 / 52)} percent.`), t);
   assert.ok(t.includes(`Japan leans towards medium Earth orbit: ${pct(22 / 52)} percent of its fleet against ${pct(counts.orbits.medium / counts.active)} percent of the catalogue.`));
-  assert.ok(t.includes("None in the geostationary belt or high elliptical orbits or orbits beyond the geostationary belt."));
+  assert.ok(t.includes("None of them is in the geostationary belt or high elliptical orbits or orbits beyond the geostationary belt."));
 });
 
 test("the hub ranks every owner with an active satellite, adds up, holds the method and links to exactly the five country pages", () => {
@@ -166,7 +251,7 @@ test("the hub ranks every owner with an active satellite, adds up, holds the met
   const t = textOf(hub);
   assert.ok(t.includes(`6 owners in the catalogue have at least one active satellite. The United States has the most, ${num(130)} active satellites, ${pct(130 / 402)} percent of all 402 active satellites in our count.`));
   assert.ok(t.includes(`The top three owners together hold ${pct((130 + 90 + 66) / 402)} percent`));
-  assert.ok(t.includes("Every Starlink satellite in the data, 70 of them, is recorded under United States."));
+  assert.ok(t.includes("Every Starlink satellite in the data, 70 of them, is recorded under the United States."));
   assert.ok(t.includes(`Leaving Starlink out, the United States has 60 of the other 332 active satellites, ${pct(60 / 332)} percent.`));
   // the method lives here once, including the orbit groups the hub's orbit table shows
   const method = hub.slice(hub.indexOf('id="method"'), hub.indexOf('id="faq"'));
@@ -214,6 +299,11 @@ test("the five country pages share under half of their 8-word sequences, with nu
   const worst = pairs.reduce((a, b) => (b.jaccard > a.jaccard ? b : a));
   t.diagnostic(`worst pair ${worst.pair}: ${pct(worst.jaccard)} percent shared (Jaccard), ${pct(worst.containment)} percent of the smaller page`);
   for (const p of pairs) assert.ok(p.jaccard < 0.5, `${p.pair}: ${pct(p.jaccard)} percent`);
+  // OURS: measured on 2026-10-06 at 64.3 percent for the worst pair (China and the CIS); the limit is that plus 5 points, so the pages
+  // cannot drift back towards a template. It is above half: see docs/satcountry-sources.md.
+  const worstC = pairs.reduce((a, b) => (b.containment > a.containment ? b : a));
+  t.diagnostic(`worst containment ${worstC.pair}: ${pct(worstC.containment)} percent`);
+  for (const p of pairs) assert.ok(p.containment < 0.693, `${p.pair}: ${pct(p.containment)} percent of the smaller page`);
   assert.equal(pairs.length, 10);
 });
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { countSatellites, ORBIT_ORDER } from "../site/satcount.mjs";
-import { COUNTRY_PAGES, HUB_FILE, MIN_ACTIVE_FOR_PAGE, NOT_RECORDED, NEAR_EQUATOR_DEG, countOwners, ownerPositions, pageGuard, latitudeBands, busiestBand, latitudeSummary, nameFamily } from "../site/satcountry.mjs";
+import { COUNTRY_PAGES, HUB_FILE, MIN_ACTIVE_FOR_PAGE, NOT_RECORDED, NEAR_EQUATOR_DEG, countOwners, ownerPositions, pageGuard, latitudeBands, busiestBand, latitudeSummary, nameFamily, isDesignatorOnly, launchOf } from "../site/satcountry.mjs";
 import { buildFixture, STANDARD, countryFixture, nAtAltitude } from "./helpers/satfixture.mjs";
 
 const fx = countryFixture();
@@ -160,18 +160,42 @@ test("the latitude summary leaves out points within one degree of the equator, s
   assert.deepEqual(latitudeSummary([]), { total: 0, near: 0, nearGeo: 0, considered: 0, band: null, north: 0 });
 });
 
-test("name families, recent names and the oldest and newest satellites come from names.txt, and are empty without it", () => {
-  assert.deepEqual(["STARLINK-1234", "COSMOS 2545", "COSMOS 2620 [GLONASS-K1]", "2026-205A", "", "X", "qianfan-1"].map(nameFamily), ["STARLINK", "COSMOS", "COSMOS", null, null, null, "QIANFAN"]);
+test("name families, recent launches and the earliest launches come from names.txt, and are empty without it", () => {
+  assert.deepEqual(["STARLINK-1234", "COSMOS 2545", "COSMOS 2620 [GLONASS-K1]", "2026-205A", "", "X", "qianfan-1", "DMC3", "SDA_1664", "AE1C"].map(nameFamily),
+    ["STARLINK", "COSMOS", "COSMOS", null, null, null, "QIANFAN", "DMC", "SDA", "AE"]);
+  assert.deepEqual(["2026-205A", "2026-205AB", "1998-067A", "STARLINK-1", "2026-205", " 2026-220F "].map(isDesignatorOnly), [true, true, true, false, false, true]);
+  assert.equal(launchOf("2026-205A"), "2026-205");
   const us = owner("United States");
-  assert.deepEqual(us.families, [{ name: "STARLINK", count: 70 }, { name: "FLOCK", count: 30 }, { name: "USA", count: 30 }]);
-  assert.deepEqual(us.recent, ["FLOCK 4Y-75", "STARLINK-1000", "STARLINK-1001"]);
-  assert.deepEqual(owner("Commonwealth of Independent States (former USSR)").recent, ["MOLNIYA 2-14"]);
-  assert.deepEqual(us.oldest, { name: "USA 372", date: "2008-05-01" });
-  assert.equal(us.newest.date, "2025-05-01");
+  assert.deepEqual(us.families.map((f) => [f.name, f.count]), [["STARLINK", 70], ["FLOCK", 30], ["USA", 30]]);
+  assert.deepEqual(us.families[0].orbits, ["low"]);
+  assert.deepEqual(us.families[0].purposes, ["Broadband internet"]);
+  assert.deepEqual(owner("Japan").families.map((f) => [f.name, f.count, f.orbits.join(), f.purposes.join()]), [["GRUS", 26, "low", "Earth observation,Weather and climate"], ["JCSAT", 26, "geostationary", "Communications,Weather and climate"]], "a tie for the main purpose names both");
+  assert.equal(us.noFamily, 0);
+  assert.equal(c.named, true);
+  assert.deepEqual(us.recent.map((r) => r.name), ["FLOCK 4Y-75", "STARLINK-1000", "STARLINK-1001"], "sorted by launch date, then name");
+  assert.equal(us.recent.length, us.last30);
+  assert.deepEqual(owner("Commonwealth of Independent States (former USSR)").recent.map((r) => r.name), ["MOLNIYA 2-14"]);
+  assert.deepEqual(us.earliest.map((e) => e.date), ["2008-05-01", "2009-05-01", "2010-05-01"]);
+  assert.deepEqual(us.earliest[0].names, ["USA 372", "USA 390", "USA 408", "USA 426"], "every satellite launched on the earliest day");
   const noNames = countOwners({ ...fx, names: null });
-  for (const o of noNames.owners) { assert.deepEqual(o.families, []); assert.deepEqual(o.recent, []); assert.equal(o.oldest, null); }
+  assert.equal(noNames.named, false);
+  for (const o of noNames.owners) { assert.deepEqual(o.families, []); assert.deepEqual(o.recent, []); assert.deepEqual(o.earliest, []); assert.equal(o.noFamily, 0); }
   assert.deepEqual(noNames.owners.map((o) => o.active), c.owners.map((o) => o.active), "names change no count");
   assert.deepEqual(countOwners({ ...fx, names: fx.names.join("\n") }).owners[0].families, us.families, "a string works as well as an array");
+});
+
+test("a names file that does not have one line per object is refused", () => {
+  assert.throws(() => countOwners({ ...fx, names: fx.names.slice(1) }), /names\.txt has 403 lines, expected 404/);
+  assert.throws(() => countOwners({ ...fx, names: [...fx.names, "EXTRA"] }), /names\.txt has 405 lines, expected 404/);
+  assert.throws(() => countOwners({ ...fx, names: fx.names.join("\n") + "\n" }), /names\.txt has 405 lines/, "a stray newline at the end is a line too");
+});
+
+test("satellites with no name family are counted, and only those", () => {
+  const objs = [["STARLINK-1"], ["2026-205A"], ["2026-205B"], ["123 SAT"], [""], ["QPS-SAR 9"]].map(([name]) => ({ type: 0, status: 1, owner: 1, alt: 550, name }));
+  const o = countOwners(buildFixture(objs, { owners: ["X"] })).owners[0];
+  assert.equal(o.noFamily, 4);
+  assert.deepEqual(o.families.map((f) => [f.name, f.count]), [["QPS", 1], ["STARLINK", 1]]);
+  assert.equal(o.families.reduce((s, f) => s + f.count, 0) + o.noFamily, o.active, "families and the unnamed add up to the fleet");
 });
 
 test("the server's allowed page list in hosting/lib.php names exactly the slugs in COUNTRY_PAGES", () => {

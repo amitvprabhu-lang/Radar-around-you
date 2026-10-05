@@ -3,7 +3,7 @@
 // feed; the only typed text is method and caveats, which match docs/satcountry-sources.md and the code. Owners keep the catalogue's names.
 import { esc, table, sources, SITE, urlPath, href } from "./layout.mjs";
 import { ORBIT_ORDER, ORBIT_LABELS, ORBIT_CHART_LABELS, ORBIT_BOUNDS } from "./satcount.mjs";
-import { COUNTRY_PAGES, HUB_FILE, NOT_RECORDED, MIN_ACTIVE_FOR_PAGE, NEAR_EQUATOR_DEG, countOwners, ownerPositions, pageGuard, latitudeSummary } from "./satcountry.mjs";
+import { COUNTRY_PAGES, HUB_FILE, NOT_RECORDED, MIN_ACTIVE_FOR_PAGE, NEAR_EQUATOR_DEG, countOwners, ownerPositions, pageGuard, latitudeSummary, isDesignatorOnly, launchOf } from "./satcountry.mjs";
 import { SATCOUNT_FILE, LIVE_FILES, sitemapLive, barChartSvg, columnChartSvg, num, pct, dateLong, timeUtc, CELESTRAK, SATCAT, STATUS } from "./pages-satcount.mjs";
 import { worldMapSvg, uniqueDots } from "./svgmap.mjs";
 import { decodeCoast } from "../src/data.js";
@@ -21,6 +21,13 @@ const share = (part, whole) => (whole ? part / whole : 0);
 // a share too small to show with one decimal is written as words, so a table never shows a misleading 0.0
 const pctText = (x) => (x > 0 && x < 0.0005 ? "under 0.1" : pct(x));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// "a", "a and b", "a, b and c"
+const and = (list) => (list.length < 2 ? list.join("") : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`);
+// at most n items, then "and N <rest>"
+const capList = (list, n, rest) => (list.length > n ? `${list.slice(0, n).join(", ")} and ${list.length - n} ${rest}` : and(list));
+// the singular or plural form for a count
+const v = (n, one, many) => (n === 1 ? one : many);
+const ORBIT_SHORT = { low: "Low", medium: "Medium", geostationary: "Geostationary", highElliptical: "High elliptical", beyond: "Beyond geostationary" };
 // lower case orbit names for sentences, built from the same groups as ORBIT_LABELS
 const ORBIT_PROSE = { low: "low Earth orbit", medium: "medium Earth orbit", geostationary: "the geostationary belt", highElliptical: "high elliptical orbits", beyond: "orbits beyond the geostationary belt" };
 // "30 to 60 degrees north", "the equator to 30 degrees south"
@@ -45,6 +52,7 @@ const methodItems = (from) => [
   `The owner is the catalogue's owner field, shown exactly as the catalogue records it. Each satellite has one owner, so it is counted once. A satellite with no owner recorded is counted as "${NOT_RECORDED}" and not ranked.`,
   "Starlink satellites are those whose catalogue name contains STARLINK.",
   `The orbit groups are our working definitions: eccentricity of ${ORBIT_BOUNDS.ellipticalAt} or more is high elliptical; otherwise mean altitude below ${num(ORBIT_BOUNDS.lowBelow)} km is low, from ${num(ORBIT_BOUNDS.lowBelow)} km up to ${num(ORBIT_BOUNDS.mediumBelow - 1)} km is medium, ${num(ORBIT_BOUNDS.mediumBelow)} to ${num(ORBIT_BOUNDS.geoUpTo)} km is the geostationary belt, and anything higher is beyond it.`,
+  "Name families on the country pages are our own grouping by the run of letters at the start of each catalogue name (\"DMC3\" counts as DMC, \"SDA_1664\" as SDA). A name that is only a launch designator such as 2026-205A (an object not named yet), or that does not start with letters, has no family, and those satellites are counted separately. The catalogue uses more than one name prefix for some fleets, and we do not merge families.",
   "Purposes are CelesTrak's own groupings, a convenience and not a statement of a satellite's mission. \"Unspecified\" means the catalogue has no grouping for that satellite.",
   "Launch years count the satellites still active now by the year they were launched. They are not counts of launches in each year, because satellites launched earlier and since retired are not in them. \"Launched in the last 30 days\" means launched in the 30 days before the data time.",
   `The maps on the country pages show the point on the ground below each satellite at the data time, worked out from its orbital elements with the two-body orbit and main J2 drift the live globe uses for its swarm, not with SGP4. The positions are approximate, and a satellite within ${NEAR_EQUATOR_DEG} degree of the equator is not counted as north or south of it. Positions are rounded to 0.1 degree for drawing. A map does not move after its page is built; the coastlines are the live globe's own.`,
@@ -79,7 +87,7 @@ export function hubPage(counts, { updated, pages = COUNTRY_PAGES }) {
   let starText = "";
   if (starOwners.length === 1 && lead) {
     const s = starOwners[0];
-    starText = ` Every Starlink satellite in the data, ${num(s.starlink)} of them, is recorded under ${esc(s.name)}.`;
+    starText = ` Every Starlink satellite in the data, ${num(s.starlink)} of them, is recorded under ${said(s, false)}.`;
     if (s === lead && total > s.starlink) starText += ` Leaving Starlink out, ${said(s, false)} has ${num(s.active - s.starlink)} of the other ${num(total - s.starlink)} active satellites, ${pct(share(s.active - s.starlink, total - s.starlink))} percent.`;
   }
   // the orbit groups of the owners with a page against all active satellites, so the method's orbit definitions describe something shown here
@@ -188,33 +196,54 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
   const mapDesc = `${num(dots)} dots for ${num(pts.length)} satellites.${lat.band ? ` Busiest band: ${bandLabel(lat.band)}.` : ""}`;
   const map = worldMapSvg({ coast, points: pts, id: "map", title: `${o.name}: satellite positions, ${time}, ${date}`, desc: mapDesc });
 
-  // purposes: the top eight and the rest
+  // purposes: the top eight and the rest; ties for the top recorded purpose are all named
   const topP = o.purposes.slice(0, 8), restP = o.purposes.slice(8).reduce((s, p) => s + p.count, 0);
   const unspecified = o.purposes.find((p) => p.name === "Unspecified");
-  const firstP = o.purposes.find((p) => p.name !== "Unspecified");
-  const purposeText = (unspecified && unspecified === o.purposes[0] ? `No grouping recorded for ${pct(share(unspecified.count, o.active))} percent. ` : "") +
-    (firstP ? `Top recorded purpose: ${esc(firstP.name)}, ${pct(share(firstP.count, o.active))} percent.` : "No purpose grouping is recorded for any of them.");
+  const recorded = o.purposes.filter((p) => p.name !== "Unspecified");
+  const topRec = recorded.length ? recorded.filter((p) => p.count === recorded[0].count) : [];
+  const nextRec = recorded.slice(topRec.length, topRec.length + 3);
+  const purposeText = (unspecified && unspecified === o.purposes[0] ? `The catalogue records no purpose grouping for ${pct(share(unspecified.count, o.active))} percent of them. ` : "") +
+    (topRec.length ? `The most common recorded purpose ${topRec.length > 1 ? `is shared by ${and(topRec.map((p) => esc(p.name)))}, with ${num(topRec[0].count)} satellites each` : `is ${esc(topRec[0].name)}, with ${num(topRec[0].count)} satellites`}, ${pct(share(topRec[0].count, o.active))} percent${topRec.length > 1 ? " each" : ""}.` : "No purpose grouping is recorded for any of them.") +
+    (nextRec.length ? ` After ${topRec.length > 1 ? "them" : "it"} come ${and(nextRec.map((p) => `${esc(p.name)} (${num(p.count)})`))}.` : "");
   // launch years
   const yearRows = yearRowsOf(o.launchYears);
   const y = new Date(counts.taken).getUTCFullYear();
   const recent5 = o.launchYears.filter((r) => r.year >= y - 4).reduce((s, r) => s + r.count, 0);
-  const peak = o.launchYears.reduce((a, r) => (!a || r.count > a.count ? r : a), null);
-  const first = o.launchYears[0], newest = o.launchYears[o.launchYears.length - 1];
+  const peakN = Math.max(0, ...o.launchYears.map((r) => r.count)), peaks = o.launchYears.filter((r) => r.count === peakN);
+  // name families (only when the feed has names): the unnamed are counted, ties are never ranked
+  const fams = o.families, top = fams[0], tiedFirst = top ? fams.filter((f) => f.count === top.count) : [];
+  const second = fams[tiedFirst.length], tiedSecond = second ? fams.filter((f) => f.count === second.count) : [];
+  const familyFaqOk = top && tiedFirst.length === 1 && o.noFamily < top.count - (second ? second.count : 0);
+  const famRow = (f) => [esc(f.name), num(f.count), pctText(share(f.count, o.active)), and(f.orbits.map((k) => ORBIT_SHORT[k])), f.purposes.length ? and(f.purposes.map(esc)) : "None recorded"];
+  const otherFams = fams.slice(10).reduce((s2, f) => s2 + f.count, 0);
+  // recent launches grouped by launch date; names first, launch designators counted
+  const desig = o.recent.filter((r) => isDesignatorOnly(r.name)), named = o.recent.filter((r) => !isDesignatorOnly(r.name));
+  const byDate = new Map();
+  for (const r of o.recent) { const k = r.date || ""; if (!byDate.has(k)) byDate.set(k, []); byDate.get(k).push(r); }
+  const recentRows = [...byDate].sort((a, b) => a[0].localeCompare(b[0])).map(([d, list]) => {
+    const nm = list.filter((r) => !isDesignatorOnly(r.name)).map((r) => r.name), ds = list.filter((r) => isDesignatorOnly(r.name)).map((r) => r.name);
+    const launches = [...new Set(ds.map(launchOf))].sort();
+    return [d ? esc(dateLong(d)) : "Date not recorded", num(list.length), nm.length ? esc(capList(nm, 3, "more")) : "None",
+      ds.length ? `${num(ds.length)} (${esc(launches.join(", "))})` : "None"];
+  });
+  const n30 = o.recent.length;
+  const recentText = !n30 ? "" : desig.length === 0 ? `${n30 === 1 ? "It has" : n30 === 2 ? "Both have" : `All ${num(n30)} have`} a name in the catalogue.`
+    : named.length === 0 ? `${n30 === 1 ? "It has" : n30 === 2 ? "Both have" : `All ${num(n30)} have`} only a launch designator so far, for example ${esc(desig[0].name)}, so ${v(n30, "it is", "they are")} not named in the catalogue yet.`
+    : `${num(named.length)} ${v(named.length, "has", "have")} a name in the catalogue and ${num(desig.length)} ${v(desig.length, "has", "have")} only a launch designator so far, for example ${esc(desig[0].name)}.`;
 
   const links = [`<a href="${href(file, HUB_FILE)}">all owners ranked</a>`]
     .concat(pages.filter((p) => p.slug !== page.slug).map((p) => `<a href="${href(file, p.file)}">${esc(p.name)}</a>`));
 
-  const rankBits = [above ? `${esc(above.name)} is ahead with ${num(above.active)}` : "", below ? `${esc(below.name)} follows with ${num(below.active)}` : ""].filter(Boolean).join("; ");
-  // Three or four questions, chosen and answered from this owner's own numbers, so no two pages carry the same set of answers.
+  const rankBits = [above ? `${said(above)} is ahead with ${num(above.active)}` : "", below ? `${said(below, !above)} follows with ${num(below.active)}` : ""].filter(Boolean).join("; ");
+  // Three questions, chosen and answered from this owner's own numbers, so no two pages carry the same set of answers.
   const faq = [
-    [`Where does ${page.phrase} rank among satellite owners?`,
-      `${rank === 1 ? "First" : cap(ordinal(rank))}${rankBits ? `. ${rankBits}` : ""}.`],
+    [`Where does ${page.phrase} rank among satellite owners?`, `${rank === 1 ? "First" : cap(ordinal(rank))}${rankBits ? `. ${rankBits}` : ""}.`],
     o.starlink > 0
       ? ["How much of this fleet is Starlink?", `${pct(share(o.starlink, o.active))} percent. Starlink alone is ${pct(share(o.starlink, total))} percent of our whole count.`]
-      : o.families.length ? [`Which ${page.name} satellite family is largest?`, `${esc(o.families[0].name)}, with ${num(o.families[0].count)}${o.families[1] ? `, ahead of ${esc(o.families[1].name)} with ${num(o.families[1].count)}` : ""}.`]
-      : firstP ? [`What are most ${page.name} satellites for?`, `${esc(firstP.name)}, the largest recorded purpose (${num(firstP.count)})${unspecified ? `; ${num(unspecified.count)} have no grouping` : ""}.`] : null,
+      : familyFaqOk ? [`Which name family is largest among satellites the catalogue records for ${page.phrase}?`, `${esc(top.name)}, with ${num(top.count)}${second ? `, ahead of ${and(tiedSecond.map((f) => esc(f.name)))} with ${num(second.count)}${tiedSecond.length > 1 ? " each" : ""}` : ""}${o.noFamily ? `; ${num(o.noFamily)} ${v(o.noFamily, "has", "have")} no name family, too few to change that order` : ""}.`]
+      : topRec.length ? [`What are most satellites the catalogue records for ${page.phrase} used for?`, `${and(topRec.map((p) => esc(p.name)))}, the largest recorded purpose${topRec.length > 1 ? "s, tied" : ""} (${num(topRec[0].count)}${topRec.length > 1 ? " each" : ""})${unspecified ? `; ${num(unspecified.count)} ${v(unspecified.count, "has", "have")} no grouping` : ""}.`] : null,
     o.last30 > 0
-      ? ["How many were launched in the last 30 days?", `${num(o.last30)} of the ${num(counts.last30)} recent launches still active in our count.`]
+      ? ["How many were launched in the last 30 days?", `${num(o.last30)} of the ${num(counts.last30)} active satellites launched in the 30 days before the data time.`]
       : [`Which orbit group stands out for ${page.phrase}?`, `${cap(ORBIT_PROSE[apart])}: ${pct(oShare(apart))} percent of this fleet, catalogue ${pct(wShare(apart))}.`],
   ].filter(Boolean);
 
@@ -222,36 +251,44 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
   const used = ORBIT_ORDER.filter((k) => o.orbits[k] > 0).sort((a, b) => o.orbits[b] - o.orbits[a] || ORBIT_ORDER.indexOf(a) - ORBIT_ORDER.indexOf(b));
   const answer = `Recorded as "${owner}", ${rank === 1 ? "the largest fleet" : `the ${ordinal(rank)} largest fleet`} among ${num(rows.length)} owners.` +
     (o.starlink > 0 ? ` Starlink makes up ${num(o.starlink)} of them; the other ${num(o.active - o.starlink)} are not Starlink.` : "");
-  const yearDesc = yearRows.map((r) => `${r.label}: ${num(r.value)}`).join(", ");
 
   const body = `
 <p>See also: ${links.join(", ")}.</p>
 
 <h2 id="answer">What makes up this fleet</h2>
-<p>${answer}${o.families.length ? ` Largest name families (first word of the catalogue name): ${o.families.slice(0, 3).map((f) => esc(f.name)).join(", ")}.` : ""}</p>
-${o.families.length ? table({ caption: "Largest name families", head: ["Family", "Satellites", "Share (percent)"], numeric: [1, 2], rows: o.families.slice(0, 10).map((f) => [esc(f.name), num(f.count), pctText(share(f.count, o.active))]) }) : ""}
-${o.recent.length ? `<p>Launched in the 30 days before ${esc(date)} and active: ${o.recent.slice(0, 12).map(esc).join(", ")}${o.recent.length > 12 ? ` and ${num(o.recent.length - 12)} more` : ""}.</p>
+<p>${answer}</p>
+${counts.named && fams.length + o.noFamily > 0 ? `
+<h2 id="names">Name families</h2>
+<p>Our own grouping by the letters that start each catalogue name ("DMC3" counts as DMC); where the catalogue uses more than one prefix for a fleet, we do not merge them. ${o.noFamily ? `${num(o.noFamily)} of these satellites (${pct(share(o.noFamily, o.active))} percent) ${v(o.noFamily, "has", "have")} no name family: ${v(o.noFamily, "its", "their")} catalogue name is only a launch designator, so ${v(o.noFamily, "it is", "they are")} not named yet, or does not start with letters.` : "Every one of these satellites has a name family."}</p>
+${table({ caption: "Largest name families", head: ["Family", "Satellites", "Share (percent)", "Main orbit group", "Main recorded purpose"], numeric: [1, 2],
+    rows: fams.slice(0, 10).map(famRow).concat(otherFams ? [[`${num(fams.length - 10)} other families`, num(otherFams), pctText(share(otherFams, o.active)), "", ""]] : []).concat(o.noFamily ? [["No name family", num(o.noFamily), pctText(share(o.noFamily, o.active)), "", ""]] : []) })}
+` : ""}${counts.named && o.recent.length ? `
+<h2 id="recent">Launched in the last 30 days</h2>
+<p>${num(o.recent.length)} of these satellites ${v(o.recent.length, "was", "were")} launched in the 30 days before the data time. ${recentText}</p>
+${table({ caption: "Recent launches by launch date (two launches on one day share a row)", head: ["Launch date", "Satellites", "Named", "Only a launch designator"], numeric: [1], rows: recentRows })}
 ` : ""}
 <h2 id="orbits">Orbit groups</h2>
 <p>${overText}Groups as defined under <a href="${method}">how these numbers are made</a>.</p>
 ${table({ caption: "By orbit group, largest first", head: ["Orbit group", "Satellites", "Share (percent)", "Catalogue share (percent)"], numeric: [1, 2, 3],
-    rows: used.map((k) => [esc(ORBIT_CHART_LABELS[k]), num(o.orbits[k]), pctText(oShare(k)), pctText(wShare(k))]) })}${used.length < ORBIT_ORDER.length ? `<p>None in ${ORBIT_ORDER.filter((k) => !used.includes(k)).map((k) => ORBIT_PROSE[k]).join(" or ")}.</p>` : ""}
+    rows: used.map((k) => [esc(ORBIT_CHART_LABELS[k]), num(o.orbits[k]), pctText(oShare(k)), pctText(wShare(k))]) })}${used.length < ORBIT_ORDER.length ? `<p>None of them is in ${ORBIT_ORDER.filter((k) => !used.includes(k)).map((k) => ORBIT_PROSE[k]).join(" or ")}.</p>` : ""}
 
 <h2 id="map">Map at the data time</h2>
 ${map}
-<p>At ${esc(time)}, approximate (<a href="${method}">how</a>). ${mapSummaryText(pts)}${dots < pts.length ? ` ${num(dots)} dots.` : ""}</p>
+<p>Positions at ${esc(time)} are approximate (<a href="${method}">how</a>). ${mapSummaryText(pts)}${dots < pts.length ? ` Satellites closer than 0.1 degree share a dot, so the map has ${num(dots)} dots.` : ""}</p>
 
 <h2 id="purpose">Purposes</h2>
-<p>${purposeText}${topP.length > 1 ? ` Next: ${topP.filter((p) => p !== firstP && p !== unspecified).slice(0, 3).map((p) => `${esc(p.name)} ${num(p.count)}`).join(", ") || "none"}.` : ""}</p>
+<p>${purposeText}</p>
 ${table({ caption: "By purpose, largest first", head: ["Purpose", "Satellites"], numeric: [1], rows: topP.map((p) => [esc(p.name), num(p.count)]).concat(restP ? [["All other purposes", num(restP)]] : []) })}
 
 <h2 id="growth">Launch years</h2>
-${o.oldest && o.newest && o.oldest.name !== o.newest.name ? `<p>Oldest still active: ${esc(o.oldest.name)}, launched ${esc(dateLong(o.oldest.date))}. Newest: ${esc(o.newest.name)}, ${esc(dateLong(o.newest.date))}.</p>
-` : ""}<p>${share(recent5, o.active) >= 0.5 ? `Mostly recent: ${pct(share(recent5, o.active))} percent went up in ${y - 4} or later.` : `Mostly older: only ${pct(share(recent5, o.active))} percent went up in ${y - 4} or later.`}${peak ? ` Peak ${peak.year} (${num(peak.count)})${o.oldest ? "" : `, oldest ${first.year}`}.` : ""}${o.unknownYear ? ` Undated: ${num(o.unknownYear)}.` : ""}</p>
-${columnChartSvg({ id: "chart-years", title: `Active satellites of ${o.name} by launch year`, desc: yearDesc || "No launch dates recorded.", rows: yearRows })}
+<p>${share(recent5, o.active) >= 0.5 ? `Most of them, ${pct(share(recent5, o.active))} percent, were launched in ${y - 4} or later.` : `Only ${pct(share(recent5, o.active))} percent of them were launched in ${y - 4} or later.`}${peaks.length ? ` The launch year with the most of them is ${and(peaks.map((r) => String(r.year)))}, with ${num(peakN)}${peaks.length > 1 ? " each" : ""}.` : ""}${o.unknownYear ? ` ${num(o.unknownYear)} ${v(o.unknownYear, "has", "have")} no launch date in the catalogue.` : ""}</p>
+${columnChartSvg({ id: "chart-years", title: `Active satellites of ${o.name} by launch year`, desc: `Today's active satellites by launch year, with all years before the latest fifteen combined as Earlier. The table below gives the numbers.`, rows: yearRows })}
+${table({ caption: "By launch year", head: ["Launch year", "Satellites"], numeric: [1], rows: yearRows.map((r) => [esc(r.label), num(r.value)]).concat(o.unknownYear ? [["No launch date", num(o.unknownYear)]] : []) })}
+${counts.named && o.earliest.length ? `<p>Earliest launches among satellites the catalogue lists as active:</p>
+${table({ caption: "Earliest launches still listed as active", head: ["Launch date", "Satellites"], rows: o.earliest.map((e) => [esc(dateLong(e.date)), esc(capList(e.names, 3, "more launched the same day"))]) })}` : ""}
 
 <h2 id="how">How this was counted</h2>
-<p>${num(o.active)} of the ${num(total)} satellites on the <a href="${href(file, SATCOUNT_FILE)}">count page</a> carry the owner "${owner}".${o.starlink > 0 ? " Starlink here means a name containing STARLINK." : ""}${o.unknownYear ? ` ${num(o.unknownYear)} have no launch date and are left out of the chart.` : ""} Full method: <a href="${method}">how these numbers are made</a>.</p>
+<p>${num(o.active)} of the ${num(total)} satellites on the <a href="${href(file, SATCOUNT_FILE)}">count page</a> carry the owner "${owner}".${o.starlink > 0 ? " Starlink here means a name containing STARLINK." : ""}${o.unknownYear ? ` ${num(o.unknownYear)} ${v(o.unknownYear, "has no launch date and is", "have no launch date and are")} left out of the chart.` : ""} Full method: <a href="${method}">how these numbers are made</a>.</p>
 
 <h2 id="faq">Questions</h2>
 ${faq.map(([q, a]) => `<h3>${esc(q)}</h3>\n<p>${a}</p>`).join("\n")}

@@ -36,56 +36,90 @@ const zeroOrbits = () => Object.fromEntries(ORBIT_ORDER.map((k) => [k, 0]));
 
 // Every owner the feed names (including owners with no active satellite) and "Not recorded" when an active satellite has no owner, in one
 // pass. Owners come back ranked by active satellites, then by name.
-// OURS: a name family is the run of letters at the start of a satellite's catalogue name ("STARLINK-1234" is STARLINK, "COSMOS 2545" is
-// COSMOS). It is a reading aid, not a catalogue field; names that start with anything else have no family.
+// OURS: a name family is the run of letters (two or more) at the start of a satellite's catalogue name: "STARLINK-1234" is STARLINK,
+// "COSMOS 2545" is COSMOS, "DMC3" is DMC, "SDA_1664" is SDA. It is a reading aid, not a catalogue field, and we do not merge families:
+// one fleet can appear under more than one name prefix. A name that is only a launch designator, or that does not start with letters,
+// has no family.
 export const nameFamily = (name) => { const m = /^[A-Z]{2,}/.exec(String(name || "").toUpperCase()); return m ? m[0] : null; };
+// A catalogue name that is only an international launch designator ("2026-205A"): the object has not been named yet.
+export const isDesignatorOnly = (name) => /^\d{4}-\d{3}[A-Z]{1,3}$/.test(String(name || "").trim());
+// "2026-205A" belongs to the launch "2026-205"
+export const launchOf = (designator) => String(designator).trim().slice(0, 8);
 
-// names (optional): the feed's names.txt as a string or an array of lines, in feed order. Without it, families are empty.
+const dayIso = (day) => launchDateFromDay(day).toISOString().slice(0, 10);
+// every entry of a count map that shares the highest count, in name order (several when they tie)
+const topTied = (map, order = (a, b) => a.localeCompare(b, "en")) => {
+  const best = Math.max(0, ...map.values());
+  return best ? [...map].filter(([, n]) => n === best).map(([k]) => k).sort(order) : [];
+};
+
+// names (optional): the feed's names.txt as a string or an array of lines, in feed order, one per object. Without it the name based
+// parts (families, recent names, earliest launches) are empty and `named` is false; every count is the same either way.
 export function countOwners({ meta, details, swarm, names = null }) {
-  const nameList = names === null ? null : Array.isArray(names) ? names : String(names).split("\n");
   const count = meta.count;
+  let nameList = null;
+  if (names !== null) {
+    // pipeline/pack.py writes the names joined by newlines with no newline at the end, so the split gives exactly one line per object
+    nameList = Array.isArray(names) ? names : String(names).split("\n");
+    if (nameList.length !== count) throw new Error(`satcountry: names.txt has ${nameList.length} lines, expected ${count} (one per object)`);
+  }
   checkDetails(details, count);
   const { f32, u16 } = readSwarm(swarm, count);
   const by = new Map();
   const get = (name) => {
-    if (!by.has(name)) by.set(name, { name, active: 0, starlink: 0, last30: 0, orbits: zeroOrbits(), purposes: new Map(), years: new Map(), families: new Map(), recent: [], oldest: null, newest: null, unknownYear: 0 });
+    if (!by.has(name)) by.set(name, { name, active: 0, starlink: 0, last30: 0, orbits: zeroOrbits(), purposes: new Map(), years: new Map(), families: new Map(), noFamily: 0, recent: [], dated: [], unknownYear: 0 });
     return by.get(name);
   };
   for (const name of meta.owners || []) get(name);
   const world = { active: 0, starlink: 0, last30: 0, orbits: zeroOrbits() };
-  const ownerOf = new Array(count).fill(null);
+  const ownerOf = new Array(count).fill(null), dayOf = new Array(count).fill(0);
   for (let i = 0; i < count; i++) {
     const d = unpackDetails(details, i);
     if (d.type !== 0 || !ACTIVE.has(d.status)) continue;
     const o = get(ownerName(meta, d));
-    ownerOf[i] = o;
+    ownerOf[i] = o; dayOf[i] = d.launchDay;
     o.active++; world.active++;
     if (u16[i * 6 + 5] === 1) { o.starlink++; world.starlink++; }
     const orbit = orbitClass(f32[i * 2 + 1], u16[i * 6] / 65535);
     o.orbits[orbit]++; world.orbits[orbit]++;
-    bump(o.purposes, meta.purposes[d.purpose] || "Unspecified");
+    const purpose = meta.purposes[d.purpose] || "Unspecified";
+    bump(o.purposes, purpose);
     const date = launchDateFromDay(d.launchDay);
     if (date) bump(o.years, date.getUTCFullYear()); else o.unknownYear++;
-    const fam = nameList ? nameFamily(nameList[i]) : null;
-    if (fam) bump(o.families, fam);
-    // the oldest and newest launch among this owner's active satellites, by launch day then feed order (named only when names are given)
-    if (d.launchDay && nameList && nameList[i] && nameList[i].trim()) {
-      const it = { name: nameList[i].trim(), day: d.launchDay };
-      if (!o.oldest || d.launchDay < o.oldest.day) o.oldest = it;
-      if (!o.newest || d.launchDay > o.newest.day) o.newest = it;
+    if (nameList) {
+      const name = String(nameList[i] || "").trim(), fam = nameFamily(name);
+      if (fam) {
+        if (!o.families.has(fam)) o.families.set(fam, { count: 0, orbits: new Map(), purposes: new Map() });
+        const f = o.families.get(fam);
+        f.count++; bump(f.orbits, orbit); if (purpose !== "Unspecified") bump(f.purposes, purpose);
+      } else o.noFamily++;
+      if (d.launchDay) o.dated.push({ day: d.launchDay, name: name || "(no name)" });
     }
   }
   // the same loop as countSatellites, so the 30 day numbers add up to its total
-  for (const i of meta.newIdx || []) if (ownerOf[i]) { ownerOf[i].last30++; world.last30++; if (nameList && nameList[i]) ownerOf[i].recent.push(nameList[i].trim()); }
+  for (const i of meta.newIdx || []) {
+    if (!ownerOf[i]) continue;
+    ownerOf[i].last30++; world.last30++;
+    if (nameList) ownerOf[i].recent.push({ name: String(nameList[i] || "").trim() || "(no name)", date: dayOf[i] ? dayIso(dayOf[i]) : null });
+  }
   const rows = (map) => [...map].map(([name, n]) => ({ name, count: n })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "en"));
+  const byName = (a, b) => a.name.localeCompare(b.name, "en");
+  // the three earliest launch days among the owner's active satellites, each with every satellite launched that day
+  const earliest = (dated) => {
+    const days = new Map();
+    for (const x of dated) { if (!days.has(x.day)) days.set(x.day, []); days.get(x.day).push(x.name); }
+    return [...days].sort((a, b) => a[0] - b[0]).slice(0, 3).map(([day, n]) => ({ date: dayIso(day), names: n.sort((a, b) => a.localeCompare(b, "en")) }));
+  };
   const owners = [...by.values()].map((o) => ({
     name: o.name, active: o.active, starlink: o.starlink, last30: o.last30, orbits: o.orbits, purposes: rows(o.purposes),
-    launchYears: [...o.years].sort((a, b) => a[0] - b[0]).map(([year, n]) => ({ year, count: n })), unknownYear: o.unknownYear, families: rows(o.families),
-    recent: [...new Set(o.recent)].filter(Boolean).sort((a, b) => a.localeCompare(b, "en")),
-    oldest: o.oldest && { name: o.oldest.name, date: launchDateFromDay(o.oldest.day).toISOString().slice(0, 10) },
-    newest: o.newest && { name: o.newest.name, date: launchDateFromDay(o.newest.day).toISOString().slice(0, 10) },
+    launchYears: [...o.years].sort((a, b) => a[0] - b[0]).map(([year, n]) => ({ year, count: n })), unknownYear: o.unknownYear,
+    families: [...o.families].map(([name, f]) => ({ name, count: f.count, orbits: topTied(f.orbits, (a, b) => ORBIT_ORDER.indexOf(a) - ORBIT_ORDER.indexOf(b)), purposes: topTied(f.purposes) }))
+      .sort((a, b) => b.count - a.count || byName(a, b)),
+    noFamily: o.noFamily,
+    recent: o.recent.sort((a, b) => String(a.date).localeCompare(String(b.date)) || byName(a, b)),
+    earliest: earliest(o.dated),
   })).sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, "en"));
-  return { taken: meta.taken, ...world, owners };
+  return { taken: meta.taken, ...world, named: nameList !== null, owners };
 }
 
 // null when the page can be built, otherwise the reason it is skipped.
