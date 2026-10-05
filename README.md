@@ -32,15 +32,15 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 251 unit tests for the app, no browser needed
-npm run test:pipeline   # 169 tests for the data pipeline (Python, standard library only)
+npm test                # 324 unit tests for the app, no browser needed
+npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
-npm run test:hosting    # 84 checks of the PHP hosting scripts (needs php)
-npm run site            # the content site into dist/site: 111 pages, the app as index.html, sitemap.xml, robots.txt (run npm run build first)
-npm run e2e             # 282 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:site        # 11 browser checks of the built content site served raw, the way a web host serves it (builds it first)
-npm run e2e:live        # 92 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
+npm run test:hosting    # 131 checks of the PHP hosting scripts (needs php)
+npm run site            # the content site into dist/site: 113 pages (112 static pages and the app as index.html), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
+npm run e2e             # 286 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:site        # 17 browser checks (last recorded run) of the built content site served raw, the way a web host serves it (builds it first)
+npm run e2e:live        # 112 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
 ```
@@ -84,11 +84,11 @@ npm run pipeline -- --data live --baseline public
 
 Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the page. `npm run pipeline -- --list` prints each feed with what its source says.
 
-**Scheduling.** `.github/workflows/live-data.yml` runs the collector about every 10 minutes and publishes its output to a `data` branch of the repository as a single commit. It needs a repository secret named `CONTACT_EMAIL`. `.github/workflows/ci.yml` runs the unit tests on every push. Both were written from GitHub's documentation and have not been run yet.
+**Scheduling.** `.github/workflows/live-data.yml` runs the collector and publishes its output to a `data` branch of the repository as a single commit. It needs a repository secret named `CONTACT_EMAIL`. It ran on GitHub Actions for the first time on 2026-10-05 and has published to the `data` branch since. GitHub's own every-10-minutes schedule produced only 3 runs in about 9 hours on 2026-10-05, so a cron job on the Hostinger account starts it instead (see below). `.github/workflows/ci.yml` runs the unit tests on every push; `gh run list` showed successful runs on `main` on 2026-10-05.
 
-**Serving it is not decided.** The page needs `live/` next to it. Two ways exist: serve the `data` branch next to the page (for example with GitHub Pages), or copy the folder to any static host. Neither has been tried. The bundled preview on claude.ai cannot reach any feed, so it is built with live polling off and shows the snapshot, and the Data tile says so.
+**Serving it.** The page needs `live/` next to it. The site on Hostinger gets it from two cron jobs on the Hostinger account: `hosting/trigger.php` starts the collector on GitHub, and `hosting/pull.php` copies the `data` branch's output into the site's `live/` folder (and, with `--pages-dest`, the live satellite count page and its sitemap). The data path was verified end to end on 2026-10-05: the site's `live/manifest.json` matched the `data` branch and the clock chip changed to LIVE. NOT CONFIRMED: that the live satellite count page reaches the site this way (the cron job must carry `--pages-dest`; see `docs/handoff.md`, item 4). Setup and limits are in `hosting/README.md`. Serving the `data` branch by other means (for example GitHub Pages) has not been tried. The bundled preview on claude.ai cannot reach any feed, so it is built with live polling off and shows the snapshot, and the Data tile says so.
 
-**Not tested here.** The build sandbox's connection to CelesTrak is reset mid-request, so a live download of element sets and the daily catalogue build have not been run against the real service. The satellite path was tested at full size with the real 7 MB download served through the real runner, and the CelesTrak behaviour (one request, no retry, halt on any refusal) is tested with a fake network. The first scheduled run will be the first real one.
+**Not tested in the build sandbox.** The build sandbox's connection to CelesTrak is reset mid-request, so a live download of element sets and the daily catalogue build could not be run against the real service there. The satellite path was tested at full size with the real 7 MB download served through the real runner, and the CelesTrak behaviour (one request, no retry, halt on any refusal) is tested with a fake network. The collector has since run against the real services, on the Mac and on GitHub Actions, on 2026-10-05 (see `docs/handoff.md`).
 
 ## Content site (search pages)
 
@@ -103,7 +103,7 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 
 An indexable build also writes llms.txt (a short summary and links in the llmstxt.org layout); a noindex build writes it no more than it writes a sitemap.
 
-While the site sits on a temporary test address, set `SITE_NOINDEX=1` for the build (and `SITE_URL` to that address). Every page then says `noindex,nofollow`, `robots.txt` disallows everything and no `sitemap.xml` is written. Remove it for the real launch. Only `1` and `0` are accepted; any other value stops the build. See `docs/hosting.md`.
+`SITE_NOINDEX=1` is an option for a site on a temporary address that must not be indexed (set `SITE_URL` to that address too). Every page then says `noindex,nofollow`, `robots.txt` disallows everything, and no sitemap and no `llms.txt` are written. `zeninnov8.com` is built without it (indexable) since 2026-10-05. Only `1` and `0` are accepted; any other value stops the build. See `docs/hosting.md`.
 
 The build stops if the Moon phases, seasons, solar eclipses or solstice sunrise and sunset times stop agreeing with the US Naval Observatory tables saved in `test/fixtures/usno`, and a page only quotes a comparison result that ran in that build. Set `SITE_URL` to the real address before building; until then canonical links and the sitemap use `https://amitvprabhu-lang.github.io/Radar-around-you`, which is a guess at where GitHub Pages would serve this repository. `test/site.test.js` checks unique titles and descriptions, every internal link and anchor, the sitemap, the house style and the constellation facts.
 

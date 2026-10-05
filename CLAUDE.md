@@ -14,9 +14,9 @@ A free, global, real-time 3D web tool: satellites and the ISS above you, the sky
 ## Commands
 | Command | What it does | Last known result |
 | --- | --- | --- |
-| `npm test` | unit tests (`test/*.test.js`) | 315 pass (macOS, Node 24, 2026-10-05) |
+| `npm test` | unit tests (`test/*.test.js`) | 324 pass (macOS, Node 24, 2026-10-05) |
 | `npm run test:pipeline` | Python collector tests | 175 run, 3 skipped, none failed (macOS). The 3 skipped need raw downloads that are not in the repository (`raw/`, `raw2/` are ignored). The cloud note said 177; why the counts differ is NOT CONFIRMED. |
-| `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 125 pass (macOS with PHP 8.5.11 from Homebrew on 2026-10-05; 92 passed before the pages option was added, on the cloud and the Mac). On PHP 8.5 it prints a deprecation notice for `$http_response_header` in `hosting/lib.php` line 41; the server runs PHP 8.3.33 where it is silent. |
+| `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 131 pass (macOS with PHP 8.5.11 from Homebrew on 2026-10-05; 92 passed before the pages option was added, on the cloud and the Mac, and 125 before the page paths were narrowed to the two live files). On PHP 8.5 it prints a deprecation notice for `$http_response_header` in `hosting/lib.php` line 41; the server runs PHP 8.3.33 where it is silent. |
 | `npm run e2e` | snapshot build in Chromium, phone and desktop | 286 pass, no console errors (macOS, Chromium 153) |
 | `npm run e2e:live` | live-mode states in Chromium | 112 pass. One run on the same code failed 9 checks (the page stayed on the snapshot) and the rerun passed; not diagnosed. |
 | `npm run e2e:site` | the built content site served raw, as a web host serves it | 17 pass (macOS, 2026-10-05) with only `SITE_URL=https://zeninnov8.com` set (the production setting, indexable since 2026-10-05) and 17 with `SITE_NOINDEX=1` added (the noindex build). Without `SITE_URL` the canonical check fails, because the default address has a path. |

@@ -10,10 +10,10 @@ What is checked and what is not, so nobody has to guess later. Read on 2026-10-0
 - Static front ends are served from `~/domains/<domain>/public_html`. Hostinger generates an `.htaccess` there and says it is regenerated on every redeploy and should not be edited by hand.
 
 ## What this project needs
-- Build command: `npm run build:hosting` (runs `npm run build`, then `npm run site`). Tested from a clean clone of the repository: install about 2 seconds, build about 2 seconds, 111 pages, 8.6 MB.
+- Build command: `npm run build:hosting` (runs `npm run build`, then `npm run site`). Tested from a clean clone of the repository: install about 2 seconds, build about 2 seconds, 111 pages, 8.6 MB (at that time; on 2026-10-05 after the About page `npm run site` printed 113 pages: 112 static pages plus the app as `index.html`).
 - Output directory: `dist/site`.
 - Environment variable: `SITE_URL`, the final address, for example `https://example.org`. Without it the canonical links and sitemap use a guess at a GitHub Pages address. The build stops with a message if the value is not a plain `https` address in lowercase (no spaces, login, query or fragment); trailing slashes are removed. This guards against a typing slip such as a stray character in front of `https`, which would otherwise put wrong canonical links on every page without any error.
-- Environment variable: `SITE_NOINDEX`, set to `1` while the site is on a temporary address that must not be indexed (see "Testing on a temporary address" below). Leave it out for the real launch. Only `1` turns it on and only `0` or nothing turns it off; any other value stops the build with a message, so a typo cannot quietly decide this.
+- Environment variable: `SITE_NOINDEX`, set to `1` only for a temporary address that must not be indexed (see "Testing on a temporary address" below). Leave it out or set `0` for an indexable site; zeninnov8.com is built with `0` since 2026-10-05. Only `1` turns it on and only `0` or nothing turns it off; any other value stops the build with a message, so a typo cannot quietly decide this.
 - Node.js 22 (the version the project was built and tested with).
 
 ## Steps (the exact button names in hPanel were not checked)
@@ -33,7 +33,8 @@ The first test site is `https://zeninnov8.com`, at the root of that domain, to b
 With `SITE_NOINDEX=1` the build changes only what crawlers are told:
 - every page, and the app page, carries `<meta name="robots" content="noindex,nofollow">` instead of `index,follow,max-image-preview:large`;
 - `robots.txt` says `User-agent: *` and `Disallow: /`, with no `Sitemap:` line;
-- `sitemap.xml` is not written, because a sitemap lists pages for search engines and would contradict the page tags.
+- `sitemap.xml` and `sitemap-live.xml` are not written, because a sitemap lists pages for search engines and would contradict the page tags (the live page's GitHub build, `site/build-live.mjs`, also writes no `sitemap-live.xml` and removes an old one);
+- `llms.txt` is not written either.
 
 The pages, links and canonical addresses are otherwise identical, and the build prints `NOINDEX IS ON` so it shows in the build log. The unit tests (`test/site.test.js`) check that a normal build is unchanged, that a noindex build has no indexable page, and that a bad value stops the build.
 

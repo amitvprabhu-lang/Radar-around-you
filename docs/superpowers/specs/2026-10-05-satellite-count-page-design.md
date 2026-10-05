@@ -4,6 +4,8 @@ Status: approved by the owner in conversation on 2026-10-05, written down here f
 
 ## 1. Why this page, and why not launches
 
+> Note added 2026-10-05, after this design was written: on 2026-10-05 the owner decided to keep zeninnov8.com indexable (`SITE_NOINDEX` is `0` on Hostinger and in the GitHub repository variables). Statements in this section that the test domain stays noindex no longer hold; the text below is kept as it was decided at the time.
+
 The owner asked for live-data pages that could help the site rank in search. The first proposal was a rocket launches pilot. The owner then supplied Ubersuggest exports for a competitor, orbitalradar.com (estimates, not measurements; the export lists are subsets: the top 600 pages and the top 2,000 keywords). What those exports showed:
 
 - One page, "how many satellites are in orbit", holds about 77% of the estimated visits in the top-600 list (64,352 of 83,207). The top 5 pages hold 86% and the top 20 hold 94%. 425 of the 600 pages have 5 or fewer estimated visits.
@@ -59,6 +61,8 @@ Structured data: BreadcrumbList and WebPage, with `dateModified` equal to the vi
 
 ## 5. How it stays fresh
 
+> Note added 2026-10-05, after this design was written: on 2026-10-05 the owner decided to keep zeninnov8.com indexable (`SITE_NOINDEX` is `0` on Hostinger and in the GitHub repository variables). Statements in this section that the test domain stays noindex no longer hold; the text below is kept as it was decided at the time.
+
 One code path, two places it runs:
 
 1. **After each collection, on GitHub.** A new step in `.github/workflows/live-data.yml` runs `node site/build-live.mjs --data live --out pages`. It rebuilds the page only when the satellites feed's version has changed since the previous build (the previous `pages/index.json` is restored with the collector's memory), otherwise it keeps the existing page. Output goes into the `data` branch under `pages/`: the page, `sitemap-live.xml` and `pages/index.json` (each file's path, hash and the time its content last changed). The step needs Node set up in the workflow (the workflow has Python only today).
@@ -104,6 +108,8 @@ A new `docs/satcount-sources.md` records, in the style of `docs/star-sources.md`
 - Scope of the feed: CelesTrak's active, stations and visual lists plus four debris clouds (read from the collector's code on 2026-10-05). It is not the full catalogue.
 
 ## 10. Rollout and measuring
+
+> Note added 2026-10-05, after this design was written: on 2026-10-05 the owner decided to keep zeninnov8.com indexable (`SITE_NOINDEX` is `0` on Hostinger and in the GitHub repository variables). Statements in this section that the test domain stays noindex no longer hold; the text below is kept as it was decided at the time. `llms.txt` was later added as an optional extra by the About plan (`docs/superpowers/plans/2026-10-05-about-page-and-llms.md`); it is written only for indexable builds (see `docs/about-sources.md`), so the last sentence of this section no longer holds.
 
 1. Build and test locally, then push. The page appears on the test domain, still noindex.
 2. Verify on the live test domain with `curl` and a screenshot and compare the numbers.

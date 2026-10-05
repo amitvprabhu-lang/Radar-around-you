@@ -34,7 +34,7 @@ export const SITE = {
   // Set SITE_URL when the domain is chosen. Until then canonical links use DEFAULT_SITE_URL, which is an assumption.
   url: siteUrlFromEnv(process.env.SITE_URL),
   repo: "https://github.com/amitvprabhu-lang/Radar-around-you",
-  // set SITE_NOINDEX=1 while the site is on a temporary address; remove it when the real domain goes live
+  // SITE_NOINDEX=1 is for a temporary address (every page noindex, no sitemap, no llms.txt); leave it unset or 0 for an indexable site
   noindex: noindexFromEnv(process.env.SITE_NOINDEX),
 };
 

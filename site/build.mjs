@@ -148,5 +148,5 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const r = build({ allowUnchecked: process.env.ALLOW_UNCHECKED === "1" });
   console.log(`site: ${r.pages} pages written to ${r.outDir} (canonical base ${SITE.url})`);
-  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away and robots.txt disallows everything. Remove SITE_NOINDEX before the real launch.");
+  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away, robots.txt disallows everything, and no sitemap or llms.txt is written. This setting is for a temporary address.");
 }

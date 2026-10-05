@@ -31,4 +31,4 @@ Why not rely on GitHub's own schedule: on 2026-10-05 the repository's every-10-m
 - **Unknown until tested on your account:** whether a deployment also clears folders outside `public_html` (keep the scripts and the token file there and check after the next deployment), whether cron can run PHP at the interval you set, and how GitHub treats a workflow started every 10 minutes (it should only cost free minutes for a public repository; check GitHub's current billing page).
 
 ## Tests
-`php hosting/tests/run.php` (about 125 checks, no network). `php hosting/tests/integration.php SOURCE DEST` copies a real collector output folder through the puller and compares every file. Both were run on PHP 8.3; nothing newer than PHP 7.4 syntax is used, but 7.4 itself was not available to run.
+`php hosting/tests/run.php` (131 checks on 2026-10-05, no network). `php hosting/tests/integration.php SOURCE DEST` copies a real collector output folder through the puller and compares every file. Both were run on PHP 8.3; nothing newer than PHP 7.4 syntax is used, but 7.4 itself was not available to run.

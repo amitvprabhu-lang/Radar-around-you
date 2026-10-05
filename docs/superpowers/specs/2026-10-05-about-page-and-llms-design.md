@@ -4,6 +4,8 @@ Status: design approved by the owner in conversation on 2026-10-05 ("Build and d
 
 ## 1. Why
 
+> Note added 2026-10-05, after this design was written: on 2026-10-05 the owner decided to keep zeninnov8.com indexable (`SITE_NOINDEX` is `0` on Hostinger and in the GitHub repository variables), so the sentence below that the test domain stays noindex no longer holds.
+
 The site's 110 content pages are rich in readable text, but the home page is the 3D app: about 100 words of text outside scripts (the title, a description, structured data and a `<noscript>` paragraph with nine links). Nothing on it tells a search engine or an AI tool what the site does. The owner asked for the site text to be rich, fully indexable and easy for search engines and AI tools to understand. The test domain stays noindex for now; everything here must be ready for the day the flag is removed.
 
 ## 2. What is built
