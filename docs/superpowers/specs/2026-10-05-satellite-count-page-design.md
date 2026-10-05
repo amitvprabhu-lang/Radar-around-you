@@ -11,7 +11,9 @@ The owner asked for live-data pages that could help the site rank in search. The
 - The competitor's launch-related keywords (82 of them) account for about 3% of the keyword traffic. Its many city, entity and launch pages are not where the traffic comes from.
 - Its home page has about 7,300 backlinks and the winning page 63. Links to the site are very likely a large part of its lead and cannot be copied with on-page work.
 
-Our own app already shows the same number ("19,314 objects in orbit", from the CelesTrak catalogue the collector fetches). So the pilot is a live page that answers that question better than one number can: three clearly defined answers plus breakdowns computed from our own catalogue. The launches page is deferred (section 10).
+Our own app already shows a similar number ("19,314 objects in orbit"). So the pilot is a live page that answers the question with a clearly defined number plus breakdowns computed from our own catalogue. The launches page is deferred (section 10).
+
+Correction made the same day, before any code was written: the satellite feed is not the full catalogue. `pipeline/feeds.py` fetches CelesTrak's "active", "stations" and "visual" GP lists, and `pipeline/catalogue.py` adds four named debris clouds. The bundled snapshot shows the effect: of 19,316 objects, 16,632 are payloads, 4 are rocket bodies, 2,677 are debris and 3 are of unknown type, and only 2 objects have the status "Not operational". So the feed can honestly give the count of active satellites, and it cannot give a count of all satellites, all rocket bodies or all debris. An earlier draft of this spec promised those counts. They are removed. A fuller count would need a larger data source (for example the full CelesTrak or Space-Track catalogue), which is a later phase and raises its own reuse question (section 9).
 
 What is not known: whether this page will rank. The competitor already holds position 1 for the query family and has a large link lead. No effect on search is possible while the site is on the test domain with noindex.
 
@@ -23,15 +25,13 @@ Out of scope: the launches page, per-country or per-operator pages, an Atom or R
 
 ## 3. The page
 
-Title: "How many satellites are in orbit? Live count, 5 October 2026" (the date is the data date, written out in words). The meta description states the three numbers.
+Title: "How many satellites are in orbit? Live count, 5 October 2026" (the date is the data date, written out in words). The meta description states the active count.
 
-Three answers, each defined in plain words on the page:
+One headline number, defined in plain words on the page:
 
-1. **Active satellites.** Payloads whose recorded status is Operational, Partially operational, Backup or standby, Spare or Extended mission. This is our definition, not CelesTrak's. It excludes Not operational, Decayed and Not known.
-2. **All satellites.** Every object whose type is payload, working or not.
-3. **All tracked objects.** Payloads, rocket bodies, debris and objects of unknown type that have current orbital data. Today this is 19,314, the same figure the app shows.
+**Active satellites.** Payloads (object type Satellite) in the feed whose recorded status is Operational, Partially operational, Backup or standby, Spare or Extended mission. This is our definition, not CelesTrak's, and the feed is CelesTrak's "active" list, so the number is the count of active satellites that list holds. A table gives the count for each individual status and for payloads with no status recorded, so a reader who wants a different definition can add them up.
 
-A table also gives the count for each individual status, so a reader who wants a different definition can add them up.
+A "What this count does not include" section says plainly that the page does not count defunct satellites, rocket bodies or most debris, because the data behind it is the active list. It states that the feed holds four named debris clouds that are not the total debris population and are not presented as one. It points to the app for the objects the app shows.
 
 Breakdowns, each as inline SVG with a title and description plus a text table as its alternative:
 
@@ -41,7 +41,7 @@ Breakdowns, each as inline SVG with a title and description plus a text table as
 - launch year (a column per year, showing the growth)
 - launched in the last 30 days, and the Starlink share
 
-Text: a short answer paragraph for each common phrasing of the question, a "How we count" section with the definitions above, a visible "Data as of" time, a "Page updated" time (when the page was last rebuilt, which only happens when the satellites data changes), a credit to CelesTrak and a link to its pages, and a short visible FAQ that repeats the key numbers as text. A link into the 3D app and to the satellites guide.
+Text: an answer-first opening sentence (the active count, its definition and the data time in the first sentence, so a search snippet or an AI answer can quote it), headings written as the questions people ask, a short answer paragraph for each common phrasing of the question, a "How we count" section with the definitions above, a visible "Data as of" time, a "Page updated" time (when the page was last rebuilt, which only happens when the satellites data changes), a credit to CelesTrak and a link to its pages, and a short visible FAQ that repeats the key numbers as text. A link into the 3D app and to the satellites guide.
 
 Rules for every number on the page:
 
@@ -72,7 +72,7 @@ Sitemap: while the site is noindex there is no sitemap and robots.txt disallows 
 
 ## 6. Safety rails
 
-- The builder refuses to write the page and the workflow step fails if the totals are implausible (fewer than 10,000 or more than 100,000 tracked objects) or if payloads plus rocket bodies plus debris plus unknowns do not equal the total.
+- The builder refuses to write the page and the workflow step fails if the active satellite count is implausible (fewer than 5,000 or more than 60,000) or if payloads plus rocket bodies plus debris plus unknowns do not equal the number of objects in the feed.
 - A failed build leaves the previous page on the site, because the pull only copies files that changed.
 - If the collector is halted by a source's usage policy, the page keeps its last good numbers and shows the true "Data as of" time.
 - The delay between a source updating and the page changing is about 10 to 20 minutes plus the satellites feed's own 2 hour refresh (`refreshSec` 7200 in the manifest).
@@ -85,9 +85,9 @@ Sitemap: while the site is noindex there is no sitemap and robots.txt disallows 
 
 ## 8. Tests (written before the code)
 
-- `test/satcount.test.js`: a small hand-built catalogue with known answers. Payload, rocket body, debris and unknown sum to the total; status mapping matches the recorded CelesTrak codes; orbit boundaries at their exact edges; "last 30 days" on the boundary day; empty and tiny inputs.
-- Against the real bundled snapshot: the counter agrees with the catalogue's own totals (19,314 objects at the time of writing).
-- An independent check by hand: compare the totals with one independent published count (CelesTrak's own statistics page or the UCS Satellite Database), and record the date and result in the source record. Until that is done the page says "our count" and accuracy is NOT CONFIRMED.
+- `test/satcount.test.js`: a small hand-built catalogue with known answers. Payload, rocket body, debris and unknown sum to the number of objects in the feed; status mapping matches the recorded CelesTrak codes; orbit boundaries at their exact edges; "last 30 days" on the boundary day; empty and tiny inputs.
+- Against the real bundled snapshot: the counter's totals agree with the feed's own totals (19,316 objects, 16,632 payloads and 2,677 debris pieces in the bundled snapshot).
+- An independent check by hand: compare the active satellite count with one independent published count (CelesTrak's own statistics page or the UCS Satellite Database), and record the date and result in the source record. Until that is done the page says "our count" and accuracy is NOT CONFIRMED.
 - `test/pages-satcount.test.js` and additions to `test/site.test.js`: the number in the title, headline, FAQ and structured data is identical; internal links resolve; no em dashes or emoji; structured data parses; charts have text alternatives; no external requests; canonical and robots tags follow `SITE_NOINDEX`; the page is under a size cap.
 - PHP tests in `hosting/tests/run.php`: a path with `..` is rejected, unchanged files are skipped, writes are atomic, a half-failed pull keeps the old file. PHP is installed on the Mac (8.5.11) and `npm run test:hosting` passed 92 on 2026-10-05.
 - `e2e-site.mjs`: one more check that the page loads raw as a web host serves it, in standards mode, as UTF-8, with the right canonical and robots tags.
@@ -101,6 +101,7 @@ A new `docs/satcount-sources.md` records, in the style of `docs/star-sources.md`
 - Status codes: from `docs/feature-sources.md` (CelesTrak status codes page). Which codes count as "active" is our definition.
 - Orbit boundaries: our working definitions (section 3). NOT CONFIRMED against a cited standard.
 - The competitor figures in section 1 are Ubersuggest estimates supplied by the owner.
+- Scope of the feed: CelesTrak's active, stations and visual lists plus four debris clouds (read from the collector's code on 2026-10-05). It is not the full catalogue.
 
 ## 10. Rollout and measuring
 
@@ -109,7 +110,9 @@ A new `docs/satcount-sources.md` records, in the style of `docs/star-sources.md`
 3. Indexing changes only when the owner chooses the final domain: then drop noindex, update both `SITE_URL` settings, and submit the sitemap in Google Search Console.
 4. Measuring cannot start until the final domain is indexed. Track the query family "how many satellites in orbit" and its variants weekly in Search Console (the Search Console connector failed to connect earlier, so it would be fixed or read by hand). Success markers are the author's guesses, not benchmarks: indexed within two weeks, impressions within four, top 10 for at least one variant within twelve. If none appears, review the page before building more. Do not judge it before about three months.
 
-Later, not in this pilot: the launches page (with light at the pad, Earth-shadow height, launch times in six cities and distance from the visitor's place, as designed in conversation), per-country satellite pages, an Atom feed, IndexNow.
+Search and answer engines: pages are indexable and quotable by design (answer-first sentence, question headings, tables, visible dates, structured data that matches the text). Google documents no special markup or files for its AI features. At launch the owner decides which crawlers `robots.txt` should name (search and answer crawlers such as OAI-SearchBot and Claude-SearchBot versus training crawlers such as GPTBot and ClaudeBot); the default `Allow: /` admits all of them. `llms.txt` is not added (no evidence that search engines or assistants read it for ordinary sites).
+
+Later, not in this pilot: IndexNow and Bing Webmaster Tools, the full-catalogue counts, the launches page (with light at the pad, Earth-shadow height, launch times in six cities and distance from the visitor's place, as designed in conversation), per-country satellite pages, an Atom feed, IndexNow.
 
 ## 11. Risks
 
@@ -117,6 +120,7 @@ Later, not in this pilot: the launches page (with light at the pad, Earth-shadow
 | --- | --- |
 | The competitor holds position 1 and has a large link lead | Cannot be fixed on the page. Success markers above are modest and judged after three months. |
 | CelesTrak reuse terms are unclear | Aggregate counts only, a credit, a source record. Consider asking CelesTrak directly. |
+| The feed is CelesTrak's active list, not the full catalogue | The page says so in "What this count does not include" and does not publish counts for rocket bodies, debris or defunct satellites. |
 | Our "active" and orbit definitions differ from others | Defined openly on the page, with the per-status table so readers can recompute. |
 | The pull or the workflow fails silently | The page shows the true data time; the builder's plausibility checks fail the step loudly. |
 | `hosting/lib.php` line 41 uses `$http_response_header`, deprecated in PHP 8.5 | Works silently on the server's PHP 8.3.33. Low priority; fix with a version check when the host moves to 8.4 or later. |
