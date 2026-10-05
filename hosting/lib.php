@@ -212,13 +212,15 @@ function radar_prune(string $dest, array $keep): int
 // "satellites-by-country/index.html" and "satellites-by-country/<slug>/index.html" for the five slugs below. So a damaged or hostile
 // index cannot overwrite any other page of the site (such as about/index.html) or write anywhere else. \z (not $) is used so a trailing
 // newline cannot slip through.
+// The six live pages from the hazard feeds (docs/superpowers/specs/2026-10-06-live-hazard-pages-design.md) are allowed ahead of being built,
+// so the owner copies this file to the server once for all of them; a path that is allowed but absent from pages/index.json is never fetched.
 // The slugs must match COUNTRY_PAGES in site/satcountry.mjs (a unit test, test/satcountry.test.js, checks they match). Adding a country
 // page means adding its slug here as well, and the owner copying this lib.php to the server again; until then the server refuses it.
 const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the largest live page (the United States page with its map) is about 240 KB
 
 function radar_safe_page_path(string $p): bool
 {
-    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/(?:united-states|china|united-kingdom|cis-former-ussr|japan)/index\.html)\z#', $p);
+    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/(?:united-states|china|united-kingdom|cis-former-ussr|japan)/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now)/index\.html)\z#', $p);
 }
 
 // Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist; the folders inside it,
