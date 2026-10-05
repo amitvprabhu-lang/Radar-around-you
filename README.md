@@ -32,7 +32,7 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 379 unit tests for the app and the content site, no browser needed
+npm test                # 380 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
@@ -125,7 +125,7 @@ test/       unit tests, checked against satellite.js, astronomy-engine and the r
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
 site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs;
             satcount.mjs, satcountry.mjs, svgmap.mjs and build-live.mjs for the live satellite pages
-hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site) with 167 checks; see hosting/README.md
+hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site) with 185 checks; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
 e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts
