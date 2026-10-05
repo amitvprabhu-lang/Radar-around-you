@@ -352,3 +352,91 @@ def close_approaches(body, now):
         raise ValidationError("close approaches: the row count does not match the count the API reported")
     out.sort(key=lambda r: r["time"])
     return {"generated": iso(now), "version": sig["version"], "ldKm": LD_KM, "approaches": out}
+
+
+# ---------------------------------------------------------------- The Space Devs: Launch Library 2 upcoming launches
+LL2_MAX_LAUNCHES = 40          # OURS: the app lists at most this many
+LL2_DATE_WINDOW_DAYS = (-3, 800)  # OURS: a launch date outside this range around today means a broken answer
+
+
+def _text(v, limit=160):
+    """A short plain string from a source field, or None. Control characters are dropped and long text is cut."""
+    if not isinstance(v, str):
+        return None
+    t = re.sub(r"[\x00-\x1f\x7f]", " ", v).strip()
+    return t[:limit] if t else None
+
+
+def _coord(v, limit):
+    """A latitude or longitude as a float, or None. The source has sent these as numbers; a numeric string is accepted too."""
+    if isinstance(v, str):
+        try:
+            v = float(v)
+        except ValueError:
+            return None
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and -limit <= v <= limit else None
+
+
+def _one_per(items, key):
+    """Keep one item per key, the one the source updated last (the first if neither says). Returns the kept items and how many were dropped."""
+    best = {}
+    for x in items:
+        k = key(x)
+        if k not in best or (x.get("updated") or "") > (best[k].get("updated") or ""):
+            best[k] = x
+    return list(best.values()), len(items) - len(best)
+
+
+def launches(body, now):
+    """Upcoming launches from Launch Library 2, soonest first. The planned time (net) can be exact or only a month or quarter;
+    the source says which in net_precision, and that is passed on so the app never shows a vague date as an exact one."""
+    d = _json(body, "launches")
+    results = d.get("results") if isinstance(d, dict) else None
+    if not isinstance(results, list) or not results:
+        raise ValidationError("launches: no results list")
+    lo, hi = (now + timedelta(days=x) for x in LL2_DATE_WINDOW_DAYS)
+    out = []
+    for r in results:
+        if not isinstance(r, dict):
+            raise ValidationError("launches: a result is not an object")
+        lid, name = _text(r.get("id"), 80), _text(r.get("name"), 200)
+        if not lid or not name:
+            raise ValidationError("launches: a launch has no id or name")
+        try:
+            net = parse_iso(r["net"])
+            ws = parse_iso(r["window_start"]) if r.get("window_start") else None
+            we = parse_iso(r["window_end"]) if r.get("window_end") else None
+        except (KeyError, ValueError, TypeError) as e:
+            raise ValidationError(f"launches: {name} has an unreadable time ({e})") from e
+        if not lo <= net <= hi:
+            raise ValidationError(f"launches: {name} is dated {net:%Y-%m-%d}, far from today")
+        status = r.get("status") if isinstance(r.get("status"), dict) else {}
+        prec = r.get("net_precision") if isinstance(r.get("net_precision"), dict) else {}
+        pad = r.get("pad") if isinstance(r.get("pad"), dict) else {}
+        lat, lon = _coord(pad.get("latitude"), 90), _coord(pad.get("longitude"), 180)
+        if lat is None or lon is None:
+            lat = lon = None  # a launch without a usable pad position is kept; it just has no distance
+        loc = pad.get("location") if isinstance(pad.get("location"), dict) else {}
+        country = pad.get("country") if isinstance(pad.get("country"), dict) else {}
+        rocket = ((r.get("rocket") or {}).get("configuration") or {}) if isinstance(r.get("rocket"), dict) else {}
+        provider = r.get("launch_service_provider") if isinstance(r.get("launch_service_provider"), dict) else {}
+        mission = r.get("mission") if isinstance(r.get("mission"), dict) else {}
+        orbit = mission.get("orbit") if isinstance(mission.get("orbit"), dict) else {}
+        prob = r.get("probability")
+        out.append({
+            "id": lid, "name": name, "net": iso(net),
+            "windowStart": iso(ws) if ws else None, "windowEnd": iso(we) if we else None,
+            "precision": _text(prec.get("abbrev"), 8), "precisionName": _text(prec.get("name"), 40),
+            "status": _text(status.get("abbrev"), 12), "statusName": _text(status.get("name"), 60), "statusNote": _text(status.get("description"), 200),
+            "provider": _text(provider.get("name"), 80), "rocket": _text(rocket.get("full_name") or rocket.get("name"), 80),
+            "mission": _text(mission.get("name"), 120), "missionType": _text(mission.get("type"), 60), "orbit": _text(orbit.get("name"), 60),
+            "pad": _text(pad.get("name"), 100), "location": _text(loc.get("name") or pad.get("name"), 120),
+            "country": _text(country.get("alpha_2_code"), 3), "lat": lat, "lon": lon,
+            "webcast": r.get("webcast_live") is True,
+            "probability": int(prob) if isinstance(prob, (int, float)) and not isinstance(prob, bool) and 0 <= prob <= 100 else None,
+            "updated": iso(parse_iso(r["last_updated"])) if r.get("last_updated") else None,
+        })
+    out, dropped = _one_per(out, lambda x: x["id"])
+    out, dropped2 = _one_per(out, lambda x: (re.sub(r"\s+", " ", x["name"]).casefold(), x["net"]))  # the same launch under two ids
+    out.sort(key=lambda x: x["net"])
+    return {"generated": iso(now), "total": d.get("count") if isinstance(d.get("count"), int) else None, "duplicatesDropped": dropped + dropped2, "launches": out[:LL2_MAX_LAUNCHES]}

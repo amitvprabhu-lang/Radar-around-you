@@ -10,7 +10,7 @@ export const isoNow = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 1
 
 // The hazard fixtures are real feed output from one moment (2026-10-04, about 19:45 UTC). Tests run at any time, so every
 // timestamp in them is moved by the same amount to make that moment "now". Relative ages and windows stay as they were.
-const TIME_KEYS = new Set(["t", "updated", "issued", "from", "until", "reached", "valid", "generated", "newest"]);
+const TIME_KEYS = new Set(["t", "updated", "issued", "from", "until", "reached", "valid", "generated", "newest", "net", "windowStart", "windowEnd"]);
 const FIXTURE_NOW = Date.parse("2026-10-04T19:45:00Z");
 function shiftTimes(value, deltaMs) {
   if (Array.isArray(value)) return value.map((v) => shiftTimes(v, deltaMs));
@@ -37,6 +37,7 @@ export function livePack({ taken = "2026-10-04T19:00:00Z", withSatellites = true
     [dir("kp") + "kp.json"]: kp, [dir("clouds") + "clouds.json"]: clouds, [dir("planes") + "planes.json"]: planes,
     [dir("storms") + "storms.json"]: shiftTimes(JSON.parse(hz("storms.json")), Date.parse(taken) - FIXTURE_NOW), [dir("spaceweather") + "spaceweather.json"]: shiftTimes(JSON.parse(hz("spaceweather.json")), Date.parse(taken) - FIXTURE_NOW),
     [dir("closeapproaches") + "closeapproaches.json"]: shiftTimes(JSON.parse(hz("closeapproaches.json")), Date.parse(taken) - FIXTURE_NOW),
+    [dir("launches") + "launches.json"]: (() => { const d = JSON.parse(hz("launches.json")); return shiftTimes(d, Date.parse(taken) - Date.parse(d.generated)); })(),
     [dir("fires") + "fires.bin"]: hz("fires.bin"), [dir("fires") + "fires.json"]: shiftTimes(JSON.parse(hz("fires.json")), Date.parse(taken) - FIXTURE_NOW),
   };
   const rel = (id, ...names) => Object.fromEntries(names.map((n) => [n, `${id}/${version}/${n}`]));
@@ -47,6 +48,7 @@ export function livePack({ taken = "2026-10-04T19:00:00Z", withSatellites = true
     storms: feed(version, rel("storms", "storms.json"), taken, { label: "Tropical storms (Atlantic and Pacific)" }), fires: feed(version, rel("fires", "fires.bin", "fires.json"), taken, { label: "Active fire detections" }),
     spaceweather: feed(version, rel("spaceweather", "spaceweather.json"), taken, { label: "Solar wind and geomagnetic alerts" }),
     closeapproaches: feed(version, rel("closeapproaches", "closeapproaches.json"), taken, { label: "Asteroid close approaches" }),
+    launches: feed(version, rel("launches", "launches.json"), taken, { label: "Rocket launches" }),
   };
   if (withSatellites) {
     const names = ["swarm.bin", "ids.bin", "details.bin", "names.txt", "precise.json"];

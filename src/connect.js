@@ -6,6 +6,7 @@
 // - A statement links things only when they are near each other in space and time, and says "near", never "caused by".
 // - Limits below marked OURS are our own choices of what counts as near.
 import { haversineKm, bearingDeg, compassPoint } from "./core.js";
+import { withoutDuplicateStorms } from "./dedupe.js";
 
 export const NEAR = {
   storm: { watchKm: 1500, alertKm: 600 },  // OURS
@@ -138,7 +139,6 @@ const plural = (n, one, many) => `${n.toLocaleString("en-US")} ${n === 1 ? one :
 export function connections({ place, nowMs, storms = null, fires = null, space = null, events = [], quakes = [], auroraChance = null }) {
   const out = [];
   const { lat, lon } = place;
-  const nhcCovers = !!(storms && (storms.storms || []).length);
 
   // storms
   for (const s of stormsNear(storms, lat, lon)) {
@@ -163,9 +163,9 @@ export function connections({ place, nowMs, storms = null, fires = null, space =
     }
   }
 
-  // GDACS events (quakes have their own rule below, and NHC replaces GDACS for the storms it covers)
-  for (const e of events || []) {
-    if (e.type === "EQ" || (e.type === "TC" && nhcCovers)) continue;
+  // GDACS events (quakes have their own rule below, and NHC replaces the GDACS copy of each storm it lists; other GDACS cyclones stay)
+  for (const e of withoutDuplicateStorms(events, storms && storms.storms)) {
+    if (e.type === "EQ") continue;
     const km = haversineKm(lat, lon, e.lat, e.lon);
     if (km > NEAR.hazardKm) continue;
     out.push({ id: `event:${e.url || e.name}`, kind: "hazard", severity: e.alert === "Red" ? SEV.alert : e.alert === "Orange" ? SEV.watch : SEV.info, title: e.name,

@@ -10,6 +10,7 @@ import { searchPlaces, placeFromRecord, countryName, PLACES_CREDIT } from "./pla
 import { constellationAt, visibilityFrom, VISIBILITY_TEXT, bestMonth, wanderersIn } from "./constellations.js";
 import { colourName, magnitudeRank, starDay, bayerName } from "./starinfo.js";
 import { sizeText, sigmaText, lunarText, kmCompact, whenFromNow, ASSUMED_ALBEDO } from "./asteroids.js";
+import * as L from "./launches.js";
 import { fmtDay } from "./tonight.js";
 import { $, h, icon, fmtTime, fmtDayTime, fmtDate, fmtDateTime, fmtUtc, num, kmText, latLonText, ageText, durText, daysAgoText } from "./dom.js";
 
@@ -340,6 +341,32 @@ export function createPanels(ctx) {
     kids.push(h("p", { class: "srcline", text: `Source: NASA/JPL CNEOS, SBDB Close-Approach Data API (version ${close.version}), as of ${fmtUtc(new Date(close.generated))}.` }));
     kids.push(h("div", { class: "actions" }, link("NASA's list (CNEOS)", "https://cneos.jpl.nasa.gov/ca/", "link", "small")));
     openSheet("asteroids", ...kids);
+  }
+
+  // rocket launches (The Space Devs, Launch Library 2): firm times first, then the ones planned only for a month or quarter
+  function openLaunches() {
+    const doc = D.hazards && D.hazards.launches;
+    const head = h("h2", { text: "Rocket launches" });
+    if (!doc) { openSheet("launches", head, h("p", { class: "note warn", text: "The launch list comes from a live feed (The Space Devs, Launch Library 2), and this copy of the app has no live connection, so there is nothing to show yet." })); return; }
+    const now = nowDate().getTime();
+    const list = L.upcoming(doc, now), g = L.groups(list);
+    const kids = [head];
+    kids.push(h("p", { text: list.length ? `${g.firm.length} launch${g.firm.length === 1 ? "" : "es"} with a firm time and ${g.loose.length} planned only for a month or quarter, from The Space Devs' Launch Library 2.` : "The source lists no upcoming launches right now." }));
+    kids.push(h("p", { class: "note", text: "Launch dates move often. The status is the source's own: \"Go for Launch\" means the current time is confirmed by official or reliable sources, and \"To Be Determined\" means the date is a placeholder or rough estimate. The source does not guarantee that its information is accurate." }));
+    const row = (l) => {
+      const { vehicle, mission } = L.split(l), cd = L.countdown(l, now), dist = L.padDistanceKm(l, place());
+      return h("div", { class: "item near " + (l.webcast ? "watch" : "info") },
+        h("div", { class: "grow" }, h("b", { text: mission ? `${vehicle}: ${mission}` : vehicle }),
+          h("span", { class: "s", text: `${L.whenText(l, place().tz)}${L.isExact(l) ? ` (${place().tz})` : ""}${cd ? `, ${cd}` : ""}` }),
+          h("span", { class: "s", text: `${l.location || l.pad || "Launch site not given"}${dist != null ? ` · ${L.distanceText(dist)}` : ""}` }),
+          h("span", { class: "s", text: [`${l.provider || "Provider not given"}`, L.statusLine(l), l.missionType, l.orbit, l.probability != null ? `${l.probability}% chance of good launch weather` : null, l.webcast ? "webcast live now" : null].filter(Boolean).join(" · ") })));
+    };
+    if (g.firm.length) kids.push(h("h3", { text: "With a firm time" }), h("div", { class: "list" }, ...g.firm.map(row)));
+    if (g.loose.length) kids.push(h("h3", { text: "Planned for a month or quarter" }), h("div", { class: "list" }, ...g.loose.map(row)));
+    kids.push(h("p", { class: "note", text: "Distance is a straight line from your place to the pad and says nothing about whether a launch can be seen from there. Times are shown in the place's time zone." }));
+    kids.push(h("p", { class: "srcline", text: `Source: The Space Devs, Launch Library 2, as of ${fmtUtc(new Date(doc.generated))}.` }));
+    kids.push(h("div", { class: "actions" }, link("The Space Devs", "https://thespacedevs.com/llapi", "link", "small")));
+    openSheet("launches", ...kids);
   }
 
   // all 88 constellations, with the ones above the horizon first
@@ -818,5 +845,5 @@ export function createPanels(ctx) {
 
   const watch = createWatch(ctx, { openSheet, closeSheet, tag, btn, link });
 
-  return { openNear: watch.openNear, openWatch: watch.openWatch, connectionList: watch.connectionList, replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openAsteroids, openConstellations, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
+  return { openNear: watch.openNear, openWatch: watch.openWatch, connectionList: watch.connectionList, replayControls, toast, openSheet, closeSheet, renderCard, tickLive, openSearch, closeSearch, openPlaces, openFeed, openAbout, openStatus, openAsteroids, openLaunches, openConstellations, openCalendar, openTonight, openTrains, openShare, buildSearchIndex, runSearch };
 }

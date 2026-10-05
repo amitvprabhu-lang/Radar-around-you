@@ -297,3 +297,121 @@ class CloseApproachTest(unittest.TestCase):
         d["count"] = 99
         with self.assertRaises(ValidationError):
             hazards.close_approaches(json.dumps(d), self.NOW)
+
+
+class LaunchesTest(unittest.TestCase):
+    NOW = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
+
+    def doc(self):
+        return json.loads(fx("ll2_upcoming.json"))
+
+    def test_real_answer_is_read_sorted_and_keeps_how_exact_each_time_is(self):
+        d = hazards.launches(fx("ll2_upcoming.json"), self.NOW)
+        a = d["launches"]
+        self.assertEqual(len(a), 8)
+        self.assertEqual([x["net"] for x in a], sorted(x["net"] for x in a))
+        self.assertEqual(d["total"], 470)
+        self.assertEqual({x["precision"] for x in a}, {"SEC", "MIN", "HR", "M", "Q4"})
+        vague = [x for x in a if x["precision"] in ("M", "Q4")]
+        self.assertTrue(vague and all(x["status"] == "TBD" for x in vague))
+        first = a[0]
+        self.assertEqual(first["name"], "Falcon 9 Block 5 | SDA Tranche 1 Transport Layer A")
+        self.assertEqual((first["provider"], first["rocket"], first["status"], first["statusName"]), ("SpaceX", "Falcon 9 Block 5", "Go", "Go for Launch"))
+        self.assertAlmostEqual(first["lat"], 34.632)
+        self.assertAlmostEqual(first["lon"], -120.611)
+        self.assertEqual(first["country"], "US")
+        self.assertIn("confirmed", first["statusNote"])
+
+    def test_every_output_field_is_plain_data(self):
+        for x in hazards.launches(fx("ll2_upcoming.json"), self.NOW)["launches"]:
+            for k, v in x.items():
+                self.assertTrue(v is None or isinstance(v, (str, int, float, bool)), k)
+            self.assertNotIn("image", " ".join(x.keys()).lower())  # no image links: some are non-commercial licence
+
+    def test_a_launch_without_a_pad_position_is_kept_without_one(self):
+        d = self.doc()
+        d["results"][0]["pad"]["latitude"] = None
+        x = hazards.launches(json.dumps(d), self.NOW)["launches"][0]
+        self.assertIsNone(x["lat"]); self.assertIsNone(x["lon"])
+        d["results"][0]["pad"]["latitude"] = "34.5"; d["results"][0]["pad"]["longitude"] = "-120.5"
+        x = hazards.launches(json.dumps(d), self.NOW)["launches"][0]
+        self.assertEqual((x["lat"], x["lon"]), (34.5, -120.5))
+        d["results"][0]["pad"]["latitude"] = 95
+        self.assertIsNone(hazards.launches(json.dumps(d), self.NOW)["launches"][0]["lat"])
+
+    def test_missing_optional_parts_become_none(self):
+        d = self.doc()
+        r = d["results"][0]
+        r["mission"] = None; r["net_precision"] = None; r["webcast_live"] = None; r["probability"] = 120
+        x = hazards.launches(json.dumps(d), self.NOW)["launches"][0]
+        self.assertIsNone(x["mission"]); self.assertIsNone(x["precision"]); self.assertFalse(x["webcast"]); self.assertIsNone(x["probability"])
+        r["probability"] = 80
+        self.assertEqual(hazards.launches(json.dumps(d), self.NOW)["launches"][0]["probability"], 80)
+
+    def test_control_characters_and_long_text_are_cleaned(self):
+        d = self.doc()
+        d["results"][0]["name"] = "Bad\x00name\n" + "x" * 500
+        x = hazards.launches(json.dumps(d), self.NOW)["launches"]
+        self.assertTrue(any("Bad name" in y["name"] and len(y["name"]) <= 200 for y in x))
+
+    def test_broken_answers_are_rejected(self):
+        for mutate, why in [
+            (lambda d: d.update(results=[]), "empty"),
+            (lambda d: d.update(results="x"), "not a list"),
+            (lambda d: d["results"][0].update(net="soon"), "unreadable time"),
+            (lambda d: d["results"][0].pop("net"), "no time"),
+            (lambda d: d["results"][0].update(net="2031-01-01T00:00:00Z"), "far future"),
+            (lambda d: d["results"][0].update(net="2026-09-01T00:00:00Z"), "long past"),
+            (lambda d: d["results"][0].update(name=""), "no name"),
+            (lambda d: d["results"][0].pop("id"), "no id"),
+            (lambda d: d["results"].append("x"), "not an object"),
+        ]:
+            d = self.doc(); mutate(d)
+            with self.assertRaises(ValidationError, msg=why):
+                hazards.launches(json.dumps(d), self.NOW)
+        with self.assertRaises(ValidationError):
+            hazards.launches(b"[]", self.NOW)
+        with self.assertRaises(ValidationError):
+            hazards.launches(b"not json", self.NOW)
+
+    def test_the_list_is_capped(self):
+        d = self.doc()
+        base = d["results"][0]
+        d["results"] = [dict(base, id=f"id{i}", name=f"L{i}") for i in range(60)]
+        self.assertEqual(len(hazards.launches(json.dumps(d), self.NOW)["launches"]), hazards.LL2_MAX_LAUNCHES)
+
+
+class LaunchDuplicatesTest(unittest.TestCase):
+    NOW = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
+
+    def doc(self):
+        return json.loads(fx("ll2_upcoming.json"))
+
+    def test_the_real_answer_has_no_duplicates(self):
+        self.assertEqual(hazards.launches(fx("ll2_upcoming.json"), self.NOW)["duplicatesDropped"], 0)
+
+    def test_the_same_id_twice_keeps_the_later_update(self):
+        d = self.doc()
+        older = json.loads(json.dumps(d["results"][0])); older["last_updated"] = "2026-10-01T00:00:00Z"; older["status"]["name"] = "Old status"
+        d["results"].append(older)
+        out = hazards.launches(json.dumps(d), self.NOW)
+        self.assertEqual(out["duplicatesDropped"], 1)
+        self.assertEqual(len(out["launches"]), 8)
+        self.assertNotEqual(out["launches"][0]["statusName"], "Old status")
+        d["results"][-1]["last_updated"] = "2026-12-01T00:00:00Z"  # now the copy is newer
+        out = hazards.launches(json.dumps(d), self.NOW)
+        self.assertEqual(out["launches"][0]["statusName"], "Old status")
+
+    def test_the_same_launch_under_two_ids_is_one_launch(self):
+        d = self.doc()
+        twin = json.loads(json.dumps(d["results"][1])); twin["id"] = "another-id"; twin["name"] = "  " + twin["name"].upper() + "  "
+        d["results"].append(twin)
+        out = hazards.launches(json.dumps(d), self.NOW)
+        self.assertEqual((out["duplicatesDropped"], len(out["launches"])), (1, 8))
+
+    def test_two_different_launches_at_the_same_time_are_both_kept(self):
+        d = self.doc()
+        other = json.loads(json.dumps(d["results"][1])); other["id"] = "x2"; other["name"] = "Different rocket | Different mission"
+        d["results"].append(other)
+        out = hazards.launches(json.dumps(d), self.NOW)
+        self.assertEqual((out["duplicatesDropped"], len(out["launches"])), (0, 9))

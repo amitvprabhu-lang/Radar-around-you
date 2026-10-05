@@ -18,6 +18,7 @@ import { createWakeLock } from "./wake.js";
 import { skyCalendar, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
+import { soonCount } from "./launches.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -323,6 +324,7 @@ async function main() {
     if (hz.storms || hz.fires || hz.space) { const n = panels.connectionList(hz).length; out.push(["near", String(n), `near ${S.place.name}`, () => panels.openNear()]); }
     if (hz.storms) out.push(["storms", String(hz.storms.storms.length), hz.storms.storms.length === 1 ? "active storm" : "active storms", () => panels.openWatch("storms")]);
     if (hz.close) { const n = hz.close.approaches.filter((a) => Date.parse(a.time) >= nowDate().getTime() - 6 * 3600e3).length; out.push(["asteroids", String(n), "asteroid flybys, 60 days", () => panels.openAsteroids()]); }
+    if (hz.launches) { const n = soonCount(hz.launches, nowDate().getTime()); out.push(["launches", String(n), n === 1 ? "launch in 7 days" : "launches in 7 days", () => panels.openLaunches()]); }
     if (hz.fires) { const d = hz.fires.summary.detections; out.push(["fires", d >= 10000 ? `${Math.round(d / 1000)}k` : num(d), "fire detections, 24 h", () => panels.openWatch("fires")]); }
     return out;
   }
@@ -832,10 +834,11 @@ async function main() {
     aurora({ grid, meta }) { D.aurora.set(grid); D.meta.aurora = meta; orbit.refreshAurora(); sky.refreshAurora(); refreshDerived(); },
     clouds(data) { applyCities(data, null); },
     planes(data) { applyCities(null, data); },
-    storms(data) { D.hazards.storms = data; orbit.refreshStorms(); refreshDerived(); },
+    storms(data) { D.hazards.storms = data; orbit.refreshStorms(); orbit.refreshMarkers(); refreshDerived(); },
     fires(data) { D.hazards.fires = data; orbit.refreshFires(); renderLayerChips(); refreshDerived(); },
     spaceweather(data) { D.hazards.space = data; refreshDerived(); },
     closeapproaches(data) { D.hazards.close = data; refreshDerived(); },
+    launches(data) { D.hazards.launches = data; refreshDerived(); },
   };
   function startLive() {
     liveCtl = createLive({
@@ -893,7 +896,7 @@ async function main() {
       } catch { toast("Could not open the place in that link", { sub: "The place list could not be loaded.", plain: true }); }
     }
     if (t.view && t.view !== S.view) setView(t.view);
-    const sheets = { feed: () => panels.openFeed(), calendar: () => panels.openCalendar(), tonight: () => panels.openTonight(), trains: () => panels.openTrains(), status: () => panels.openStatus(), about: () => panels.openAbout(), places: () => panels.openPlaces(), near: () => panels.openNear(), constellations: () => panels.openConstellations(), asteroids: () => panels.openAsteroids() };
+    const sheets = { feed: () => panels.openFeed(), calendar: () => panels.openCalendar(), tonight: () => panels.openTonight(), trains: () => panels.openTrains(), status: () => panels.openStatus(), about: () => panels.openAbout(), places: () => panels.openPlaces(), near: () => panels.openNear(), constellations: () => panels.openConstellations(), asteroids: () => panels.openAsteroids(), launches: () => panels.openLaunches() };
     if (t.watch) panels.openWatch(t.watch);
     else if (t.sheet && sheets[t.sheet]) sheets[t.sheet]();
     if (t.con) openConstellationLink(t.con);

@@ -337,6 +337,33 @@
    "failures": 0,
    "nextTryAt": "2026-10-05T03:33:38Z",
    "halted": null
+  },
+  "launches": {
+   "label": "Rocket launches",
+   "source": "The Space Devs (Launch Library 2)",
+   "docUrl": "https://github.com/TheSpaceDevs/Tutorials/blob/main/faqs/faq_TSD.md",
+   "says": "The Space Devs FAQ: free access to Launch Library 2 is \"limited to 15 calls per hour\" and users are \"heavily\" encouraged to cache the output and avoid having user clients query the APIs directly. The API's api-throttle endpoint reported 15 requests per 3600 seconds on 2026-10-04. It states no refresh interval for the data; once an hour is our choice and uses a quarter of the allowance.",
+   "licence": "The Space Devs FAQ terms of use: \"You are free to use the data in any way, shape, or form\"; accuracy of all the information is not guaranteed; \"Attribution is not mandatory, but is encouraged and appreciated\". Images carry their own licences (some are non-commercial), so none are used.",
+   "credit": "Launches: The Space Devs (Launch Library 2)",
+   "refreshSec": 3600,
+   "staleAfterSec": 14400,
+   "status": "ok",
+   "checkedAt": "2026-10-04T21:34:38Z",
+   "fetchedAt": "2026-10-04T21:34:38Z",
+   "sourceTime": "2026-10-04T21:34:37Z",
+   "count": 30,
+   "version": "20261004T213438Z",
+   "files": {
+    "launches.json": "launches/20261004T213438Z/launches.json"
+   },
+   "sizes": {
+    "launches.json": 21741
+   },
+   "note": "next: Falcon 9 Block 5 | SDA Tranche 1 Transport Layer A at 2026-10-05T08:17:21Z",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T03:33:38Z",
+   "halted": null
   }
  },
  "static": [

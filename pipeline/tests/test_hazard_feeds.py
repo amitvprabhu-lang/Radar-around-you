@@ -149,3 +149,56 @@ class CloseApproaches(HazardBase):
         f = self.manifest()["feeds"]["closeapproaches"]
         self.assertEqual(f["files"]["closeapproaches.json"], first)
         self.assertNotEqual(f["status"], "ok")
+
+
+class Launches(HazardBase):
+    LL2 = "https://ll.thespacedevs.com/2.3.0/launches/upcoming/"
+
+    def setUp(self):
+        super().setUp()
+        self.clock.t = datetime(2026, 10, 5, 0, 30, tzinfo=timezone.utc)
+
+    def test_the_feed_publishes_the_list_and_asks_once(self):
+        self.net.add(self.LL2, resp(200, fx("ll2_upcoming.json")))
+        self.run_(["launches"])
+        f = self.manifest()["feeds"]["launches"]
+        d = self.jread(f["files"]["launches.json"])
+        self.assertEqual((f["status"], f["count"], len(d["launches"])), ("ok", 8, 8))
+        self.assertIn("next:", f["note"])
+        self.assertEqual(self.net.count(self.LL2), 1)
+
+    def test_the_request_asks_for_what_the_validator_needs(self):
+        url = config.FEEDS["launches"].url
+        self.assertIn("mode=normal", url)
+        self.assertIn("hide_recent_previous=true", url)
+
+    def test_the_registry_entry_states_the_limit_and_asks_less_often_than_it_allows(self):
+        f = config.FEEDS["launches"]
+        self.assertIn("15 calls per hour", f.says)
+        self.assertGreaterEqual(f.refresh_s, 3600 / 15)
+        self.assertEqual(f.halt_group, "ll2")
+
+    def test_a_rate_limit_answer_halts_the_source_and_keeps_the_last_copy(self):
+        self.net.add(self.LL2, resp(200, fx("ll2_upcoming.json")))
+        self.run_(["launches"])
+        first = self.manifest()["feeds"]["launches"]["files"]["launches.json"]
+        self.clock.advance(3700)
+        self.net.routes.clear()
+        self.net.add(self.LL2, resp(429))
+        self.run_(["launches"], force=True)
+        f = self.manifest()["feeds"]["launches"]
+        self.assertEqual(f["files"]["launches.json"], first)
+        self.assertEqual(f["status"], "halted")
+        self.assertEqual(self.net.count(self.LL2), 2)  # one try each, no repeats after a refusal
+
+    def test_a_malformed_answer_keeps_the_last_copy(self):
+        self.net.add(self.LL2, resp(200, fx("ll2_upcoming.json")))
+        self.run_(["launches"])
+        first = self.manifest()["feeds"]["launches"]["files"]["launches.json"]
+        self.clock.advance(3700)
+        self.net.routes.clear()
+        self.net.add(self.LL2, resp(200, json.dumps({"results": []})))
+        self.run_(["launches"], force=True)
+        f = self.manifest()["feeds"]["launches"]
+        self.assertEqual(f["files"]["launches.json"], first)
+        self.assertNotEqual(f["status"], "ok")

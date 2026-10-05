@@ -4,6 +4,7 @@ import { h, fmtUtc, num, kmText, ageText, latLonText } from "./dom.js";
 import { connections, spaceSituation, stormsNear, firesNear, topFireClusters, CONE_NOTE, NEAR } from "./connect.js";
 import { GEOMAGNETIC_SCALE, GEOMAGNETIC_SOURCE, gLevelForKp, scaleFor, SAFFIR_SIMPSON, SSHWS_NOTE, SSHWS_SOURCE, categoryForKnots } from "./scales.js";
 import { compassPoint, haversineKm } from "./core.js";
+import { unmatchedCyclones } from "./dedupe.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const svg = (tag, attrs = {}, ...kids) => {
@@ -206,7 +207,7 @@ export function createWatch(ctx, ui) {
       for (const s of stormsNear(st.storms, place().lat, place().lon)) kids.push(stormCard(s));
       kids.push(src("NOAA National Hurricane Center (CurrentStorms.json and forecast files)", st.storms.generated));
     }
-    const others = (D.events || []).filter((e) => e.type === "TC" && !(st.storms && st.storms.storms.some((s) => Math.abs(s.lat - e.lat) < 2 && Math.abs(((s.lon - e.lon + 540) % 360) - 180) < 2)));
+    const others = unmatchedCyclones(D.events, st.storms && st.storms.storms);
     if (others.length) {
       kids.push(h("h3", { text: "Other cyclones, from GDACS" }));
       kids.push(h("p", { class: "note", text: "NHC covers the Atlantic and the eastern and central Pacific. These come from GDACS, which gives a position and one wind figure for the whole storm, so its strength right now can be lower. Check the forecast centre for your region." }));

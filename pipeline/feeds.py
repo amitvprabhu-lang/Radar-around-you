@@ -246,6 +246,16 @@ def closeapproaches(ctx):
     return Result({"closeapproaches.json": dumps(data)}, len(data["approaches"]), data["generated"], f"closest: {nearest['name']} at {nearest['distLd']} lunar distances" if nearest else "none listed")
 
 
+def launches(ctx):
+    r = ctx.get("launches", F["launches"].url)
+    try:
+        data = hazards.launches(r.body, ctx.now)
+    except validate.ValidationError as e:
+        raise FeedFailure(str(e))
+    nxt = data["launches"][0] if data["launches"] else None
+    return Result({"launches.json": dumps(data)}, len(data["launches"]), data["generated"], f"next: {nxt['name']} at {nxt['net']}" if nxt else "none listed")
+
+
 BUILDERS = {"catalogue": catalogue, "satellites": satellites, "quakes": quakes, "events": events,
             "aurora": aurora, "kp": kp, "clouds": clouds, "planes": planes,
-            "spaceweather": spaceweather, "storms": storms, "fires": fires, "closeapproaches": closeapproaches}
+            "spaceweather": spaceweather, "storms": storms, "fires": fires, "closeapproaches": closeapproaches, "launches": launches}

@@ -47,6 +47,7 @@ for (const [label, viewport, mobile] of sizes) {
     await clear(); await R(p, () => window.__radar.panels.openWatch("fires")); await shot("22-fires");
     await clear(); await R(p, () => window.__radar.panels.openNear()); await shot("23-near-you");
     await clear(); await R(p, () => window.__radar.panels.openAsteroids()); await shot("24-asteroids");
+    await clear(); await R(p, () => window.__radar.panels.openLaunches()); await shot("26-launches");
     await clear(); await R(p, () => { window.__radar.setView("globe"); window.__radar.actions.flyTo(-3.4, 108); }); await p.waitForTimeout(3500); await shot("25-globe-fires");
   }
   await clear(); await R(p, () => window.__radar.setView("under")); await p.waitForTimeout(2500); await shot("17-under");

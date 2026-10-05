@@ -8,6 +8,7 @@ import {
 import * as S from "./shaders.js";
 import { latLonVec, vecToLatLon, eqVec, ease, glowTexture, gridTexture, polylinesToSegments, TIER_SETTINGS, ribbonMaterial, dynLine } from "./engine.js";
 import { buildStarfield } from "./stars.js";
+import { withoutDuplicateStorms } from "./dedupe.js";
 import { issModel, starlinkModel, satelliteModel, rocketBodyModel, debrisModel } from "./models.js";
 
 const R_KM = EARTH_RADIUS_KM;
@@ -158,7 +159,7 @@ export function createOrbit(ctx) {
       const age = nowMs - Date.parse(q.time);
       add({ kind: "quake", q }, q.lat, q.lon, age < 3 * 3600e3 ? 4 : 3, clamp(7 + (q.mag - 2) * 8, 8, 56));
     }
-    for (const e of D.events) {
+    for (const e of withoutDuplicateStorms(D.events, D.hazards && D.hazards.storms && D.hazards.storms.storms)) {
       if (e.type === "EQ" || e.type === "DR") continue;
       const k = e.type === "TC" ? 1 : e.type === "FL" ? 2 : 0;
       add({ kind: "event", e }, e.lat, e.lon, k, k === 1 ? 34 : k === 2 ? 22 : 14);
