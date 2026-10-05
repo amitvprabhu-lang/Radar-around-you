@@ -59,11 +59,13 @@ export function homeTextHtml({ countryHub = false } = {}) {
 // The read-more link: hidden on phones (they reach the text from the About sheet); from 700px to 899px wide the bottom of the screen is
 // the full-width tab bar with the layer chips above it, so the link sits at the right end of the place chip row, which is empty there;
 // from 900px the tab bar is a centred pill and the bottom left is free, so the link sits there, level with the tab bar.
+// The template's body is overflow: hidden with overscroll-behavior: none, which makes it a scroll container that stops the wheel from
+// passing on to the page, so a wheel over the section would not scroll; overflow: visible on body here lets it through.
 // Red light mode tints the app through a veil inside #app; the text sits above #app, so it gets the same veil of its own.
 export const HOME_TEXT_CSS = `
   html { overflow-y: auto; scrollbar-width: none; }
   html::-webkit-scrollbar { display: none; }
-  body { height: auto; }
+  body { height: auto; overflow: visible; }
   #app * { overscroll-behavior: contain; }
   .home-spacer { height: 100vh; pointer-events: none; }
   .home-text { position: relative; z-index: 2; background: var(--ink-2); border-top: 1px solid var(--line-2); color: var(--text); font: 400 17px/1.65 var(--f-body);
@@ -87,5 +89,22 @@ export const HOME_TEXT_CSS = `
 // What wrapApp adds: the style block (it lands in <head> after the template's own styles, so it wins) and, at the end of the page,
 // a one-screen spacer, the section and the read-more link. The spacer carries id="top" so "Back to the globe" scrolls to the start.
 export const HOME_STYLE = `<style id="home-text-css">${HOME_TEXT_CSS}</style>\n`;
+// With the document scrollable, a wheel over the app's controls (tab bar, top bar, chips) would scroll the page towards the text. This
+// keeps the wheel inside the app: it is cancelled unless an element between the target and #app can still scroll that way (a sheet,
+// the search results, a card), so those scroll as before. The canvas has its own listener that zooms. With the page already scrolled
+// down, a wheel up anywhere still scrolls it back. Wheel events over the section itself never reach #app and scroll the page as usual.
+export const HOME_WHEEL_SCRIPT = `<script id="home-wheel">(function () {
+  var app = document.getElementById("app");
+  if (app) app.addEventListener("wheel", function (e) {
+    var x = Math.abs(e.deltaX) > Math.abs(e.deltaY), d = x ? e.deltaX : e.deltaY;
+    if (!x && d < 0 && window.scrollY > 0) return;
+    for (var el = e.target; el && el !== app; el = el.parentElement) {
+      var o = getComputedStyle(el)[x ? "overflowX" : "overflowY"], pos = x ? el.scrollLeft : el.scrollTop;
+      var max = x ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight;
+      if ((o === "auto" || o === "scroll") && max > 0 && (d < 0 ? pos > 0 : pos < max - 1)) return;
+    }
+    e.preventDefault();
+  }, { passive: false });
+})();</script>\n`;
 export const homeBodyHtml = ({ countryHub = false } = {}) =>
-  `<div id="top" class="home-spacer" aria-hidden="true"></div>\n${homeTextHtml({ countryHub })}\n<a class="home-more" href="#${HOME_ID}">What is this? Read more</a>\n`;
+  `<div id="top" class="home-spacer" aria-hidden="true"></div>\n${homeTextHtml({ countryHub })}\n<a class="home-more" href="#${HOME_ID}">What is this? Read more</a>\n${HOME_WHEEL_SCRIPT}`;

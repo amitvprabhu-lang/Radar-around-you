@@ -112,6 +112,12 @@ const textState = (pg) => pg.evaluate(() => {
   return { y: Math.round(scrollY), vh: innerHeight, top: r ? Math.round(r.top) : null, sheet: !document.getElementById("sheet").hidden, dist: window.__radar.orbit.cam.dist };
 });
 const settle = (pg) => pg.waitForFunction(() => new Promise((ok) => { const y = scrollY; setTimeout(() => ok(scrollY === y), 250); }), null, { timeout: 10000 }).catch(() => {});
+// a wheel turn with the pointer at the middle of an element; returns the page's scroll position after it has settled
+const wheelOver = async (pg, sel, dy) => {
+  const at = await pg.evaluate((sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }, sel);
+  await pg.mouse.move(at[0], at[1]); await pg.mouse.wheel(0, dy); await pg.waitForTimeout(1500); await settle(pg);
+  return pg.evaluate(() => Math.round(scrollY));
+};
 const overlaps = (a, b) => a && b && a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, true], ["desktop", { width: 1280, height: 800 }, false]]) {
   const plain = await openHome(viewport, mobile, plainHome);
@@ -131,6 +137,9 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   check(`${label}: a wheel on the canvas still changes the zoom and leaves the page at the top`, s1.y === 0 && Math.abs(s1.dist - s0.dist) > 1e-6, JSON.stringify({ before: s0, after: s1 }));
   const more = await pg.evaluate(() => { const m = document.querySelector(".home-more"); const b = m.getBoundingClientRect(); return { shown: getComputedStyle(m).display !== "none" && getComputedStyle(m).visibility === "visible" && b.width > 0, box: [b.left, b.top, b.width, b.height] }; });
   if (!mobile) {
+    // the wheel over the app's controls stays in the app: it does not scroll the page towards the text
+    const overTabs = await wheelOver(pg, ".tabs", 400), overTop = await wheelOver(pg, ".brand", 400), overStats = await wheelOver(pg, "#stats", 400);
+    check(`${label}: a wheel over the tab bar, the top bar and the stats strip leaves the page at the top`, overTabs === 0 && overTop === 0 && overStats === 0, JSON.stringify({ overTabs, overTop, overStats }));
     // the read-more link sits clear of the tab bar and the layer chips, here and on a wider screen
     const clear = async () => pg.evaluate(() => { const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; }; return { more: r(".home-more"), tabs: r(".tabs"), chips: r("#layerChips"), w: innerWidth, h: innerHeight }; });
     const at1280 = await clear();
@@ -142,6 +151,8 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
     await pg.click(".home-more"); await settle(pg);
     const s2 = await textState(pg);
     check(`${label}: the read-more link scrolls the section into view`, s2.y > 0 && s2.top >= 0 && s2.top < s2.vh, JSON.stringify(s2));
+    const backUp = await wheelOver(pg, "#about-home .home-lead", -300);
+    check(`${label}: a wheel up over the section scrolls the page back towards the globe`, backUp < s2.y, JSON.stringify({ before: s2.y, after: backUp }));
     await pg.click(".home-back a"); await settle(pg);
     const s3 = await textState(pg);
     check(`${label}: "Back to the globe" returns the page to the top`, s3.y === 0, JSON.stringify(s3));
@@ -150,6 +161,16 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   }
   // the About sheet's link: it closes the sheet and the page scrolls to the section
   await pg.click(".brand"); await pg.waitForTimeout(400);
+  if (!mobile) {
+    // a sheet with more content than fits still scrolls with the wheel, and the page behind it does not move
+    const body = () => pg.evaluate(() => { const b = document.querySelector("#sheet .body"); return { top: Math.round(b.scrollTop), room: b.scrollHeight - b.clientHeight }; });
+    const b0 = await body(), y = await wheelOver(pg, "#sheet .body", 300);
+    // the software renderer draws a few frames a second, so the sheet's smooth scroll can take seconds to start moving
+    await pg.waitForFunction(() => document.querySelector("#sheet .body").scrollTop > 0, null, { timeout: 10000 }).catch(() => {});
+    const b1 = await body();
+    check(`${label}: a wheel over the About sheet scrolls the sheet and leaves the page at the top`, b0.room > 0 && b1.top > b0.top && y === 0, JSON.stringify({ b0, b1, y }));
+    await pg.evaluate(() => { document.querySelector("#sheet .body").scrollTop = 0; });
+  }
   const link = await pg.evaluate(() => { const a = document.querySelector("#sheet .overview a"); return a ? [a.textContent, a.getAttribute("href")] : null; });
   check(`${label}: the About sheet links to the overview`, !!link && link[0] === "What is this site? Read the overview" && link[1] === "#about-home", JSON.stringify(link));
   if (link) {

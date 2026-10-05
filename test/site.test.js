@@ -15,7 +15,7 @@ import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CON
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
 import { GUIDE_LINKS } from "../src/guidelinks.js";
-import { homeTextHtml, homeBodyHtml, HOME_STYLE, HOME_TEXT_CSS, HOME_QUESTIONS, HOME_ID, COUNTRY_HUB_FILE } from "../site/home-text.mjs";
+import { homeTextHtml, homeBodyHtml, HOME_STYLE, HOME_TEXT_CSS, HOME_WHEEL_SCRIPT, HOME_QUESTIONS, HOME_ID, COUNTRY_HUB_FILE } from "../site/home-text.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -565,25 +565,33 @@ test("the injected style exists only in the content-site build: in the home page
   assert.ok(head.includes('<style id="home-text-css">'), "in head");
   assert.ok(head.indexOf("<style>") < head.indexOf('<style id="home-text-css">'), "after the template's own style block, so its rules win");
   // the overrides the design calls for
-  for (const rule of ["html { overflow-y: auto; scrollbar-width: none; }", "html::-webkit-scrollbar { display: none; }", "body { height: auto; }", "#app * { overscroll-behavior: contain; }", ".home-spacer { height: 100vh; pointer-events: none; }"]) {
+  for (const rule of ["html { overflow-y: auto; scrollbar-width: none; }", "html::-webkit-scrollbar { display: none; }", "body { height: auto; overflow: visible; }", "#app * { overscroll-behavior: contain; }", ".home-spacer { height: 100vh; pointer-events: none; }"]) {
     assert.ok(HOME_TEXT_CSS.includes(rule), rule);
   }
   // the noscript block is unchanged and still ends with </noscript> and a newline, straight before the app
   assert.equal(countOf(home, "<noscript>"), 1);
   assert.ok(home.includes('</noscript>\n<div id="app"'));
+  // the small wheel script: in the home page once, after the app, small, no eval, a non-passive listener on #app
+  assert.equal(countOf(home, HOME_WHEEL_SCRIPT), 1);
+  assert.ok(home.indexOf('<div id="app"') < home.indexOf('<script id="home-wheel">'), "after the app, so #app exists when it runs");
+  assert.ok(HOME_WHEEL_SCRIPT.trim().split("\n").length <= 15, "about 15 lines at most");
+  assert.ok(!/\beval\b|new Function|import\(|src=/.test(HOME_WHEEL_SCRIPT), "no eval and nothing loaded");
+  assert.match(HOME_WHEEL_SCRIPT, /app\.addEventListener\("wheel", [\s\S]*e\.preventDefault\(\);[\s\S]*\{ passive: false \}\)/);
+  assert.match(HOME_WHEEL_SCRIPT, /scrollHeight - el\.clientHeight/, "an element that can still scroll keeps the wheel");
   // no other page carries any of it
   for (const f of pageFiles) {
     if (f === "index.html") continue;
     const h = read(f);
-    assert.ok(!h.includes("home-text-css") && !h.includes(`id="${HOME_ID}"`) && !h.includes("home-more"), f);
+    assert.ok(!h.includes("home-text-css") && !h.includes(`id="${HOME_ID}"`) && !h.includes("home-more") && !h.includes("home-wheel"), f);
   }
   // the app itself does not: the template and the app bundler know nothing of it, so the snapshot builds are untouched
   const template = fs.readFileSync(path.join(root, "template.html"), "utf8");
-  for (const s of ["home-text", "home-more", "home-spacer", HOME_ID, "overflow-y: auto"]) assert.ok(!template.includes(s), `template.html has ${s}`);
+  for (const s of ["home-text", "home-more", "home-spacer", "home-wheel", HOME_ID, "overflow-y: auto", 'addEventListener("wheel"']) assert.ok(!template.includes(s), `template.html has ${s}`);
+  for (const f of fs.readdirSync(path.join(root, "src"))) assert.ok(!fs.readFileSync(path.join(root, "src", f), "utf8").includes("home-wheel"), `src/${f} has the wheel script`);
   assert.ok(template.includes("html, body { margin: 0; height: 100%; background: var(--ink); color: var(--text); font: 400 15px/1.45 var(--f-body); overflow: hidden; overscroll-behavior: none; }"), "the template's full-screen rule is as it was");
   assert.ok(template.includes("#app { position: fixed; inset: 0;"));
   assert.ok(!fs.readFileSync(path.join(root, "build.mjs"), "utf8").includes("home-text"));
   // and wrapApp without the text adds nothing of it
   const plain = wrapApp(APP, { homeText: false });
-  assert.ok(!plain.includes("home-text") && !plain.includes(HOME_ID));
+  assert.ok(!plain.includes("home-text") && !plain.includes(HOME_ID) && !plain.includes("home-wheel"));
 });
