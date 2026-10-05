@@ -440,7 +440,7 @@ test("names from the data are escaped, and long labels are shortened in the char
 
 test("the page follows the house style, loads nothing from elsewhere and stays small", () => {
   const text = textOf(html);
-  assert.ok(!/[–—]/.test(text), "no en or em dashes");
+  assert.ok(!/[\u2013\u2014]/.test(text), "no en or em dashes");
   assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(html), "no emoji");
   assert.ok(!/<script[^>]+src=/.test(html) && !/<img /.test(html) && !/<link[^>]+stylesheet/.test(html));
   assert.ok(Buffer.byteLength(html) < 120 * 1024, String(Buffer.byteLength(html)));
