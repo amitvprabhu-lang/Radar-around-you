@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { countSatellites } from "../site/satcount.mjs";
+import { countSatellites, ORBIT_BOUNDS, ORBIT_LABELS } from "../site/satcount.mjs";
 import { satelliteCountPage, SATCOUNT_FILE, sitemapLive, barChartSvg, columnChartSvg } from "../site/pages-satcount.mjs";
 import { renderPage, SITE } from "../site/layout.mjs";
 import { buildFixture, STANDARD } from "./helpers/satfixture.mjs";
@@ -96,4 +96,12 @@ test("the live sitemap names the page with an accurate last modified time", () =
 test("the chart helpers handle one row and a zero maximum", () => {
   assert.match(barChartSvg({ id: "c", title: "t", desc: "d", rows: [{ label: "a", value: 0 }] }), /<rect /);
   assert.match(columnChartSvg({ id: "c", title: "t", desc: "d", rows: [{ label: "2020", value: 3 }] }), /<rect /);
+});
+
+test("the orbit boundaries on the page come from the counter's one definition", () => {
+  const text = textOf(html);
+  const n = (x) => x.toLocaleString("en-GB");
+  for (const v of [n(ORBIT_BOUNDS.lowBelow), n(ORBIT_BOUNDS.mediumBelow - 1), n(ORBIT_BOUNDS.geoUpTo), String(ORBIT_BOUNDS.ellipticalAt)]) assert.ok(text.includes(v), v);
+  const orbitTable = html.match(/aria-label="Active satellites by orbit"[\s\S]*?<\/table>/)[0];
+  for (const label of Object.values(ORBIT_LABELS)) assert.ok(orbitTable.includes(label), label);
 });

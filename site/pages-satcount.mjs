@@ -1,6 +1,7 @@
 // The "How many satellites are in orbit?" page. Pure: takes the counts from site/satcount.mjs and returns a page object for renderPage.
 // Every figure on the page comes from the one `counts` value, so the lead, description, FAQ, tables and structured data cannot disagree.
 import { esc, table, sources, SITE, urlPath } from "./layout.mjs";
+import { ORBIT_BOUNDS } from "./satcount.mjs";
 
 export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
 
@@ -81,7 +82,7 @@ ${barChartSvg({ id: "chart-owners", title: "Active satellites by owner", desc: `
 ${table({ caption: "Active satellites by owner", head: ["Owner", "Active satellites"], numeric: [1], rows: c.owners.map((o) => [esc(o.name), num(o.count)]).concat(c.ownersOther ? [["All other owners", num(c.ownersOther)]] : []) })}
 
 <h2 id="orbits">Where are the satellites?</h2>
-<p>Most active satellites are in low Earth orbit, where the Starlink network lives. The table groups every active satellite by its orbit. These groupings are our working definitions, not a standard: a high elliptical orbit is one with an eccentricity of 0.25 or more, and the other groups use the satellite's mean altitude.</p>
+<p>Most active satellites are in low Earth orbit, where the Starlink network lives. The table groups every active satellite by its orbit. These groupings are our working definitions, not a standard: a high elliptical orbit is one with an eccentricity of ${ORBIT_BOUNDS.ellipticalAt} or more, and the other groups use the satellite's mean altitude.</p>
 ${barChartSvg({ id: "chart-orbits", title: "Active satellites by orbit", desc: "Active satellites grouped into low, medium, geostationary, high elliptical and beyond-geostationary orbits.", rows: orbitRows })}
 ${table({ caption: "Active satellites by orbit", head: ["Orbit", "Active satellites"], numeric: [1], rows: c.orbits.map((o) => [esc(o.label), num(o.count)]) })}
 
@@ -96,14 +97,14 @@ ${columnChartSvg({ id: "chart-years", title: "Active satellites by launch year",
 ${table({ caption: "Active satellites by launch year", head: ["Launch year", "Active satellites"], numeric: [1], rows: yearRows.map((r) => [esc(r.label), num(r.value)]).concat(c.unknownYear ? [["Launch date not recorded", num(c.unknownYear)]] : []) })}
 
 <h2 id="not-counted">What this count does not include</h2>
-<p>This page counts active satellites only. It does not count defunct satellites, rocket bodies or most debris, because the data behind it is CelesTrak's list of active satellites. The feed also carries four named debris clouds, but those are not the total amount of debris in orbit and we do not present them as one. The count of everything tracked in orbit is much larger than the number of active satellites.</p>
+<p>This page counts active satellites only. It does not count defunct satellites, rocket bodies or most debris, because the data behind it is CelesTrak's list of active satellites. The feed also carries four named debris clouds, but those are not the total amount of debris in orbit and we do not present them as one. Counts of everything tracked in orbit also include defunct satellites, rocket bodies and debris, so they are larger than this one and come from other data.</p>
 
 <h2 id="how">How we count</h2>
 <ul>
 <li>Source: CelesTrak's current orbital element sets for its active list, with each object's owner, launch date, type and status from CelesTrak's satellite catalogue. The data time above is when we last read them.</li>
 <li>An active satellite is a catalogue satellite with a status of Operational, Partially operational, Backup or standby, Spare or Extended mission.</li>
 <li>Starlink satellites are those whose catalogue name contains STARLINK.</li>
-<li>The orbit groups are our working definitions: eccentricity of 0.25 or more is high elliptical; otherwise mean altitude below 2,000 km is low, from 2,000 km up to 35,585 km is medium, 35,586 to 35,986 km is the geostationary belt, and anything higher is beyond it.</li>
+<li>The orbit groups are our working definitions: eccentricity of ${ORBIT_BOUNDS.ellipticalAt} or more is high elliptical; otherwise mean altitude below ${num(ORBIT_BOUNDS.lowBelow)} km is low, from ${num(ORBIT_BOUNDS.lowBelow)} km up to ${num(ORBIT_BOUNDS.mediumBelow - 1)} km is medium, ${num(ORBIT_BOUNDS.mediumBelow)} to ${num(ORBIT_BOUNDS.geoUpTo)} km is the geostationary belt, and anything higher is beyond it.</li>
 <li>Other trackers use other definitions and other data, so their totals can differ from ours.</li>
 </ul>
 

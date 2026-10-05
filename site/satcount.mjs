@@ -10,22 +10,25 @@ const ACTIVE = new Set(ACTIVE_STATUSES);
 const TYPE_KEYS = ["payload", "rocketBody", "debris", "unknown"];
 
 export const ORBIT_ORDER = ["low", "medium", "geostationary", "highElliptical", "beyond"];
+// The one place the orbit boundaries live. orbitClass, the labels below and the page's prose all read from here.
+export const ORBIT_BOUNDS = { ellipticalAt: 0.25, lowBelow: 2000, mediumBelow: 35586, geoUpTo: 35986 };
+const km = (n) => n.toLocaleString("en-GB");
 export const ORBIT_LABELS = {
-  low: "Low Earth orbit (below 2,000 km)",
-  medium: "Medium Earth orbit (2,000 to 35,585 km)",
-  geostationary: "Geostationary belt (35,586 to 35,986 km)",
-  highElliptical: "High elliptical (eccentricity 0.25 or more)",
+  low: `Low Earth orbit (below ${km(ORBIT_BOUNDS.lowBelow)} km)`,
+  medium: `Medium Earth orbit (${km(ORBIT_BOUNDS.lowBelow)} to ${km(ORBIT_BOUNDS.mediumBelow - 1)} km)`,
+  geostationary: `Geostationary belt (${km(ORBIT_BOUNDS.mediumBelow)} to ${km(ORBIT_BOUNDS.geoUpTo)} km)`,
+  highElliptical: `High elliptical (eccentricity ${ORBIT_BOUNDS.ellipticalAt} or more)`,
   beyond: "Beyond the geostationary belt",
 };
 
 // OURS: working definitions, not a cited standard. High elliptical is checked first; the mean altitude is the semi-major axis minus the
 // equatorial radius the swarm decoder uses.
 export function orbitClass(nRadPerMin, ecc) {
-  if (ecc >= 0.25) return "highElliptical";
+  if (ecc >= ORBIT_BOUNDS.ellipticalAt) return "highElliptical";
   const alt = swarmFromRad(0, nRadPerMin, 0, 0, 0, 0, 0).a - SWARM_EARTH_RADIUS_KM;
-  if (alt < 2000) return "low";
-  if (alt < 35586) return "medium";
-  if (alt <= 35986) return "geostationary";
+  if (alt < ORBIT_BOUNDS.lowBelow) return "low";
+  if (alt < ORBIT_BOUNDS.mediumBelow) return "medium";
+  if (alt <= ORBIT_BOUNDS.geoUpTo) return "geostationary";
   return "beyond";
 }
 
