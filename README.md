@@ -32,14 +32,14 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 324 unit tests for the app, no browser needed
+npm test                # 329 unit tests for the app, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
 npm run test:hosting    # 131 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 113 pages (112 static pages and the app as index.html), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
 npm run e2e             # 290 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:site        # 17 browser checks (last recorded run) of the built content site served raw, the way a web host serves it (builds it first)
+npm run e2e:site        # 36 browser checks (last recorded run) of the built content site served raw, the way a web host serves it (builds it first)
 npm run e2e:live        # 112 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
@@ -99,6 +99,7 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 - The 88 constellations and the 331 stars that have IAU names, from the same IAU files the app uses. Borders between constellations are found by walking the IAU boundaries.
 - Six guides (aurora, hurricanes, earthquakes, fires, asteroids, satellites) and a "How we know" page. Each factual sentence comes from `docs/hazard-sources.md` or `docs/feature-sources.md`, which record where it was read and what could not be confirmed. The G1 to G5 and Saffir-Simpson tables are printed from `src/scales.js`.
 - An About page (`/about/`) that says what the app is, what each view does, where the data comes from and what it does not do; every statement on it is traced in `docs/about-sources.md`.
+- On the home page itself, below the first screen, a text section of short answers (the ISS, satellites above you, tonight's sky, quakes and hazards, the satellite count, sources) that scrolls up over the app; the app and its first screen are unchanged. Made by `site/home-text.mjs`, added only by the content-site build, every statement traced in `docs/home-sources.md`.
 - A page on how many satellites are in orbit (`/how-many-satellites-in-orbit/`), built from a data folder after each collection (see `docs/satcount-sources.md`).
 
 An indexable build also writes llms.txt (a short summary and links in the llmstxt.org layout); a noindex build writes it no more than it writes a sitemap.
@@ -122,7 +123,7 @@ pipeline/   the collector: config.py (feed registry), net.py, validate.py, pack.
 test/       unit tests, checked against satellite.js, astronomy-engine and the real packed data
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
-site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs
+site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, home-text.mjs (the home page text section), build.mjs
 hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data into the site) with 84 tests; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
