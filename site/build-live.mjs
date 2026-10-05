@@ -3,10 +3,15 @@
 //   node site/build-live.mjs --data live --out live/pages
 // Output (in --out): the pages, sitemap-live.xml (only when the site is indexable) and index.json, which lists each file with its hash so
 // hosting/pull.php copies only what changed. Shape of index.json:
-//   { schema: 1, satellitesVersion, siteUrl, noindex, generator, built, feeds: { <feed>: version },
+//   { schema: 1, satellitesVersion, siteUrl, indexnowKey?, noindex, generator, built, feeds: { <feed>: version },
 //     pages: { "<page>": { feeds: { <feed>: version }, dataTime } }, files: { "<path>": { sha256, size, changed } } }
+// satellitesVersion is the satellites version the satellite pages were built from. indexnowKey is the IndexNow key from
+// site/indexnow.key; it is left out when there is no key file or the site is noindex, and then hosting/pull.php sends no IndexNow pings.
+// feeds holds every feed version in the manifest; pages holds, for each live page that exists, the versions of its own feeds and its data
+// time (the feed's own time, which is also its lastmod in sitemap-live.xml). Readers take only the fields they need, so a reader older
+// than a field ignores it.
 // generator is a sha256 over the source files that shape the pages (GENERATOR_FILES). Each group of pages is built on its own and only
-// when one of its own feeds has a new version, or the site address, the noindex mode or the generator changed: the satellite pages
+// when one of its own feeds has a new version, or the site address, the noindex mode, the IndexNow key or the generator changed: the satellite pages
 // (all or nothing, as before) when the satellites feed changes, each hazard page when its feeds change. The right-now hub is worked out
 // every run and written only when its text changes. A file's `changed` time moves only when its bytes change, and the live sitemap gives
 // each page its data time (the feed's own time) as lastmod.
@@ -24,6 +29,7 @@ import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
 import { LIVE_PAGES, LIVE_FILES, SATCOUNT_FILE, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
 import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
 import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 
 const NEED = ["details.bin", "satmeta.json", "swarm.bin"];
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
@@ -32,7 +38,7 @@ const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 // imports (the orbit model, the decoders, the scales and the asteroid helpers in src/), the coastlines and the place list are named with
 // "../". A change to any of them rebuilds every page on the next run. Everything is read from the repository (the workflow checks it out).
 export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs",
-  "hazard.mjs", "pages-hazard.mjs", "livepages.mjs",
+  "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "indexnow.mjs",
   "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
 export const PLACES_FILE = fileURLToPath(new URL("../public/places.json", import.meta.url));
@@ -55,7 +61,9 @@ const HAZARD_READERS = {
   fires: (rd, o) => summariseFires({ summary: rd.json("fires", "fires.json"), bin: rd.bytes("fires", "fires.bin") }, o),
 };
 
-export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min } = {}) {
+export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey() } = {}) {
+  if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("build-live: the IndexNow key must be 8 to 128 letters, digits and dashes");
+  const key = noindex ? null : indexnowKey || null;  // a noindex site is never pinged, so its index names no key
   const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, "manifest.json"), "utf8"));
   const feeds = (manifest && typeof manifest.feeds === "object" && manifest.feeds) || {};
   const version = (name) => (feeds[name] && feeds[name].version ? String(feeds[name].version) : null);
@@ -77,7 +85,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     const parsed = JSON.parse(fs.readFileSync(indexPath, "utf8"));
     if (parsed && typeof parsed === "object" && parsed.files && typeof parsed.files === "object") prev = parsed;
   } catch { /* missing, unreadable or invalid: no previous build */ }
-  const sameShell = !!(prev && prev.noindex === noindex && prev.siteUrl === SITE.url && prev.generator === generator && prev.pages && typeof prev.pages === "object");
+  const sameShell = !!(prev && prev.noindex === noindex && prev.siteUrl === SITE.url && prev.generator === generator && (prev.indexnowKey ?? null) === key && prev.pages && typeof prev.pages === "object");
   const exists = (rel) => fs.existsSync(path.join(outDir, rel));
   const versionsOf = (names) => Object.fromEntries(names.filter((n) => version(n)).map((n) => [n, version(n)]));
   const same = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
@@ -187,7 +195,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const sortedFiles = Object.fromEntries([...ordered, ...(noindex ? [] : ["sitemap-live.xml"])].filter((f) => files[f]).map((f) => [f, files[f]]));
   const feedVersions = Object.fromEntries(Object.keys(feeds).sort().filter((n) => version(n)).map((n) => [n, version(n)]));
   const satBuilt = pages[SATCOUNT_FILE] && pages[SATCOUNT_FILE].feeds ? pages[SATCOUNT_FILE].feeds.satellites : null;
-  const index = { schema: 1, satellitesVersion: satBuilt || null, siteUrl: SITE.url, noindex, generator, built: iso, feeds: feedVersions, pages: Object.fromEntries(ordered.map((f) => [f, pages[f]])), files: sortedFiles };
+  const index = { schema: 1, satellitesVersion: satBuilt || null, siteUrl: SITE.url, ...(key ? { indexnowKey: key } : {}), noindex, generator, built: iso, feeds: feedVersions, pages: Object.fromEntries(ordered.map((f) => [f, pages[f]])), files: sortedFiles };
   const unchanged = prev && writes.length === 0 && !(noindex && exists("sitemap-live.xml")) &&
     same({ ...prev, built: null }, { ...index, built: null });
   if (unchanged) return { changed: false, version: satVersion, skipped, stale, failed, built: [] };

@@ -19,6 +19,7 @@ import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CON
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
 import { GUIDE_LINKS } from "../src/guidelinks.js";
+import { readIndexNowKey } from "../site/indexnow.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -522,4 +523,35 @@ test("with every hazard feed bundled, the deploy-time copy writes all five hazar
   const xml = fs.readFileSync(path.join(dir, "sitemap.xml"), "utf8");
   assert.ok(!/earthquakes-today|aurora-tonight|asteroid-close|tropical-storms|wildfires-today|right-now/.test(xml), "the main sitemap leaves out every live page");
   assert.equal([...fs.readFileSync(path.join(dir, "sitemap-live.xml"), "utf8").matchAll(/<loc>/g)].length, 13);
+});
+
+test("an indexable build writes the IndexNow key file at the site root, holding the key and nothing else", () => {
+  const key = readIndexNowKey();
+  assert.ok(key, "the repository has a key");
+  assert.equal(fs.readFileSync(path.join(outDir, `${key}.txt`), "utf8"), key);
+  const txt = fs.readdirSync(outDir).filter((f) => f.endsWith(".txt")).sort();
+  assert.deepEqual(txt, [`${key}.txt`, "llms.txt", "robots.txt"].sort(), "no other text file appears at the root");
+  const other = path.join(tmp, "out-other-key");
+  build({ outDir: other, appFile, publicDir: null, noindex: false, indexnowKey: "Test-Key-1234" });
+  assert.equal(fs.readFileSync(path.join(other, "Test-Key-1234.txt"), "utf8"), "Test-Key-1234");
+  assert.ok(!fs.existsSync(path.join(other, `${key}.txt`)));
+});
+
+test("a noindex build, or a build without a key, writes no IndexNow key file", () => {
+  const key = readIndexNowKey();
+  const dir = path.join(tmp, "out-noindex-key");
+  build({ outDir: dir, appFile, publicDir: null, noindex: true });
+  assert.ok(!fs.existsSync(path.join(dir, `${key}.txt`)));
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.endsWith(".txt")), ["robots.txt"]);
+  const none = path.join(tmp, "out-no-key");
+  build({ outDir: none, appFile, publicDir: null, noindex: false, indexnowKey: null });
+  assert.deepEqual(fs.readdirSync(none).filter((f) => f.endsWith(".txt")).sort(), ["llms.txt", "robots.txt"]);
+});
+
+test("a malformed IndexNow key stops the build before it writes anything", () => {
+  for (const bad of ["../evil", "short", "a b c d e f g h"]) {
+    const dir = path.join(tmp, "out-bad-key");
+    assert.throws(() => build({ outDir: dir, appFile, publicDir: null, noindex: false, indexnowKey: bad }), /indexnow/i, bad);
+    assert.ok(!fs.existsSync(dir), bad);
+  }
 });
