@@ -1,0 +1,228 @@
+{
+ "schema": 1,
+ "pipeline": 1,
+ "generatedAt": "2026-10-05T18:40:30Z",
+ "pollSec": 300,
+ "feeds": {
+  "quakes": {
+   "label": "Earthquakes",
+   "source": "U.S. Geological Survey",
+   "docUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php",
+   "says": "Feed page: \"Updated every minute.\" Response headers: cache-control max-age=60.",
+   "licence": "USGS Copyrights and Credits page: \"USGS-authored or produced data and information are considered to be in the U.S. Public Domain\"; credit is requested.",
+   "credit": "Earthquakes: U.S. Geological Survey",
+   "refreshSec": 600,
+   "staleAfterSec": 2400,
+   "status": "ok",
+   "checkedAt": "2026-10-05T18:40:12Z",
+   "fetchedAt": "2026-10-05T18:40:12Z",
+   "sourceTime": "2026-10-05T18:40:02Z",
+   "count": 295,
+   "version": "20261005T184012Z",
+   "files": {
+    "quakes.json": "quakes/20261005T184012Z/quakes.json"
+   },
+   "sizes": {
+    "quakes.json": 70876
+   },
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T18:49:12Z",
+   "halted": null
+  },
+  "aurora": {
+   "label": "Aurora forecast",
+   "source": "NOAA Space Weather Prediction Center",
+   "docUrl": "https://www.swpc.noaa.gov/products/aurora-30-minute-forecast",
+   "says": "Product page: \"a 30 to 90 minute forecast\". The refresh interval is not stated on the page; response headers: cache-control max-age=60.",
+   "licence": "Not stated on the pages read.",
+   "credit": "Aurora: NOAA Space Weather Prediction Center",
+   "refreshSec": 900,
+   "staleAfterSec": 3600,
+   "status": "ok",
+   "checkedAt": "2026-10-05T18:30:40Z",
+   "fetchedAt": "2026-10-05T18:30:40Z",
+   "sourceTime": "2026-10-05T18:18:00Z",
+   "count": 20481,
+   "version": "20261005T183040Z",
+   "files": {
+    "aurora.bin": "aurora/20261005T183040Z/aurora.bin",
+    "aurora.json": "aurora/20261005T183040Z/aurora.json"
+   },
+   "sizes": {
+    "aurora.bin": 65160,
+    "aurora.json": 72
+   },
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T18:44:40Z",
+   "halted": null
+  },
+  "kp": {
+   "label": "Geomagnetic activity (Kp)",
+   "source": "NOAA Space Weather Prediction Center",
+   "docUrl": "https://www.spaceweather.gov/content/data-access",
+   "says": "The refresh interval is not stated on the page; response headers: cache-control max-age=60.",
+   "licence": "Not stated on the pages read.",
+   "credit": "Kp: NOAA Space Weather Prediction Center",
+   "refreshSec": 1800,
+   "staleAfterSec": 10800,
+   "status": "ok",
+   "checkedAt": "2026-10-05T18:30:40Z",
+   "fetchedAt": "2026-10-05T18:30:40Z",
+   "sourceTime": "2026-10-05T15:00:00Z",
+   "count": 16,
+   "version": "20261005T183040Z",
+   "files": {
+    "kp.json": "kp/20261005T183040Z/kp.json"
+   },
+   "sizes": {
+    "kp.json": 605
+   },
+   "note": "",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T18:59:40Z",
+   "halted": null
+  },
+  "spaceweather": {
+   "label": "Solar wind and geomagnetic alerts",
+   "source": "NOAA Space Weather Prediction Center",
+   "docUrl": "https://www.swpc.noaa.gov/content/data-access",
+   "says": "Rows are one minute apart. Response headers measured 2026-10-04 on rtsw_mag_1m.json and alerts.json: cache-control max-age=60. The page read does not state a refresh interval.",
+   "licence": "NWS disclaimer page (weather.gov/disclaimer): NWS web page information is \"in the public domain, unless specifically noted otherwise\" and may be used if you do not claim it is your own, imply NOAA/NWS endorsement, or modify it and present it as official.",
+   "credit": "Solar wind and alerts: NOAA Space Weather Prediction Center",
+   "refreshSec": 600,
+   "staleAfterSec": 3600,
+   "status": "ok",
+   "checkedAt": "2026-10-05T18:40:30Z",
+   "fetchedAt": "2026-10-05T18:40:30Z",
+   "sourceTime": "2026-10-05T18:34:00Z",
+   "count": 71,
+   "version": "20261005T184030Z",
+   "files": {
+    "spaceweather.json": "spaceweather/20261005T184030Z/spaceweather.json"
+   },
+   "sizes": {
+    "spaceweather.json": 10830
+   },
+   "note": "14 geomagnetic messages in the last 72 h",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T18:49:30Z",
+   "halted": null
+  },
+  "storms": {
+   "label": "Tropical storms (Atlantic and Pacific)",
+   "source": "NOAA National Hurricane Center",
+   "docUrl": "https://www.nhc.noaa.gov/gis/",
+   "says": "The GIS page lists the feeds. Response headers measured 2026-10-04: cache-control max-age=300. Advisories come about every six hours. Its KML says the official forecast track in KML format is an experimental product.",
+   "licence": "NWS disclaimer page: public domain with the three conditions quoted for the space weather feed.",
+   "credit": "Storms: NOAA National Hurricane Center",
+   "refreshSec": 900,
+   "staleAfterSec": 28800,
+   "status": "ok",
+   "checkedAt": "2026-10-05T18:30:41Z",
+   "fetchedAt": "2026-10-05T18:30:41Z",
+   "sourceTime": "2026-10-05T15:00:00Z",
+   "count": 1,
+   "version": "20261005T183041Z",
+   "files": {
+    "storms.json": "storms/20261005T183041Z/storms.json"
+   },
+   "sizes": {
+    "storms.json": 7729
+   },
+   "note": "Rachel",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T18:44:41Z",
+   "halted": null
+  },
+  "fires": {
+   "label": "Active fire detections",
+   "source": "NASA FIRMS (LANCE)",
+   "docUrl": "https://www.earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data",
+   "says": "The LANCE page says near real-time users usually need data \"within three hours\"; the FIRMS pages themselves returned no text when read, so the latency for fire files is not confirmed from a primary page. Measured 2026-10-04: the 24 hour files were last modified within an hour of the request.",
+   "licence": "LANCE page: \"NASA supports full and open sharing of data\"; third parties are asked to acknowledge LANCE (text in the credit below); the information is provided \"as is\".",
+   "credit": "Fires: NASA FIRMS (LANCE), VIIRS 375 m",
+   "refreshSec": 3600,
+   "staleAfterSec": 14400,
+   "status": "ok",
+   "checkedAt": "2026-10-05T18:11:03Z",
+   "fetchedAt": "2026-10-05T18:11:03Z",
+   "sourceTime": "2026-10-05T15:35:00Z",
+   "count": 16177,
+   "version": "20261005T181103Z",
+   "files": {
+    "fires.bin": "fires/20261005T181103Z/fires.bin",
+    "fires.json": "fires/20261005T181103Z/fires.json"
+   },
+   "sizes": {
+    "fires.bin": 194124,
+    "fires.json": 387
+   },
+   "note": "192083 detections in 16177 cells",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T19:10:03Z",
+   "halted": null
+  },
+  "closeapproaches": {
+   "label": "Asteroid close approaches",
+   "source": "NASA/JPL CNEOS (SBDB Close-Approach Data API)",
+   "docUrl": "https://ssd-api.jpl.nasa.gov/doc/cad.html",
+   "says": "The page describes \"current close-approach data\" and sets its defaults to \"NEO Earth close-approaches less than 0.05 au in the next 60 days sorted by date\". It states no refresh interval; every 6 hours is our choice. It asks users to check the payload's signature version (we require 1.5).",
+   "licence": "Not stated on the page read.",
+   "credit": "Asteroid close approaches: NASA/JPL CNEOS",
+   "refreshSec": 21600,
+   "staleAfterSec": 86400,
+   "status": "ok",
+   "checkedAt": "2026-10-05T14:40:39Z",
+   "fetchedAt": "2026-10-05T14:40:39Z",
+   "sourceTime": "2026-10-05T14:40:39Z",
+   "count": 35,
+   "version": "20261005T144039Z",
+   "files": {
+    "closeapproaches.json": "closeapproaches/20261005T144039Z/closeapproaches.json"
+   },
+   "sizes": {
+    "closeapproaches.json": 7293
+   },
+   "note": "closest: 2025 UK9 at 0.82 lunar distances",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-05T20:39:39Z",
+   "halted": null
+  }
+ },
+ "static": [
+  {
+   "id": "stars",
+   "label": "Stars and constellation lines",
+   "note": "Fixed catalogue packed at build time (Hipparcos based). Non-commercial licence, see docs/feature-sources.md."
+  },
+  {
+   "id": "coast",
+   "label": "Coastlines",
+   "note": "Natural Earth outlines via world-atlas, packed at build time."
+  },
+  {
+   "id": "textures",
+   "label": "Earth, Moon and cloud images",
+   "note": "Packed at build time. The cloud image is a daily NASA GIBS composite from the build day and is not refreshed by this pipeline yet."
+  },
+  {
+   "id": "routes",
+   "label": "Flight routes and airlines",
+   "note": "Looked up once at build time from adsb.lol and OpenFlights. The route endpoint is marked deprecated, so this is not refreshed."
+  },
+  {
+   "id": "impact",
+   "label": "Shaking maps and population exposure",
+   "note": "Fetched once at build time for the largest quakes from USGS ShakeMap and PAGER. New quakes show no shaking map until this is made live."
+  }
+ ]
+}
