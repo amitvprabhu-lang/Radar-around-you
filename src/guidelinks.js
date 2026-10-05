@@ -17,4 +17,6 @@ export const GUIDE_LINKS = [
   { group: "Guides", href: "guides/asteroids/", label: "Asteroid close approaches" },
   { group: "Guides", href: "guides/satellites/", label: "Seeing the ISS and satellites" },
   { group: "Guides", href: "methods/", label: "How we know" },
+  { group: "About", href: "about/", label: "What Radar Around You is and does" },
+  { group: "About", href: "how-many-satellites-in-orbit/", label: "How many satellites are in orbit" },
 ];

@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities } from "../site/build.mjs";
+import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, APP_FEATURES } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
@@ -37,8 +37,8 @@ const read = (f) => fs.readFileSync(path.join(outDir, f), "utf8");
 const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ");
 
 test("the site has the expected pages and no duplicates", () => {
-  // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1);
+  // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1);
   assert.equal(pageFiles.length, result.pages);
   assert.equal(cities.length, 6);
 });
@@ -264,6 +264,14 @@ test("the app page gains search metadata and nothing else changes", () => {
   assert.throws(() => wrapApp("<title>Radar Around You</title><p>no app</p>"), /no #app/);
   const noscriptLinks = [...h.matchAll(/<noscript>[\s\S]*?<\/noscript>/g)][0][0].match(/href="([^"]+)"/g);
   assert.ok(noscriptLinks.length >= 8);
+  const noscript = [...h.matchAll(/<noscript>[\s\S]*?<\/noscript>/g)][0][0];
+  for (const f of APP_FEATURES) assert.ok(noscript.includes(f), `noscript lists: ${f}`);
+  assert.ok(noscript.includes('href="about/"'), "noscript links to the About page");
+  assert.ok(noscript.length > 1400, `noscript is a real description (${noscript.length} characters)`);
+  const ld = [...h.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1].replace(/\\u003c/g, "<")));
+  assert.deepEqual(ld.find((o) => o["@type"] === "WebApplication").featureList, APP_FEATURES);
+  const site = ld.find((o) => o["@type"] === "WebSite");
+  assert.ok(site && site.name === SITE.name && site.url === `${SITE.url}/`);
 });
 
 test("the build refuses to run when a comparison with the USNO tables fails or is missing", () => {
@@ -405,6 +413,7 @@ test("every link the app shows to the content pages has a page, and the list has
   for (const nav of ["moon-phases/", "eclipses/", "meteor-showers/", "planets/", "sky/", "guides/", "methods/"]) {
     assert.ok(GUIDE_LINKS.some((l) => l.href === nav) || nav === "guides/", `${nav} is linked from the app`);
   }
+  for (const must of ["about/", "how-many-satellites-in-orbit/"]) assert.ok(GUIDE_LINKS.some((l) => l.href === must), `${must} is linked from the app's About sheet`);
 });
 
 test("a noindex build writes no sitemaps at all, as before", () => {
@@ -414,4 +423,13 @@ test("a noindex build writes no sitemaps at all, as before", () => {
   assert.ok(!fs.existsSync(path.join(dir, "sitemap-live.xml")));
   assert.equal(fs.readFileSync(path.join(dir, "robots.txt"), "utf8"), "User-agent: *\nDisallow: /\n");
   assert.ok(fs.readFileSync(path.join(dir, SATCOUNT_FILE), "utf8").includes('<meta name="robots" content="noindex,nofollow">'));
+});
+
+test("the About page is built, is in the main sitemap and the navigation, and carries the right robots tag", () => {
+  assert.ok(pageFiles.includes("about/index.html"));
+  const xml = fs.readFileSync(path.join(outDir, "sitemap.xml"), "utf8");
+  assert.ok(xml.includes(`<loc>${SITE.url}/about/</loc>`));
+  assert.ok(read("about/index.html").includes('<meta name="robots" content="index,follow,max-image-preview:large">'));
+  assert.ok(read("moon-phases/index.html").includes('href="../about/"'), "every page's navigation links to About");
+  assert.ok(read("index.html").includes('href="about/"'));
 });

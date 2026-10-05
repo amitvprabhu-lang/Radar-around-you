@@ -17,6 +17,17 @@ const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
 export const APP_TITLE = "Radar Around You: live satellites, ISS, sky tonight, quakes and aurora";
 export const APP_DESCRIPTION = "A free live 3D view of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, for any place on Earth.";
 
+// OURS: the short feature list the home page's noscript text and structured data share. Each line is a statement from README.md.
+export const APP_FEATURES = [
+  "A 3D globe of tracked satellites, the International Space Station, earthquakes, storms, fires and aurora, with details on tap",
+  "A first-person sky view for any place, with the Moon, planets, stars, constellations and satellite passes",
+  "A Tonight verdict for your place from cloud, the Moon, the dark hours and aurora chance, with what to look for",
+  "Earthquakes shown inside a cutaway of the Earth, with the waves travelling to you",
+  "Aurora, storm, fire and launch information from named agencies, each with its source and time",
+  "A sky calendar for the next 90 days: Moon phases, eclipses, planets and meteor showers",
+];
+const APP_DETAIL = "Everything is drawn in 3D, and every object can be tapped for details or searched for by name. Each card says where its information comes from, and the data comes from agencies and projects such as USGS, NOAA, NASA and CelesTrak.";
+
 // The six places the data pages work out in detail. They come from the snapshot so the site and the app use the same coordinates.
 export function loadCities() {
   return readJson("snapshot.json").cities.map(({ id, name, country, lat, lon, tz }) => ({ id, name, country, lat, lon, tz }));
@@ -40,8 +51,9 @@ export function wrapApp(appHtml, { noindex = SITE.noindex } = {}) {
   const ld = {
     "@context": "https://schema.org", "@type": "WebApplication", name: SITE.name, url: canonical, description: APP_DESCRIPTION,
     applicationCategory: "EducationalApplication", operatingSystem: "Any device with a web browser", isAccessibleForFree: true,
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }, featureList: APP_FEATURES, inLanguage: "en",
   };
+  const ldSite = { "@context": "https://schema.org", "@type": "WebSite", name: SITE.name, url: canonical, description: APP_DESCRIPTION, inLanguage: "en" };
   const head = `<title>${esc(APP_TITLE)}</title>
 <meta name="description" content="${esc(APP_DESCRIPTION)}">
 <link rel="canonical" href="${esc(canonical)}">
@@ -52,9 +64,11 @@ ${robotsMeta(noindex)}
 <meta property="og:description" content="${esc(APP_DESCRIPTION)}">
 <meta property="og:url" content="${esc(canonical)}">
 <meta name="twitter:card" content="summary">
-<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>`;
+<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
+<script type="application/ld+json">${JSON.stringify(ldSite).replace(/</g, "\\u003c")}</script>`;
   const nav = NAV.filter(([f]) => f !== "").map(([f, label]) => `<li><a href="${f}">${esc(label)}</a></li>`).join("");
-  const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><h1>${esc(SITE.name)}</h1><p>${esc(APP_DESCRIPTION)} It needs JavaScript. Meanwhile, these pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
+  const features = APP_FEATURES.map((f) => `<li>${esc(f)}</li>`).join("");
+  const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><h1>${esc(SITE.name)}</h1><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
   return appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => noscript + '<div id="app"');
 }
 

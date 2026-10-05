@@ -58,6 +58,7 @@ export function href(fromFile, toFile) {
 
 export const NAV = [
   ["", "Live app"],
+  ["about/", "About"],
   ["moon-phases/", "Moon phases"],
   ["eclipses/", "Eclipses"],
   ["meteor-showers/", "Meteor showers"],
