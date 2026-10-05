@@ -16,8 +16,8 @@ The site's 110 content pages are rich in readable text, but the home page is the
 
 - Every statement on the About page comes from `README.md`, `docs/feature-sources.md`, `docs/hazard-sources.md`, `docs/star-sources.md`, `docs/handoff.md` or the existing guides, and `docs/about-sources.md` maps each statement to its source. A statement that cannot be traced is left out.
 - No volatile numbers (object counts, test counts). The one place numbers appear is the "about 15,000 people" size of towns that the place search covers, from the README.
-- Three sentences are the author's own wording and are flagged for the owner's review in the handoff: the "not an emergency warning service" note, the "Sky Lens is new and has had limited testing on real phones" note (from the handoff, which says it has not been tried on a real phone), and "an independent, free project" (no personal name on the page).
-- Data refresh intervals are not printed in the sources table, because they can drift; the page points to the app's Data status screen. The "within roughly 10 to 25 minutes" figure is our own estimate from the hosting notes and is worded as one.
+- One sentence is the author's own wording and is flagged for the owner's review in the handoff: "not an emergency warning service" (the next sentence follows the fires guide). The Sky Lens limit is worded from the README (tested in a browser with a fake camera, not on a phone). No personal name appears on the page.
+- Data refresh intervals and delay estimates are not printed, because they can drift; the page says how often a feed changes depends on its source and points to the app's Data status screen. A statement is limited to what the README says (for example: pass times come from SGP4 only for the ISS, other bright objects and recent launches).
 
 ## 4. Not in scope
 
