@@ -27,3 +27,8 @@ jobs:
       - run: npm run build
       - run: npm run site
       - run: npm run test:pipeline
+      - name: Hosting scripts (PHP)
+        run: |
+          command -v php > /dev/null || sudo apt-get install -y php-cli php-curl
+          php -v | head -1
+          npm run test:hosting

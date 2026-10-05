@@ -13,7 +13,8 @@
     "build:snapshot": "LIVE_BASE= node build.mjs src/main.js template.html dist/radar-snapshot.html",
     "e2e:live": "npm run build && node e2e-live.mjs",
     "site": "node site/build.mjs",
-    "build:hosting": "npm run build && npm run site"
+    "build:hosting": "npm run build && npm run site",
+    "test:hosting": "php hosting/tests/run.php"
   },
   "type": "module",
   "dependencies": {

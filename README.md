@@ -36,6 +36,7 @@ npm test                # 251 unit tests for the app, no browser needed
 npm run test:pipeline   # 169 tests for the data pipeline (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
+npm run test:hosting    # 84 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 111 pages, the app as index.html, sitemap.xml, robots.txt (run npm run build first)
 npm run e2e             # 282 browser checks on the snapshot build, phone and desktop windows (needs Playwright, see below)
 npm run e2e:live        # 92 browser checks of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
@@ -115,6 +116,7 @@ test/       unit tests, checked against satellite.js, astronomy-engine and the r
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
 site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs
+hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data into the site) with 84 tests; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
 e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts

@@ -24,5 +24,5 @@ What is checked and what is not, so nobody has to guess later. Read on 2026-10-0
 ## Not yet known
 - Whether a redeploy clears the extra folders in `public_html`, where the live data would sit. Test: put a file in `public_html/live/`, redeploy, see if it is still there. If it is cleared, the live data must be served from somewhere a redeploy does not touch.
 - Whether the generated `.htaccess` lets the manifest and `.webmanifest` files be served with the right type, and whether `live/manifest.json` can be kept from being cached for long. The app works without these; the risk is stale live data.
-- Whether Python and cron jobs work on the account (terminal test in `docs/star-sources.md` is not about this; see the commands in the project chat: `python3 --version`, `curl -sI https://earthquake.usgs.gov`, `which tar curl git`, `df -h ~`). The Web Apps feature does not run the collector.
+- Python: Hostinger support (an assistant answer pasted in the project chat on 2026-10-05) says Business Web Hosting does not support Python, even a plain script run by cron; cron itself is unlimited and supports custom commands, best used for PHP. So the collector runs on GitHub and two PHP cron jobs connect it to the site: see `hosting/README.md`.
 - Plan limits on CPU and memory shared by all websites on the account.

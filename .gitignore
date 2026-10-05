@@ -8,3 +8,7 @@ v1/vendor/
 live/
 __pycache__/
 *.pyc
+
+# a real hosting config holds a GitHub token and must never be committed
+hosting/radar-config.php
+radar-config.php
