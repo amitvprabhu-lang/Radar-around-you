@@ -67,7 +67,7 @@ export function countOwners({ meta, details, swarm, names = null }) {
   const { f32, u16 } = readSwarm(swarm, count);
   const by = new Map();
   const get = (name) => {
-    if (!by.has(name)) by.set(name, { name, active: 0, starlink: 0, last30: 0, orbits: zeroOrbits(), purposes: new Map(), years: new Map(), families: new Map(), noFamily: 0, recent: [], dated: [], unknownYear: 0 });
+    if (!by.has(name)) by.set(name, { name, active: 0, starlink: 0, last30: 0, orbits: zeroOrbits(), purposes: new Map(), years: new Map(), families: new Map(), noFamily: 0, noFamilyDesignator: 0, noFamilyOther: [], recent: [], dated: [], unknownYear: 0 });
     return by.get(name);
   };
   for (const name of meta.owners || []) get(name);
@@ -92,7 +92,10 @@ export function countOwners({ meta, details, swarm, names = null }) {
         if (!o.families.has(fam)) o.families.set(fam, { count: 0, orbits: new Map(), purposes: new Map() });
         const f = o.families.get(fam);
         f.count++; bump(f.orbits, orbit); if (purpose !== "Unspecified") bump(f.purposes, purpose);
-      } else o.noFamily++;
+      } else {
+        o.noFamily++;
+        if (isDesignatorOnly(name)) o.noFamilyDesignator++; else o.noFamilyOther.push(name || "(no name)");
+      }
       if (d.launchDay) o.dated.push({ day: d.launchDay, name: name || "(no name)" });
     }
   }
@@ -115,7 +118,10 @@ export function countOwners({ meta, details, swarm, names = null }) {
     launchYears: [...o.years].sort((a, b) => a[0] - b[0]).map(([year, n]) => ({ year, count: n })), unknownYear: o.unknownYear,
     families: [...o.families].map(([name, f]) => ({ name, count: f.count, orbits: topTied(f.orbits, (a, b) => ORBIT_ORDER.indexOf(a) - ORBIT_ORDER.indexOf(b)), purposes: topTied(f.purposes) }))
       .sort((a, b) => b.count - a.count || byName(a, b)),
-    noFamily: o.noFamily,
+    // the satellites with no family, split into those with only a launch designator and those whose name does not start with two or more
+    // letters ("Z-SAT", "S5", "1KUNS-PF"), with up to three of the latter as examples, in name order
+    noFamily: o.noFamily, noFamilyDesignator: o.noFamilyDesignator, noFamilyOther: o.noFamilyOther.length,
+    noFamilyExamples: [...new Set(o.noFamilyOther)].filter((n) => n !== "(no name)").sort((a, b) => a.localeCompare(b, "en")).slice(0, 3),
     recent: o.recent.sort((a, b) => String(a.date).localeCompare(String(b.date)) || byName(a, b)),
     earliest: earliest(o.dated),
   })).sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, "en"));

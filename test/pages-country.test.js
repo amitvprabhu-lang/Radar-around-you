@@ -137,6 +137,9 @@ test("the 30 day answer counts satellites, never launches", () => {
     for (const m of t.matchAll(/How many were launched in the last 30 days\? ([^?]*?\.)/g)) assert.match(m[1], /^[\d,]+ of the [\d,]+ active satellites launched in the 30 days before the data time\.$/, p.file);
   }
   assert.ok(textOf(renderPage(realSet.pages[2])).includes("of the 160 active satellites launched in the 30 days before the data time."), "the real figure names satellites");
+  const china = textOf(renderPage(realSet.pages[2]));
+  assert.ok(china.includes("How many satellites the catalogue records for China have a purpose group?"), "China has more unrecorded than its top group");
+  assert.ok(!/Broadband internet, the largest recorded purpose/.test(china));
 });
 
 // a small owner with chosen names, launch dates and recent satellites, for the name based sections
@@ -167,17 +170,33 @@ test("name families count the unnamed, and the largest-family answer appears onl
   // a 5 satellite lead and 5 unnamed: the unnamed could reverse it, so no family answer
   const close = namedFleet([...fam(22, "QPS"), ...fam(17, "STRIX"), ...fam(8, "ZZ"), ...Array.from({ length: 5 }, (_, k) => ({ name: `2026-1${k}0A` }))], []);
   const tc = textOf(close.h);
-  assert.ok(tc.includes("Our own grouping by the letters that start each catalogue name"), "the grouping is described as ours");
-  assert.ok(tc.includes("5 of these satellites (9.6 percent) have no name family: their catalogue name is only a launch designator, so they are not named yet, or does not start with letters."), tc);
+  assert.ok(tc.includes("Our own grouping by the run of two or more letters that starts each catalogue name"), "the grouping is described as ours, as the code applies it");
+  assert.ok(tc.includes("5 of these satellites (9.6 percent) have no name family: they have only a launch designator so far."), tc);
   assert.ok(!/Which name family is largest/.test(tc));
   assert.deepEqual(tableCells(close.h, "Largest name families").at(-1).slice(0, 3).map(textOf), ["No name family", "5", "9.6"]);
   // a lead bigger than the unnamed: answered, with every runner-up that ties named
   const clear = namedFleet([...fam(30, "QPS"), ...fam(5, "STRIX"), ...fam(5, "GRUS"), ...fam(4, "AA"), ...fam(4, "BB"), ...fam(3, "CC"), { name: "2026-150A" }], []);
   assert.ok(textOf(clear.h).includes("Which name family is largest among satellites the catalogue records for Japan? QPS, with 30, ahead of GRUS and STRIX with 5 each; 1 has no name family, too few to change that order."), textOf(clear.h));
+  // the group column: named "Most common CelesTrak group", explained under the table, and blank of a label below 5 satellites
+  assert.ok(close.h.includes("<th>Most common CelesTrak group</th>") && !close.h.includes("Main recorded purpose"));
+  assert.ok(tc.includes("The group is the CelesTrak list a satellite is in, as the collector maps those lists to purposes; a satellite in several lists gets only one of them"));
+  const famRows = tableCells(clear.h, "Largest name families").map((r) => r.map(textOf));
+  assert.deepEqual(famRows.find((r) => r[0] === "QPS")[4], "Earth observation");
+  assert.deepEqual(famRows.find((r) => r[0] === "AA")[4], "Fewer than 5 satellites");
+  assert.deepEqual(famRows.find((r) => r[0] === "GRUS")[4], "Earth observation", "exactly 5 shows the group");
   // a tie for first: no ranking
   const tie = namedFleet([...fam(26, "GRUS"), ...fam(26, "JCSAT")], []);
   assert.ok(!/Which name family is largest/.test(textOf(tie.h)));
   assert.ok(textOf(tie.h).includes("Every one of these satellites has a name family."));
+});
+
+test("satellites with no name family are worded by kind: a launch designator, or a name that does not start with two or more letters", () => {
+  const odd = namedFleet([{ name: "Z-SAT" }, { name: "S5" }, { name: "123 SAT" }, { name: "2026-205A" }, { name: "QIANFAN 16 OBJECT A" }, { name: "R5-S4" }], []);
+  const t = textOf(odd.h);
+  assert.ok(t.includes("5 of these satellites (9.6 percent) have no name family: 1 has only a launch designator so far; 4 have names that do not start with two or more letters, such as 123 SAT, R5-S4 and S5."), t);
+  assert.equal(odd.c.owners[0].families.find((f) => f.name === "QIANFAN").count, 1, "a placeholder such as QIANFAN 16 OBJECT A is a real name with a family");
+  const one = textOf(namedFleet([{ name: "Z-SAT" }], []).h);
+  assert.ok(one.includes("1 of these satellites (1.9 percent) has no name family: its name does not start with two or more letters, such as Z-SAT."), one);
 });
 
 test("the earliest launches name every satellite of the earliest days, up to three each", () => {
@@ -239,6 +258,9 @@ test("an owner whose largest purpose is Unspecified, or that leans towards an or
   assert.ok(t.includes(`The catalogue records no purpose grouping for ${pct(30 / 52)} percent of them. The most common recorded purpose is Communications, with 22 satellites, ${pct(22 / 52)} percent.`), t);
   assert.ok(t.includes(`Japan leans towards medium Earth orbit: ${pct(22 / 52)} percent of its fleet against ${pct(counts.orbits.medium / counts.active)} percent of the catalogue.`));
   assert.ok(t.includes("None of them is in the geostationary belt or high elliptical orbits or orbits beyond the geostationary belt."));
+  // more satellites without a recorded group than in the largest group: no "most used for" claim
+  assert.ok(t.includes("How many satellites the catalogue records for Japan have a purpose group? 22 of the 52. The other 30 have no recorded group, more than any single group has, so the catalogue cannot say what most of them are for."), t);
+  assert.ok(!/What are most satellites the catalogue records for Japan used for/.test(t));
 });
 
 test("the hub ranks every owner with an active satellite, adds up, holds the method and links to exactly the five country pages", () => {

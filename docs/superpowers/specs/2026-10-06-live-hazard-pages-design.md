@@ -1,10 +1,10 @@
-# Design: live pages from the hazard feeds (six pages and a hub)
+# Design: live pages from the hazard feeds (five pages and a hub)
 
 Status: written on 2026-10-06 after the owner said "Yes, dynamic pages would be a good idea" (in answer to a list of candidates). The choice of pages and the content are mine and are listed for the owner's review. Anything marked NOT CONFIRMED has not been checked.
 
 ## 1. What is built
 
-Six pages and one hub (the owner asked on 2026-10-06 for "all dynamic, easily indexable pages which add value to the internet and the users"; see section 2a) that rebuild whenever their feed changes, in the same way as the satellite count page: GitHub builds them into the data branch's `pages/` folder after each collection, `hosting/pull.php --pages-dest` copies them to the site, and `site/build.mjs` writes a snapshot copy at deploy time so a redeploy never 404s them.
+Five pages and one hub (the owner asked on 2026-10-06 for "all dynamic, easily indexable pages which add value to the internet and the users"; see section 2a) that rebuild whenever their feed changes, in the same way as the satellite count page: GitHub builds them into the data branch's `pages/` folder after each collection, `hosting/pull.php --pages-dest` copies them to the site, and `site/build.mjs` writes a snapshot copy at deploy time so a redeploy never 404s them.
 
 | URL | Feed (collector name) | Answers |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ Not built, on purpose: a launches page (the launch data licence is NOT CONFIRMED
 ## 4. Where the code goes
 
 - `site/hazard.mjs` (pure): `summariseQuakes`, `summariseSpace`, `summariseApproaches`, `summariseStorms`, `summariseFires`, each with a freshness check and a guard, plus `HAZARD_PAGES` (slug, feed names, max age, title phrase).
-- `site/pages-hazard.mjs`: the four page functions and the chart helpers (reuse `barChartSvg`, `columnChartSvg` from `site/pages-satcount.mjs` and `worldMapSvg` from `site/svgmap.mjs`).
+- `site/pages-hazard.mjs`: the page functions (one for each of the five summaries, plus the `/right-now/` hub) and the chart helpers (reuse `barChartSvg`, `columnChartSvg` from `site/pages-satcount.mjs` and `worldMapSvg` from `site/svgmap.mjs`).
 - `site/livepages.mjs`: one registry of every live page path (count, country hub, five countries, five hazard pages, the right-now hub), used by `build-live.mjs`, the sitemap, the llms notes and the PHP-sync test.
 - `site/build-live.mjs`: each page is built independently; a stale or failing feed skips only its page, prints which and why, and the previous copy stays; the manifest is read for every feed; `index.json` lists every file; the generator hash covers the new modules; rebuild when the page's own feed version changes (per page versions in `index.json`), not only the satellites version, so quake pages refresh every collection while the satellite pages stay as they are.
 - `hosting/lib.php`: the slugs are added to the allowed paths (`earthquakes-today`, `aurora-tonight`, `asteroid-close-approaches`, `tropical-storms-now`, `wildfires-today`, `right-now`, each `<slug>/index.html`), still `\z`, plus tests and the list-sync test. The owner must copy `lib.php` to the server again.

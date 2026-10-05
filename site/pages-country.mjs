@@ -27,6 +27,7 @@ const and = (list) => (list.length < 2 ? list.join("") : `${list.slice(0, -1).jo
 const capList = (list, n, rest) => (list.length > n ? `${list.slice(0, n).join(", ")} and ${list.length - n} ${rest}` : and(list));
 // the singular or plural form for a count
 const v = (n, one, many) => (n === 1 ? one : many);
+const FAMILY_GROUP_MIN = 5;
 const ORBIT_SHORT = { low: "Low", medium: "Medium", geostationary: "Geostationary", highElliptical: "High elliptical", beyond: "Beyond geostationary" };
 // lower case orbit names for sentences, built from the same groups as ORBIT_LABELS
 const ORBIT_PROSE = { low: "low Earth orbit", medium: "medium Earth orbit", geostationary: "the geostationary belt", highElliptical: "high elliptical orbits", beyond: "orbits beyond the geostationary belt" };
@@ -214,7 +215,14 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
   const fams = o.families, top = fams[0], tiedFirst = top ? fams.filter((f) => f.count === top.count) : [];
   const second = fams[tiedFirst.length], tiedSecond = second ? fams.filter((f) => f.count === second.count) : [];
   const familyFaqOk = top && tiedFirst.length === 1 && o.noFamily < top.count - (second ? second.count : 0);
-  const famRow = (f) => [esc(f.name), num(f.count), pctText(share(f.count, o.active)), and(f.orbits.map((k) => ORBIT_SHORT[k])), f.purposes.length ? and(f.purposes.map(esc)) : "None recorded"];
+  // OURS: a family's most common CelesTrak group is shown only from 5 satellites up, so one satellite never prints a label for its family
+  const famRow = (f) => [esc(f.name), num(f.count), pctText(share(f.count, o.active)), and(f.orbits.map((k) => ORBIT_SHORT[k])),
+    f.count < FAMILY_GROUP_MIN ? "Fewer than 5 satellites" : f.purposes.length ? and(f.purposes.map(esc)) : "None recorded"];
+  const examples = o.noFamilyExamples.length ? `, such as ${and(o.noFamilyExamples.map(esc))}` : "";
+  const noFamilyText = !o.noFamily ? "Every one of these satellites has a name family." : `${num(o.noFamily)} of these satellites (${pct(share(o.noFamily, o.active))} percent) ${v(o.noFamily, "has", "have")} no name family: ` +
+    (!o.noFamilyOther ? `${v(o.noFamily, "it has", "they have")} only a launch designator so far.`
+      : !o.noFamilyDesignator ? `${v(o.noFamily, "its name does", "their names do")} not start with two or more letters${examples}.`
+      : `${num(o.noFamilyDesignator)} ${v(o.noFamilyDesignator, "has", "have")} only a launch designator so far; ${num(o.noFamilyOther)} ${v(o.noFamilyOther, "has a name that does", "have names that do")} not start with two or more letters${examples}.`);
   const otherFams = fams.slice(10).reduce((s2, f) => s2 + f.count, 0);
   // recent launches grouped by launch date; names first, launch designators counted
   const desig = o.recent.filter((r) => isDesignatorOnly(r.name)), named = o.recent.filter((r) => !isDesignatorOnly(r.name));
@@ -241,6 +249,8 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
     o.starlink > 0
       ? ["How much of this fleet is Starlink?", `${pct(share(o.starlink, o.active))} percent. Starlink alone is ${pct(share(o.starlink, total))} percent of our whole count.`]
       : familyFaqOk ? [`Which name family is largest among satellites the catalogue records for ${page.phrase}?`, `${esc(top.name)}, with ${num(top.count)}${second ? `, ahead of ${and(tiedSecond.map((f) => esc(f.name)))} with ${num(second.count)}${tiedSecond.length > 1 ? " each" : ""}` : ""}${o.noFamily ? `; ${num(o.noFamily)} ${v(o.noFamily, "has", "have")} no name family, too few to change that order` : ""}.`]
+      : unspecified && (!topRec.length || unspecified.count > topRec[0].count)
+        ? [`How many satellites the catalogue records for ${page.phrase} have a purpose group?`, `${num(o.active - unspecified.count)} of the ${num(o.active)}. The other ${num(unspecified.count)} have no recorded group, more than any single group has, so the catalogue cannot say what most of them are for.`]
       : topRec.length ? [`What are most satellites the catalogue records for ${page.phrase} used for?`, `${and(topRec.map((p) => esc(p.name)))}, the largest recorded purpose${topRec.length > 1 ? "s, tied" : ""} (${num(topRec[0].count)}${topRec.length > 1 ? " each" : ""})${unspecified ? `; ${num(unspecified.count)} ${v(unspecified.count, "has", "have")} no grouping` : ""}.`] : null,
     o.last30 > 0
       ? ["How many were launched in the last 30 days?", `${num(o.last30)} of the ${num(counts.last30)} active satellites launched in the 30 days before the data time.`]
@@ -259,9 +269,10 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
 <p>${answer}</p>
 ${counts.named && fams.length + o.noFamily > 0 ? `
 <h2 id="names">Name families</h2>
-<p>Our own grouping by the letters that start each catalogue name ("DMC3" counts as DMC); where the catalogue uses more than one prefix for a fleet, we do not merge them. ${o.noFamily ? `${num(o.noFamily)} of these satellites (${pct(share(o.noFamily, o.active))} percent) ${v(o.noFamily, "has", "have")} no name family: ${v(o.noFamily, "its", "their")} catalogue name is only a launch designator, so ${v(o.noFamily, "it is", "they are")} not named yet, or does not start with letters.` : "Every one of these satellites has a name family."}</p>
-${table({ caption: "Largest name families", head: ["Family", "Satellites", "Share (percent)", "Main orbit group", "Main recorded purpose"], numeric: [1, 2],
+<p>Our own grouping by the run of two or more letters that starts each catalogue name ("DMC3" counts as DMC); where the catalogue uses more than one prefix for a fleet, we do not merge them. ${noFamilyText}</p>
+${table({ caption: "Largest name families", head: ["Family", "Satellites", "Share (percent)", "Main orbit group", "Most common CelesTrak group"], numeric: [1, 2],
     rows: fams.slice(0, 10).map(famRow).concat(otherFams ? [[`${num(fams.length - 10)} other families`, num(otherFams), pctText(share(otherFams, o.active)), "", ""]] : []).concat(o.noFamily ? [["No name family", num(o.noFamily), pctText(share(o.noFamily, o.active)), "", ""]] : []) })}
+<p>The group is the CelesTrak list a satellite is in, as the collector maps those lists to purposes; a satellite in several lists gets only one of them, so a family's group need not describe its mission.</p>
 ` : ""}${counts.named && o.recent.length ? `
 <h2 id="recent">Launched in the last 30 days</h2>
 <p>${num(o.recent.length)} of these satellites ${v(o.recent.length, "was", "were")} launched in the 30 days before the data time. ${recentText}</p>

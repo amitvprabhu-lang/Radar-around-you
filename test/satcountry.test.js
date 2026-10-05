@@ -194,6 +194,9 @@ test("satellites with no name family are counted, and only those", () => {
   const objs = [["STARLINK-1"], ["2026-205A"], ["2026-205B"], ["123 SAT"], [""], ["QPS-SAR 9"]].map(([name]) => ({ type: 0, status: 1, owner: 1, alt: 550, name }));
   const o = countOwners(buildFixture(objs, { owners: ["X"] })).owners[0];
   assert.equal(o.noFamily, 4);
+  assert.equal(o.noFamilyDesignator, 2);
+  assert.equal(o.noFamilyOther, 2);
+  assert.deepEqual(o.noFamilyExamples, ["123 SAT"], "an empty name is counted but never shown as an example");
   assert.deepEqual(o.families.map((f) => [f.name, f.count]), [["QPS", 1], ["STARLINK", 1]]);
   assert.equal(o.families.reduce((s, f) => s + f.count, 0) + o.noFamily, o.active, "families and the unnamed add up to the fleet");
 });
