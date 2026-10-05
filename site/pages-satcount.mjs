@@ -1,21 +1,25 @@
 // The "How many satellites are in orbit?" page. Pure: takes the counts from site/satcount.mjs and returns a page object for renderPage.
 // Every figure on the page comes from the one `counts` value, so the lead, description, FAQ, tables and structured data cannot disagree.
-import { esc, table, sources, SITE, urlPath } from "./layout.mjs";
+import { esc, table, sources, SITE, urlPath, href } from "./layout.mjs";
 import { ORBIT_BOUNDS, ORBIT_CHART_LABELS } from "./satcount.mjs";
+import { HUB_FILE, COUNTRY_PAGES } from "./satcountry.mjs";
 
 export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
+// Every page built from the live satellite feed: this page, the satellites by country hub and the five country pages (site/pages-country.mjs).
+export const LIVE_FILES = [SATCOUNT_FILE, HUB_FILE, ...COUNTRY_PAGES.map((p) => p.file)];
 
-const num = (n) => n.toLocaleString("en-GB");
-const pct = (x) => (Math.round(x * 1000) / 10).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const dateLong = (iso) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
-const timeUtc = (iso) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
+export const num = (n) => n.toLocaleString("en-GB");
+export const pct = (x) => (Math.round(x * 1000) / 10).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+export const dateLong = (iso) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
+export const timeUtc = (iso) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
 const trunc = (s, n) => (s.length > n ? s.slice(0, n - 3) + "..." : s);
 
-// A sitemap with the one live page and an accurate last modified time (the time the page was last rebuilt, which only happens when the
-// satellite data changes). Google uses lastmod only if it is consistently accurate.
-export const sitemapLive = (lastmodIso) => `<?xml version="1.0" encoding="UTF-8"?>
+// A sitemap with the live pages and an accurate last modified time (the time the pages were last rebuilt, which only happens when the
+// satellite data or the page generator changes). Google uses lastmod only if it is consistently accurate. `files` is the list of pages
+// built in that run; it defaults to every live page.
+export const sitemapLive = (lastmodIso, files = LIVE_FILES) => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>${esc(`${SITE.url}/${urlPath(SATCOUNT_FILE)}`)}</loc><lastmod>${esc(lastmodIso)}</lastmod></url>
+${files.map((f) => `  <url><loc>${esc(`${SITE.url}/${urlPath(f)}`)}</loc><lastmod>${esc(lastmodIso)}</lastmod></url>`).join("\n")}
 </urlset>
 `;
 
@@ -43,9 +47,9 @@ export function columnChartSvg({ id, title, desc, rows }) {
   return `<svg class="chart" role="img" aria-labelledby="${id}-t ${id}-d" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="max-width:100%;height:auto"><title id="${id}-t">${esc(title)}</title><desc id="${id}-d">${esc(desc)}</desc>${body}</svg>`;
 }
 
-const CELESTRAK = { title: "CelesTrak current GP data (the active list)", url: "https://celestrak.org/NORAD/elements/", note: "Where the orbital element sets come from" };
-const SATCAT = { title: "CelesTrak SATCAT format", url: "https://celestrak.org/satcat/satcat-format.php", note: "Owner, launch date, status and type for each object" };
-const STATUS = { title: "CelesTrak SATCAT status codes", url: "https://celestrak.org/satcat/status.php", note: "What Operational, Partially operational and the other statuses mean" };
+export const CELESTRAK = { title: "CelesTrak current GP data (the active list)", url: "https://celestrak.org/NORAD/elements/", note: "Where the orbital element sets come from" };
+export const SATCAT = { title: "CelesTrak SATCAT format", url: "https://celestrak.org/satcat/satcat-format.php", note: "Owner, launch date, status and type for each object" };
+export const STATUS = { title: "CelesTrak SATCAT status codes", url: "https://celestrak.org/satcat/status.php", note: "What Operational, Partially operational and the other statuses mean" };
 
 export function satelliteCountPage(c, { updated }) {
   const upIso = updated.toISOString();
