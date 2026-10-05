@@ -703,7 +703,7 @@ Then, on a quiet machine (check `uptime`; wait for the one minute load average t
 
 - [ ] **Step 5: House style and identifier check (do not use `xargs grep -P`, it is unreliable on macOS)**
 
-Run a Python scan over every file changed on the branch since the satellite count work began (`git diff --name-only <base>..HEAD`, with the base given in your dispatch) for U+2013, U+2014 and the emoji ranges, ignoring the one pre-existing literal-character assertion in `test/site.test.js`, and scan the ADDED lines (`git diff <base>..HEAD`) for `<hosting account username>`, an IP-like pattern and `@`. Show the output; expected: nothing found.
+Run a Python scan over every file changed on the branch since the satellite count work began (`git diff --name-only <base>..HEAD`, with the base given in your dispatch) for U+2013, U+2014 and the emoji ranges, ignoring the one pre-existing literal-character assertion in `test/site.test.js`, and scan the ADDED lines (`git diff <base>..HEAD`) for the hosting account username (the one shown on the hosting SSH page), an IP-like pattern and `@`. Show the output; expected: nothing found.
 
 - [ ] **Step 6: Commit**
 
