@@ -38,8 +38,8 @@ npm run build           # bundles src/ into one page: dist/radar.html (live mode
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
 npm run test:hosting    # 425 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 121 pages (120 static pages and the app as index.html), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
-npm run e2e             # 290 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first); 39 in the last recorded run (2026-10-06, the noindex build, with the home text section but before the country and hazard pages were merged in); not run yet after the merge
+npm run e2e             # 291 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
+npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first); 56 in the last recorded run (2026-10-06, indexable and noindex builds, all branches merged)
 npm run e2e:live        # 112 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
