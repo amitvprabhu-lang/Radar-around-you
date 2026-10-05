@@ -1,23 +1,30 @@
 // The "How many satellites are in orbit?" page. Pure: takes the counts from site/satcount.mjs and returns a page object for renderPage.
 // Every figure on the page comes from the one `counts` value, so the lead, description, FAQ, tables and structured data cannot disagree.
-import { esc, table, sources, SITE, urlPath } from "./layout.mjs";
+import { esc, table, sources, SITE, urlPath, href } from "./layout.mjs";
 import { ORBIT_BOUNDS, ORBIT_CHART_LABELS } from "./satcount.mjs";
+import { HUB_FILE } from "./satcountry.mjs";
+import { SATCOUNT_FILE, LIVE_FILES, SATELLITE_FILES } from "./livepages.mjs";
 
-export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
+// Every live page is listed once, in site/livepages.mjs: this page, the satellites by country pages, the hazard pages and the right-now hub.
+export { SATCOUNT_FILE, LIVE_FILES, SATELLITE_FILES };
 
-const num = (n) => n.toLocaleString("en-GB");
-const pct = (x) => (Math.round(x * 1000) / 10).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const dateLong = (iso) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
-const timeUtc = (iso) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
+export const num = (n) => n.toLocaleString("en-GB");
+export const pct = (x) => (Math.round(x * 1000) / 10).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+export const dateLong = (iso) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
+export const timeUtc = (iso) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
 const trunc = (s, n) => (s.length > n ? s.slice(0, n - 3) + "..." : s);
 
-// A sitemap with the one live page and an accurate last modified time (the time the page was last rebuilt, which only happens when the
-// satellite data changes). Google uses lastmod only if it is consistently accurate.
-export const sitemapLive = (lastmodIso) => `<?xml version="1.0" encoding="UTF-8"?>
+// A sitemap with the live pages, each with an accurate last modified time: the data time of the page (the feed's own time), which moves
+// only when the numbers can have changed. Google uses lastmod only if it is consistently accurate. `entries` is [{ file, lastmod }] in the
+// order of site/livepages.mjs; the older form (one time, a list of files that defaults to every live page) gives every page that time.
+export function sitemapLive(entries, files = LIVE_FILES) {
+  const list = typeof entries === "string" ? files.map((file) => ({ file, lastmod: entries })) : entries;
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>${esc(`${SITE.url}/${urlPath(SATCOUNT_FILE)}`)}</loc><lastmod>${esc(lastmodIso)}</lastmod></url>
+${list.map((e) => `  <url><loc>${esc(`${SITE.url}/${urlPath(e.file)}`)}</loc><lastmod>${esc(e.lastmod)}</lastmod></url>`).join("\n")}
 </urlset>
 `;
+}
 
 export function barChartSvg({ id, title, desc, rows }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -31,28 +38,33 @@ export function barChartSvg({ id, title, desc, rows }) {
   return `<svg class="chart" role="img" aria-labelledby="${id}-t ${id}-d" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="max-width:100%;height:auto"><title id="${id}-t">${esc(title)}</title><desc id="${id}-d">${esc(desc)}</desc>${body}</svg>`;
 }
 
+// rows: [{ label, value, sub }]; sub is an optional second label line (a day under an hour, say). Without any sub the output is as before.
 export function columnChartSvg({ id, title, desc, rows }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
-  const colW = 38, plotH = 170, w = rows.length * colW + 20, h = plotH + 50;
+  const subs = rows.some((r) => r.sub);
+  const colW = 38, plotH = 170, w = rows.length * colW + 20, h = plotH + 50 + (subs ? 14 : 0);
   const body = rows.map((r, i) => {
     const bh = Math.max(2, Math.round((r.value / max) * plotH)), x = 10 + i * colW, y = 20 + plotH - bh;
     return `<rect x="${x + 4}" y="${y}" width="${colW - 10}" height="${bh}" rx="2" fill="var(--ion)"></rect>` +
       `<text x="${x + colW / 2 - 1}" y="${y - 4}" text-anchor="middle" fill="var(--muted)" font-size="10">${num(r.value)}</text>` +
-      `<text x="${x + colW / 2 - 1}" y="${plotH + 36}" text-anchor="middle" fill="var(--text)" font-size="11">${esc(r.label)}</text>`;
+      `<text x="${x + colW / 2 - 1}" y="${plotH + 36}" text-anchor="middle" fill="var(--text)" font-size="11">${esc(r.label)}</text>` +
+      (r.sub ? `<text x="${x + colW / 2 - 1}" y="${plotH + 50}" text-anchor="middle" fill="var(--muted)" font-size="10">${esc(r.sub)}</text>` : "");
   }).join("");
   return `<svg class="chart" role="img" aria-labelledby="${id}-t ${id}-d" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="max-width:100%;height:auto"><title id="${id}-t">${esc(title)}</title><desc id="${id}-d">${esc(desc)}</desc>${body}</svg>`;
 }
 
-const CELESTRAK = { title: "CelesTrak current GP data (the active list)", url: "https://celestrak.org/NORAD/elements/", note: "Where the orbital element sets come from" };
-const SATCAT = { title: "CelesTrak SATCAT format", url: "https://celestrak.org/satcat/satcat-format.php", note: "Owner, launch date, status and type for each object" };
-const STATUS = { title: "CelesTrak SATCAT status codes", url: "https://celestrak.org/satcat/status.php", note: "What Operational, Partially operational and the other statuses mean" };
+export const CELESTRAK = { title: "CelesTrak current GP data (the active list)", url: "https://celestrak.org/NORAD/elements/", note: "Where the orbital element sets come from" };
+export const SATCAT = { title: "CelesTrak SATCAT format", url: "https://celestrak.org/satcat/satcat-format.php", note: "Owner, launch date, status and type for each object" };
+export const STATUS = { title: "CelesTrak SATCAT status codes", url: "https://celestrak.org/satcat/status.php", note: "What Operational, Partially operational and the other statuses mean" };
 
 export function satelliteCountPage(c, { updated }) {
   const upIso = updated.toISOString();
   const active = num(c.active), date = dateLong(c.taken), time = timeUtc(c.taken);
   const top = c.owners[0];
   const share = pct(c.starlinkShare);
-  const description = `${active} active satellites were in orbit on ${date}, ${share} percent of them Starlink. Counted from CelesTrak's active list, with breakdowns by owner, orbit, purpose and launch year.`;
+  const description = `${active} active satellites were in orbit on ${date}, ${share} percent of them Starlink. By owner, orbit, purpose and launch year, from CelesTrak.`;
+  // OURS: titles stay at 60 characters or fewer for the longest date ("30 September 2026"); a test checks it
+  const title = `How many satellites are in orbit? As of ${date}`;
   const url = `${SITE.url}/${urlPath(SATCOUNT_FILE)}`;
 
   const ownerRows = c.owners.map((o) => ({ label: o.name, value: o.count }));
@@ -77,7 +89,7 @@ export function satelliteCountPage(c, { updated }) {
 ${table({ caption: "Satellites in the feed by recorded status", head: ["Status", "Satellites"], numeric: [1], rows: c.statusRows.map((r) => [esc(r.name), num(r.count)]) })}
 
 <h2 id="who">Which countries and operators have the most satellites?</h2>
-<p>${top ? `${esc(top.name)} has the most, with ${num(top.count)} active satellites. ` : ""}Owners are shown as the catalogue records them, which mixes countries and organisations.</p>
+<p>${top ? `${esc(top.name)} has the most, with ${num(top.count)} active satellites. ` : ""}Owners are shown as the catalogue records them, which mixes countries and organisations. Every owner is ranked on <a href="${href(SATCOUNT_FILE, HUB_FILE)}">satellites by country</a>.</p>
 ${barChartSvg({ id: "chart-owners", title: "Active satellites by owner", desc: `The ${c.owners.length} owners with the most active satellites. ${top ? `${top.name} is highest with ${num(top.count)}.` : ""}`, rows: ownerRows })}
 ${table({ caption: "Active satellites by owner", head: ["Owner", "Active satellites"], numeric: [1], rows: c.owners.map((o) => [esc(o.name), num(o.count)]).concat(c.ownersOther ? [["All other owners", num(c.ownersOther)]] : []) })}
 
@@ -123,12 +135,12 @@ ${sources([CELESTRAK, SATCAT, STATUS])}`;
 
   return {
     file: SATCOUNT_FILE, crumbTitle: "Satellite count",
-    title: `How many satellites are in orbit? Live count, ${date}`, description,
+    title, description,
     h1: "How many satellites are in orbit?", kicker: "Live count",
     lead: `As of ${esc(date)}, ${esc(time)}, there are <strong>${active} active satellites</strong> in orbit, by CelesTrak's active list and our definition of active (below). ${num(c.starlink)} of them, ${share} percent, are Starlink.`,
     meta: `Data as of <time datetime="${esc(c.taken)}">${esc(date)}, ${esc(time)}</time>. Page updated <time datetime="${esc(upIso)}">${esc(dateLong(upIso))}, ${esc(timeUtc(upIso))}</time>. Satellite data from CelesTrak.`,
     cta: { label: "See them on the live globe", query: "" },
     body,
-    jsonld: [{ "@context": "https://schema.org", "@type": "WebPage", name: `How many satellites are in orbit? Live count, ${date}`, description, url, dateModified: upIso }],
+    jsonld: [{ "@context": "https://schema.org", "@type": "WebPage", name: title, description, url, dateModified: upIso }],
   };
 }

@@ -1,5 +1,5 @@
-// Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the one live page) and robots.txt,
-// and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
+// Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the live pages) and robots.txt,
+// the IndexNow key file <key>.txt (only when the site is indexable and site/indexnow.key exists), and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
 import path from "node:path";
@@ -8,9 +8,14 @@ import { allChecks } from "./verify.mjs";
 import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
-import { SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
+import { sitemapLive } from "./pages-satcount.mjs";
+import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
+import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
+import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
+import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
 import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
+import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -35,14 +40,59 @@ export function loadCities() {
   return readJson("snapshot.json").cities.map(({ id, name, country, lat, lon, tz }) => ({ id, name, country, lat, lon, tz }));
 }
 
-// The satellite snapshot bundled with the repository (public/), used for the deploy-time copy of the satellite count page so the address
-// never returns 404 after a redeploy. The live copy replaces it within minutes, built on GitHub from the collector's data.
+// The satellite snapshot bundled with the repository (public/), used for the deploy-time copy of the live pages (the satellite count page
+// and the satellites by country pages) so their addresses never return 404 after a redeploy. The live copies replace them within
+// minutes, built on GitHub from the collector's data.
 export function loadSatellites() {
   return {
     meta: readJson("public/meta.json"),
     details: fs.readFileSync(path.join(root, "public/details.bin")),
     swarm: fs.readFileSync(path.join(root, "public/swarm.bin")),
+    names: fs.readFileSync(path.join(root, "public/names.txt"), "utf8"),
   };
+}
+
+// The app's own coastlines, for the maps on the country pages.
+export const loadCoast = () => coastFromBuffer(fs.readFileSync(path.join(root, "public/coast.bin")));
+
+// The hazard feed files bundled in public/, for the deploy-time copies of the hazard pages. Each is read only if it is there (on
+// 2026-10-06 only quakes.json was), so a page whose data is not bundled is simply not written at deploy time; the live copy comes with the
+// next pull. GDACS events are not read: the bundled list carries no data time.
+export function loadHazards(dir = path.join(root, "public")) {
+  const has = (f) => fs.existsSync(path.join(dir, f));
+  const json = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+  const bytes = (f) => fs.readFileSync(path.join(dir, f));
+  return {
+    quakes: has("quakes.json") ? json("quakes.json") : null,
+    kp: has("kp.json") ? json("kp.json") : null,
+    spaceweather: has("spaceweather.json") ? json("spaceweather.json") : null,
+    aurora: has("aurora.json") && has("aurora.bin") ? { meta: json("aurora.json"), grid: bytes("aurora.bin") } : null,
+    closeapproaches: has("closeapproaches.json") ? json("closeapproaches.json") : null,
+    storms: has("storms.json") ? json("storms.json") : null,
+    fires: has("fires.json") && has("fires.bin") ? { summary: json("fires.json"), bin: bytes("fires.bin") } : null,
+    places: has("places.json") ? json("places.json") : null,
+  };
+}
+
+// The deploy-time copies of the hazard pages and the right-now hub, from the bundled data. Old data is allowed here (the page then says it
+// is the copy bundled at deploy time); a feed that fails its guard is left out with a message. satellites: { active, dataTime }.
+export function hazardSnapshotPages(h, { now, coast, satellites, satelliteFiles = SATELLITE_FILES }) {
+  const o = { now, allowStale: true };
+  const make = {
+    quakes: () => h.quakes && summariseQuakes(h.quakes, o),
+    aurora: () => h.kp && summariseSpace({ kp: h.kp, spaceweather: h.spaceweather, aurora: h.aurora }, o),
+    asteroids: () => h.closeapproaches && summariseApproaches(h.closeapproaches, o),
+    storms: () => h.storms && summariseStorms(h.storms, o),
+    fires: () => h.fires && h.places && summariseFires(h.fires, { ...o, places: h.places }),
+  };
+  const summaries = {}, skipped = [];
+  for (const p of HAZARD_PAGES) {
+    try { const s = make[p.key](); if (s) summaries[p.key] = s; } catch (e) { skipped.push({ file: p.file, reason: e.message }); }
+  }
+  const built = [...satelliteFiles, ...HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => p.file), RIGHT_NOW_FILE];
+  const pages = HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => ({ ...HAZARD_PAGE_FUNCTIONS[p.key](summaries[p.key], { built, coast }), dataTime: summaries[p.key].dataTime }));
+  const hub = rightNowPage(hubRows({ satellites, quakes: summaries.quakes, space: summaries.aurora, approaches: summaries.asteroids, storms: summaries.storms, fires: summaries.fires }), { available: built });
+  return { pages: [...pages, hub], skipped };
 }
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
@@ -120,7 +170,8 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
-export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites() } = {}) {
+export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast(), hazards = loadHazards(), indexnowKey = readIndexNowKey() } = {}) {
+  if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("site: the IndexNow key must be 8 to 128 letters, digits and dashes");
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -130,7 +181,12 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   const details = fs.existsSync(path.join(root, "public/stardetails.json")) ? readJson("public/stardetails.json") : null;
   const satcount = countSatellites(satellites);
   assertPlausible(satcount);
-  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now });
+  const country = countryPageSet(satellites, { coast, updated: now });
+  for (const sk of country.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
+  const taken = isoZ(parseTime(satcount.taken));
+  const live = hazardSnapshotPages(hazards, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
+  for (const sk of live.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
+  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages, livePages: live.pages });
   const seen = new Set();
   for (const p of pages) { if (seen.has(p.file)) throw new Error(`site: duplicate page ${p.file}`); seen.add(p.file); }
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -144,16 +200,22 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex, countryHub })));
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
-    fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => f !== SATCOUNT_FILE)));
-    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString()));
+    // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out
+    fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => !LIVE_FILES.includes(f))));
+    // each live page with its data time: the satellite pages the snapshot's time, the hazard pages and the hub their feeds' own times
+    const dataTime = new Map(pages.filter((p) => p.dataTime).map((p) => [p.file, p.dataTime]));
+    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(LIVE_FILES.filter((f) => files.includes(f)).map((f) => ({ file: f, lastmod: dataTime.get(f) || taken }))));
     fs.writeFileSync(path.join(outDir, "llms.txt"), buildLlmsTxt({ pages, url: SITE.url, name: SITE.name, summary: APP_DESCRIPTION }));
+    // IndexNow ownership proof: the key and nothing else, UTF-8, at the site root. hosting/pull.php sends pings only while this file holds
+    // the key that pages/index.json names, and a redeploy writes it again. Never written for a noindex site, which must not be pinged.
+    if (indexnowKey) fs.writeFileSync(path.join(outDir, `${indexnowKey}.txt`), indexnowKey, "utf8");
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
-  return { outDir, pages: files.length, checks, noindex };
+  return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const r = build({ allowUnchecked: process.env.ALLOW_UNCHECKED === "1" });
   console.log(`site: ${r.pages} pages written to ${r.outDir} (canonical base ${SITE.url})`);
-  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away, robots.txt disallows everything, and no sitemap or llms.txt is written. This setting is for a temporary address.");
+  if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away, robots.txt disallows everything, and no sitemap, llms.txt or IndexNow key file is written. This setting is for a temporary address.");
 }

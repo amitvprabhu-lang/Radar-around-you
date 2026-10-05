@@ -140,7 +140,15 @@ $lines = file($lf, FILE_IGNORE_NEW_LINES); ok(count($lines) === 300 && substr($l
 // ---- finished pages (pages/ on the data branch, copied to the site root)
 ok(radar_safe_page_path('how-many-satellites-in-orbit/index.html'), 'the satellite count page is allowed');
 ok(radar_safe_page_path('sitemap-live.xml'), 'the live sitemap is allowed');
-foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-many-satellites-in-orbit/index.html.bak', 'how-many-satellites-in-orbit/index.htm', "sitemap-live.xml\n", '../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html'] as $bad) {
+ok(radar_safe_page_path('satellites-by-country/index.html'), 'the satellites by country hub is allowed');
+foreach (['united-states', 'china', 'united-kingdom', 'cis-former-ussr', 'japan'] as $slug) { ok(radar_safe_page_path("satellites-by-country/$slug/index.html"), "the country page '$slug' is allowed"); }
+foreach (['earthquakes-today', 'aurora-tonight', 'asteroid-close-approaches', 'tropical-storms-now', 'wildfires-today', 'right-now'] as $slug) { ok(radar_safe_page_path("$slug/index.html"), "the live page '$slug' is allowed"); ok(!radar_safe_page_path("$slug/x/index.html"), "a nested path under '$slug' is refused"); ok(!radar_safe_page_path("$slug/index.html\n"), "a trailing newline after '$slug' is refused"); }
+foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-many-satellites-in-orbit/index.html.bak', 'how-many-satellites-in-orbit/index.htm', "sitemap-live.xml\n", '../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html',
+    'satellites-by-country/a/b/index.html', 'satellites-by-country/UPPER/index.html', 'satellites-by-country/x.php', 'satellites-by-country//index.html',
+    'satellites-by-country/../about/index.html', 'satellites-by-country/-japan/index.html', 'satellites-by-country/japan-/index.html', 'satellites-by-country/united--states/index.html',
+    'satellites-by-country/japan2/index.html', 'satellites-by-country/japan/index.html.bak', "satellites-by-country/japan/index.html\n", 'satellites-by-country/japan/', 'satellites-by-country/japan/x.html',
+    'satellites-by-country/index.html.bak', 'satellites-by-country', 'satellites-by-country/', 'Satellites-by-country/japan/index.html', 'x/satellites-by-country/japan/index.html',
+    'satellites-by-country/france/index.html', 'satellites-by-country/italy/index.html', 'satellites-by-country/united-states-of-america/index.html', 'satellites-by-country/chinaa/index.html', 'satellites-by-country/japan-x/index.html'] as $bad) {
     ok(!radar_safe_page_path($bad), 'unsafe page path rejected: ' . json_encode($bad));
 }
 $PAGE = '<!doctype html><title>t</title><p>7 active satellites</p>'; $SITEMAP = '<?xml version="1.0"?><urlset/>';
@@ -182,6 +190,352 @@ ok(!$r['ok'] && $r['reason'] === 'invalid', 'an index with the wrong schema is r
 $nope = sys_get_temp_dir() . '/radar-test-nope-' . bin2hex(random_bytes(4));
 $r = radar_sync_pages(BASE, $nope, $srv($P1, $log));
 ok(!$r['ok'] && $r['reason'] === 'dest' && !is_dir($nope), 'a site folder that does not exist is not created');
+
+// the satellites by country pages live in nested folders that do not exist yet on the site; the sync creates them inside the site folder
+$root3 = tmpdir(); $log = [];
+$P3 = $P1 + ['satellites-by-country/index.html' => '<p>hub</p>', 'satellites-by-country/japan/index.html' => '<p>japan</p>', 'satellites-by-country/cis-former-ussr/index.html' => '<p>cis</p>'];
+$r = radar_sync_pages(BASE, $root3, $srv($P3, $log));
+ok($r['ok'] && $r['fetched'] === 5, 'the hub and the country pages are fetched with the count page and the sitemap');
+same(file_get_contents($root3 . '/satellites-by-country/japan/index.html'), '<p>japan</p>', 'a country page is written into a new nested folder');
+same(file_get_contents($root3 . '/satellites-by-country/index.html'), '<p>hub</p>', 'the hub is written');
+same(files($root3), ['how-many-satellites-in-orbit/index.html', 'satellites-by-country/cis-former-ussr/index.html', 'satellites-by-country/index.html', 'satellites-by-country/japan/index.html', 'sitemap-live.xml'], 'nothing else is written and no temporary files are left');
+$log = []; $r = radar_sync_pages(BASE, $root3, $srv($P3, $log));
+ok($r['ok'] && $r['fetched'] === 0, 'a second sync of the nested pages fetches nothing');
+$evil3 = $P1 + ['satellites-by-country/a/b/index.html' => 'x', 'satellites-by-country/UPPER/index.html' => 'x'];
+$root4 = tmpdir(); $r = radar_sync_pages(BASE, $root4, $srv($evil3, $log));
+ok(!$r['ok'] && count($r['failed']) === 2, 'deeper or uppercase country paths are refused');
+ok(!is_dir($root4 . '/satellites-by-country'), 'and no folder is made for them');
+
+// ---- the pages sync hands back the parsed index and the paths it actually wrote (for IndexNow), next to its old fields
+$root5 = tmpdir(); $log = [];
+$r = radar_sync_pages(BASE, $root5, $srv($P1, $log));
+ok($r['ok'] && $r['fetched'] === 2, 'the old fields are unchanged');
+same($r['changed'], ['how-many-satellites-in-orbit/index.html', 'sitemap-live.xml'], 'the first sync lists both written paths as changed');
+same($r['index']['satellitesVersion'], 'V1', 'and hands back the parsed index');
+$r = radar_sync_pages(BASE, $root5, $srv($P1, $log));
+same($r['changed'], [], 'an unchanged sync lists nothing as changed');
+$r = radar_sync_pages(BASE, $root5, $srv($P2, $log));
+same($r['changed'], ['how-many-satellites-in-orbit/index.html'], 'only the page whose hash changed is listed');
+$r = radar_sync_pages(BASE, $root5, server(['pages/index.json' => pagesIndex(['how-many-satellites-in-orbit/index.html' => 'v3', 'satellites-by-country/index.html' => 'hub']), 'pages/how-many-satellites-in-orbit/index.html' => 500, 'pages/satellites-by-country/index.html' => 'hub'], $log));
+ok(!$r['ok'] && $r['changed'] === ['satellites-by-country/index.html'], 'when one page fails, the one that was written is still listed as changed');
+$r = radar_sync_pages(BASE, $root5, server([], $log));
+ok(!$r['ok'] && !isset($r['index']) && $r['changed'] === [], 'without an index nothing is listed');
+rrmdir($root5);
+
+// ---- IndexNow (docs/superpowers/specs/2026-10-06-live-hazard-pages-design.md, section 2b). No real request is ever made: $http is a fake.
+const INOW_KEY = '0123456789abcdef0123456789abcdef';
+const T0 = 1791280800;  // 2026-10-06T10:00:00Z
+function inowIndex(array $extra = []): array { return $extra + ['schema' => 1, 'siteUrl' => 'https://example.org', 'indexnowKey' => INOW_KEY, 'noindex' => false, 'files' => []]; }
+function inowSite(?string $keyText = INOW_KEY): string { $d = tmpdir(); if ($keyText !== null) { file_put_contents($d . '/' . INOW_KEY . '.txt', $keyText); } return $d; }
+// a fake IndexNow endpoint: records every call and answers with $status (or throws when $status is an exception)
+function inowHttp(array &$calls, $status = 200): callable { return function ($m, $u, $h, $b) use (&$calls, $status) { $calls[] = ['method' => $m, 'url' => $u, 'headers' => $h, 'body' => $b]; if ($status instanceof Throwable) { throw $status; } return ['status' => $status, 'body' => '', 'error' => $status === 0 ? 'could not connect' : '']; }; }
+function inowLog(string $f): string { return is_file($f) ? (string) file_get_contents($f) : ''; }
+$PAGES_CHANGED = ['how-many-satellites-in-orbit/index.html', 'satellites-by-country/index.html', 'satellites-by-country/japan/index.html', 'sitemap-live.xml'];
+
+// the payload
+$site = inowSite(); $work = tmpdir(); $state = $work . '/indexnow.json'; $lf = $work . '/pull.log'; $calls = [];
+$r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $lf, $state, T0);
+same(count($calls), 1, 'one request is sent for all due pages');
+same($r['sent'], 3, 'three pages are sent');
+same($calls[0]['method'], 'POST', 'IndexNow is a POST');
+same($calls[0]['url'], 'https://api.indexnow.org/indexnow', 'to the shared IndexNow endpoint');
+ok(in_array('Content-Type: application/json; charset=utf-8', $calls[0]['headers'], true), 'with a JSON content type in UTF-8');
+$body = json_decode($calls[0]['body'], true);
+same(array_keys($body), ['host', 'key', 'keyLocation', 'urlList'], 'the payload has exactly host, key, keyLocation and urlList');
+same($body['host'], 'example.org', 'host is the site host');
+same($body['key'], INOW_KEY, 'key is the key from the index');
+same($body['keyLocation'], 'https://example.org/' . INOW_KEY . '.txt', 'keyLocation is the key file at the site root');
+same($body['urlList'], ['https://example.org/how-many-satellites-in-orbit/', 'https://example.org/satellites-by-country/', 'https://example.org/satellites-by-country/japan/'], 'URLs are the page folders (count page, hub, nested country page) and the sitemap is not one of them');
+ok(strpos($calls[0]['body'], '\\/') === false, 'slashes are not escaped in the body');
+ok(strpos(inowLog($lf), 'indexnow: sent 3 url(s)') !== false, 'the log says how many were sent');
+$st = json_decode((string) file_get_contents($state), true);
+same($st, ['sent' => ['how-many-satellites-in-orbit/index.html' => T0, 'satellites-by-country/index.html' => T0, 'satellites-by-country/japan/index.html' => T0], 'pending' => [], 'retry' => []], 'the state file records when each page was sent, and nothing is pending');
+
+// the 6-hour throttle
+$calls = [];
+$r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $lf, $state, T0);
+ok(count($calls) === 0 && $r['sent'] === 0, 'the same pages again at once send nothing');
+ok(substr(trim(inowLog($lf)), -21) === 'indexnow: nothing due', 'and the log says nothing is due');
+$r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $lf, $state, T0 + 21599);
+ok(count($calls) === 0, 'one second short of 6 hours still sends nothing');
+$r = radar_indexnow(inowIndex(), $site, ['satellites-by-country/united-states/index.html', 'satellites-by-country/japan/index.html'], inowHttp($calls), $lf, $state, T0 + 600);
+same(json_decode($calls[0]['body'], true)['urlList'], ['https://example.org/satellites-by-country/united-states/'], 'a page never sent before is sent while the others wait');
+$calls = [];
+$r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $lf, $state, T0 + 21600);
+same(count($calls), 1, 'after 6 hours the pages are sent again');
+same(count(json_decode($calls[0]['body'], true)['urlList']), 3, 'all three that were due');
+same(json_decode((string) file_get_contents($state), true)['sent']['satellites-by-country/united-states/index.html'], T0 + 600, 'the page sent later keeps its own time');
+rrmdir($site); rrmdir($work);
+
+// the key file proves the key belongs to this site
+foreach (['missing' => null, 'different' => 'ffffffffffffffffffffffffffffffff', 'with a line break' => INOW_KEY . "\n", 'empty' => ''] as $what => $text) {
+    $site = inowSite($text); $work = tmpdir(); $calls = [];
+    $r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 0 && $r['sent'] === 0, "a key file that is $what sends nothing");
+    ok(strpos(inowLog($work . '/pull.log'), 'indexnow: key file missing or different, nothing sent') !== false, "and says so ($what)");
+    same(json_decode((string) @file_get_contents($work . '/indexnow.json'), true), ['sent' => [], 'pending' => ['how-many-satellites-in-orbit/index.html', 'satellites-by-country/index.html', 'satellites-by-country/japan/index.html'], 'retry' => []], "and records no send time, only the pages as pending ($what)");
+    rrmdir($site); rrmdir($work);
+}
+
+// refused paths are never submitted
+$site = inowSite(); $work = tmpdir(); $calls = [];
+$r = radar_indexnow(inowIndex(), $site, ['about/index.html', '../evil/index.html', 'satellites-by-country/france/index.html', "satellites-by-country/japan/index.html\n", 'live/manifest.json', 'index.html', 42, 'how-many-satellites-in-orbit/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+same(json_decode($calls[0]['body'], true)['urlList'], ['https://example.org/how-many-satellites-in-orbit/'], 'only the allowed page is submitted, never a refused path');
+$calls = [];
+$r = radar_indexnow(inowIndex(), $site, ['about/index.html', '../evil/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 99999);
+ok(count($calls) === 0, 'a list of only refused paths sends nothing');
+same(radar_indexnow(inowIndex(), $site, ['how-many-satellites-in-orbit/index.html', 'how-many-satellites-in-orbit/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 99999)['sent'], 1, 'a path listed twice is sent once');
+rrmdir($site); rrmdir($work);
+
+// the sitemap is never submitted, even alone
+$site = inowSite(); $work = tmpdir(); $calls = [];
+$r = radar_indexnow(inowIndex(), $site, ['sitemap-live.xml'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+ok(count($calls) === 0 && $r['sent'] === 0, 'a changed sitemap alone sends nothing');
+
+// nothing changed
+$r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+ok(count($calls) === 0 && $r['sent'] === 0, 'nothing changed sends nothing');
+ok(strpos(inowLog($work . '/pull.log'), 'indexnow: nothing due') !== false, 'and the log says nothing is due');
+
+// the index decides: noindex, no key, a bad key, a site address that is not a plain lowercase https host
+$bads = [
+    'noindex is true' => inowIndex(['noindex' => true]),
+    'there is no key' => array_diff_key(inowIndex(), ['indexnowKey' => 1]),
+    'the key is too short' => inowIndex(['indexnowKey' => 'abc']),
+    'the key has a slash' => inowIndex(['indexnowKey' => '../../etc/passwd']),
+    'the key ends in a line break' => inowIndex(['indexnowKey' => INOW_KEY . "\n"]),
+    'the key is not a string' => inowIndex(['indexnowKey' => 12345678]),
+    'the site is http' => inowIndex(['siteUrl' => 'http://example.org']),
+    'the host is uppercase' => inowIndex(['siteUrl' => 'https://Example.org']),
+    'the address has a path' => inowIndex(['siteUrl' => 'https://example.github.io/Radar-around-you']),
+    'the address has a port' => inowIndex(['siteUrl' => 'https://example.org:8443']),
+    'the address has a trailing slash' => inowIndex(['siteUrl' => 'https://example.org/']),
+    'the address has a login' => inowIndex(['siteUrl' => 'https://a@example.org']),
+    'the address ends in a line break' => inowIndex(['siteUrl' => "https://example.org\n"]),
+    'there is no site address' => array_diff_key(inowIndex(), ['siteUrl' => 1]),
+];
+foreach ($bads as $what => $idx) {
+    $calls = [];
+    $r = radar_indexnow($idx, $site, $PAGES_CHANGED, inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 0 && $r['sent'] === 0, "nothing is sent when $what");
+    if (strpos($what, 'the key ') === 0) {
+        same($r['reason'], 'badkey', "the reason is badkey when $what");
+        $msg = 'indexnow: the key in the pages index is not valid, nothing sent';
+        ok(substr(trim(inowLog($work . '/pull.log')), -strlen($msg)) === $msg, "and the log says the key is not valid when $what");
+    }
+}
+ok(strpos(inowLog($work . '/pull.log'), 'indexnow: the site is noindex, nothing sent') !== false, 'the noindex case is logged');
+ok(!is_file($work . '/indexnow.json'), 'and none of these records anything');
+rrmdir($site); rrmdir($work);
+
+// failures are logged, record no send time, never throw, and the next run tries again even though nothing changed since
+$PENDING3 = ['how-many-satellites-in-orbit/index.html', 'satellites-by-country/index.html', 'satellites-by-country/japan/index.html'];
+foreach ([429, 403, 422, 400, 500, 0, 204, 301] as $code) {
+    $site = inowSite(); $work = tmpdir(); $calls = [];
+    $r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls, $code), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 1 && $r['sent'] === 0 && $r['status'] === $code, "HTTP $code is one request and counts as not sent");
+    ok(strpos(inowLog($work . '/pull.log'), "indexnow: HTTP $code") !== false, "HTTP $code is logged with its status");
+    same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => [], 'pending' => $PENDING3, 'retry' => array_fill_keys($PENDING3, ['failures' => 1, 'retryAt' => T0 + 3600])], "HTTP $code records no send time, keeps the pages pending and waits an hour before the retry");
+    $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 202), $work . '/pull.log', $work . '/indexnow.json', T0 + 3599);
+    ok(count($calls) === 1 && $r['reason'] === 'none', "after HTTP $code a run before the retry time sends nothing");
+    $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 202), $work . '/pull.log', $work . '/indexnow.json', T0 + 3600);
+    ok(count($calls) === 2 && $r['sent'] === 3, "after HTTP $code the first run at the retry time sends the pending pages although nothing changed (and 202 counts as success)");
+    same(json_decode($calls[1]['body'], true)['urlList'], ['https://example.org/how-many-satellites-in-orbit/', 'https://example.org/satellites-by-country/', 'https://example.org/satellites-by-country/japan/'], "the retry after HTTP $code names the same pages");
+    same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => array_fill_keys($PENDING3, T0 + 3600), 'pending' => [], 'retry' => []], "after the retry for HTTP $code nothing is pending and the failure record is cleared");
+    $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 202), $work . '/pull.log', $work . '/indexnow.json', T0 + 3660);
+    ok(count($calls) === 2, "and the run after that sends nothing (HTTP $code)");
+    rrmdir($site); rrmdir($work);
+}
+// a failure keeps earlier send times, and a failed retry keeps the page pending
+$site = inowSite(); $work = tmpdir(); $calls = [];
+radar_indexnow(inowIndex(), $site, ['satellites-by-country/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 429), $work . '/pull.log', $work . '/indexnow.json', T0 + 60);
+same(count($calls), 1, 'with nothing changed and nothing pending no request is made');
+radar_indexnow(inowIndex(), $site, ['satellites-by-country/japan/index.html'], inowHttp($calls, 429), $work . '/pull.log', $work . '/indexnow.json', T0 + 120);
+radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 503), $work . '/pull.log', $work . '/indexnow.json', T0 + 180);
+same(count($calls), 2, 'a failed page is not tried again on the next run');
+radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 503), $work . '/pull.log', $work . '/indexnow.json', T0 + 3720);
+same(count($calls), 3, 'but on the first run at its retry time (no retry inside one run)');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => ['satellites-by-country/index.html' => T0], 'pending' => ['satellites-by-country/japan/index.html'], 'retry' => ['satellites-by-country/japan/index.html' => ['failures' => 2, 'retryAt' => T0 + 3720 + 7200]]], 'failures keep the earlier send time, the page stays pending and the delay doubles');
+rrmdir($site); rrmdir($work);
+$site = inowSite(); $work = tmpdir(); $calls = [];
+$threw = false;
+try { $r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls, new RuntimeException('network down')), $work . '/pull.log', $work . '/indexnow.json', T0); } catch (Throwable $e) { $threw = true; }
+ok(!$threw && $r['sent'] === 0, 'a request that throws is caught and counts as not sent');
+ok(strpos(inowLog($work . '/pull.log'), 'network down') !== false, 'and its message is logged');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => [], 'pending' => $PENDING3, 'retry' => array_fill_keys($PENDING3, ['failures' => 1, 'retryAt' => T0 + 3600])], 'and records no send time, only the pending pages and their retry time');
+$n = 0;
+$r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, function () use (&$n) { $n++; return 'not an array'; }, $work . '/pull.log', $work . '/indexnow.json', T0 + 3600);
+$st = json_decode((string) file_get_contents($work . '/indexnow.json'), true);
+ok($n === 1 && $r['sent'] === 0 && $st['sent'] === [] && $st['retry']['satellites-by-country/index.html'] === ['failures' => 2, 'retryAt' => T0 + 3600 + 7200], 'a nonsense answer from the HTTP function counts as a failure');
+rrmdir($site); rrmdir($work);
+
+// a corrupt or odd state file counts as empty, and is replaced by a valid one. The numeric string and the float would throttle the page if
+// the integer filter were missing; the time in the future would throttle it if it were believed.
+foreach (['{"sent":{"how-many-sat', 'null', '[]', '"text"', '{"sent":"x"}', '{"sent":{"how-many-satellites-in-orbit/index.html":"yesterday"}}', '{"sent":{"how-many-satellites-in-orbit/index.html":' . (T0 + 3600) . '}}',
+    '{"sent":{"how-many-satellites-in-orbit/index.html":"' . (T0 - 10) . '"}}', '{"sent":{"how-many-satellites-in-orbit/index.html":' . (T0 - 10) . '.0}}', '{"pending":"x"}', '{"sent":[],"pending":{"a":{"b":1}}}'] as $bad) {
+    $site = inowSite(); $work = tmpdir(); $calls = [];
+    file_put_contents($work . '/indexnow.json', $bad);
+    $r = radar_indexnow(inowIndex(), $site, ['how-many-satellites-in-orbit/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 1 && $r['sent'] === 1, 'a state file holding ' . $bad . ' counts as empty');
+    same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => ['how-many-satellites-in-orbit/index.html' => T0], 'pending' => [], 'retry' => []], 'and is replaced by a valid one (' . $bad . ')');
+    rrmdir($site); rrmdir($work);
+}
+// pending in a corrupt state file is lost with the rest (counts as empty): a run with nothing changed then sends nothing
+foreach (['{"sent":{},"pending":["how-many-satellites-in-orbit/index.html"', '{"sent":{},"pending":"how-many-satellites-in-orbit/index.html"}'] as $bad) {
+    $site = inowSite(); $work = tmpdir(); $calls = [];
+    file_put_contents($work . '/indexnow.json', $bad);
+    $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 0 && $r['reason'] === 'none', 'pending in a corrupt state file counts as empty: ' . $bad);
+    rrmdir($site); rrmdir($work);
+}
+// send times and pending entries for paths outside the allowed list are dropped and never sent
+$site = inowSite(); $work = tmpdir(); $calls = [];
+file_put_contents($work . '/indexnow.json', json_encode(['sent' => ['about/index.html' => T0 - 10, 'how-many-satellites-in-orbit/index.html' => T0 - 30000, 'sitemap-live.xml' => T0 - 10],
+    'pending' => ['about/index.html', '../evil/index.html', 'sitemap-live.xml', 42, ['x'], 'satellites-by-country/france/index.html', 'satellites-by-country/japan/index.html', 'satellites-by-country/japan/index.html']]));
+$r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+same(json_decode($calls[0]['body'], true)['urlList'], ['https://example.org/satellites-by-country/japan/'], 'only the allowed pending page is sent, once');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => ['how-many-satellites-in-orbit/index.html' => T0 - 30000, 'satellites-by-country/japan/index.html' => T0], 'pending' => [], 'retry' => []], 'entries for paths outside the allowed list are dropped from the state');
+rrmdir($site); rrmdir($work);
+// a page that changed while throttled and never changed again is sent once the throttle expires
+$site = inowSite(); $work = tmpdir(); $calls = [];
+$H = 'satellites-by-country/index.html';
+radar_indexnow(inowIndex(), $site, [$H], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+$r = radar_indexnow(inowIndex(), $site, [$H], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 600);
+ok(count($calls) === 1 && $r['reason'] === 'none', 'a page that changes again inside 6 hours is not sent at once');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => [$H => T0], 'pending' => [$H], 'retry' => []], 'but is remembered as pending, with its old send time');
+radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 21599);
+same(count($calls), 1, 'still nothing one second before the 6 hours are up');
+$r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 21600);
+ok(count($calls) === 2 && $r['sent'] === 1, 'once the throttle expires it is sent although it did not change again');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => [$H => T0 + 21600], 'pending' => [], 'retry' => []], 'and leaves pending');
+radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 50000);
+same(count($calls), 2, 'and is not sent again without a change');
+rrmdir($site); rrmdir($work);
+
+// backoff: a page the endpoint keeps refusing waits 1, 2, 4, 8 and then 12 hours (at most) between tries; a change does not shorten
+// the wait, a success clears the record
+$site = inowSite(); $work = tmpdir(); $calls = [];
+$J = 'satellites-by-country/japan/index.html'; $sf = $work . '/indexnow.json';
+$t = T0; $expect = [3600, 7200, 14400, 28800, 43200, 43200, 43200];
+foreach ($expect as $i => $delay) {
+    $before = count($calls);
+    radar_indexnow(inowIndex(), $site, [$J], inowHttp($calls, 429), $work . '/pull.log', $sf, $t);
+    same(count($calls), $before + 1, 'failure ' . ($i + 1) . ' is one request');
+    same(json_decode((string) file_get_contents($sf), true)['retry'][$J], ['failures' => $i + 1, 'retryAt' => $t + $delay], 'after failure ' . ($i + 1) . ' the wait is ' . $delay . ' seconds');
+    $r = radar_indexnow(inowIndex(), $site, [$J], inowHttp($calls, 429), $work . '/pull.log', $sf, $t + $delay - 1);
+    ok(count($calls) === $before + 1 && $r['reason'] === 'none', 'a run one second before the retry time sends nothing, even though the page changed again (' . ($i + 1) . ')');
+    $t += $delay;
+}
+$r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls, 202), $work . '/pull.log', $sf, $t);
+ok(count($calls) === count($expect) + 1 && $r['sent'] === 1, 'a run at the retry time sends, and a 202 is a success');
+same(json_decode((string) file_get_contents($sf), true), ['sent' => [$J => $t], 'pending' => [], 'retry' => []], 'a success clears the failure record');
+$r = radar_indexnow(inowIndex(), $site, [$J], inowHttp($calls, 429), $work . '/pull.log', $sf, $t + 21600);
+same(json_decode((string) file_get_contents($sf), true)['retry'][$J], ['failures' => 1, 'retryAt' => $t + 21600 + 3600], 'a failure after a success starts again at one hour');
+rrmdir($site); rrmdir($work);
+// a failure record on one page does not hold back another
+$site = inowSite(); $work = tmpdir(); $calls = [];
+radar_indexnow(inowIndex(), $site, [$J], inowHttp($calls, 429), $work . '/pull.log', $work . '/indexnow.json', T0);
+$r = radar_indexnow(inowIndex(), $site, ['satellites-by-country/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 60);
+same(json_decode($calls[1]['body'], true)['urlList'], ['https://example.org/satellites-by-country/'], 'a page with no failure record is sent while another waits for its retry time');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => ['satellites-by-country/index.html' => T0 + 60], 'pending' => [$J], 'retry' => [$J => ['failures' => 1, 'retryAt' => T0 + 3600]]], 'and the waiting page keeps its record');
+rrmdir($site); rrmdir($work);
+// corrupt retry fields count as no record, so the pending page is sent at once; records for pages that are not pending are dropped
+$CORRUPT = [
+    'failures is a string' => ['failures' => '2', 'retryAt' => T0 + 600],
+    'failures is zero' => ['failures' => 0, 'retryAt' => T0 + 600],
+    'failures is negative' => ['failures' => -1, 'retryAt' => T0 + 600],
+    'retryAt is a string' => ['failures' => 1, 'retryAt' => (string) (T0 + 600)],
+    'retryAt is a float' => ['failures' => 1, 'retryAt' => T0 + 600.5],
+    'retryAt is too far ahead' => ['failures' => 1, 'retryAt' => T0 + 43201],
+    'retryAt is missing' => ['failures' => 1],
+    'the record is not an object' => 'soon',
+];
+foreach ($CORRUPT as $what => $rec) {
+    $site = inowSite(); $work = tmpdir(); $calls = [];
+    file_put_contents($work . '/indexnow.json', json_encode(['sent' => [], 'pending' => [$J], 'retry' => [$J => $rec, 'about/index.html' => ['failures' => 1, 'retryAt' => T0 + 600]]]));
+    $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 1 && $r['sent'] === 1, "a retry record where $what counts as no record");
+    same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => [$J => T0], 'pending' => [], 'retry' => []], "and the state is clean afterwards ($what)");
+    rrmdir($site); rrmdir($work);
+}
+foreach (['"x"', '[1,2]', '{"satellites-by-country/japan/index.html":[]}'] as $bad) {
+    $site = inowSite(); $work = tmpdir(); $calls = [];
+    file_put_contents($work . '/indexnow.json', '{"sent":{},"pending":["satellites-by-country/japan/index.html"],"retry":' . $bad . '}');
+    $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+    ok(count($calls) === 1, 'a retry map holding ' . $bad . ' counts as no record');
+    rrmdir($site); rrmdir($work);
+}
+// a valid record within reach is honoured, and a record for a page that is no longer pending is dropped
+$site = inowSite(); $work = tmpdir(); $calls = [];
+file_put_contents($work . '/indexnow.json', json_encode(['sent' => [], 'pending' => [$J], 'retry' => [$J => ['failures' => 3, 'retryAt' => T0 + 43200], 'satellites-by-country/index.html' => ['failures' => 1, 'retryAt' => T0 + 600]]]));
+$r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+ok(count($calls) === 0, 'a valid record 12 hours ahead is honoured');
+same(json_decode((string) file_get_contents($work . '/indexnow.json'), true)['retry'], [$J => ['failures' => 3, 'retryAt' => T0 + 43200]], 'and a record for a page that is not pending is dropped');
+rrmdir($site); rrmdir($work);
+
+// a state file that cannot be written: nothing is sent, so the throttle cannot fail open
+$site = inowSite(); $work = tmpdir(); $ro = tmpdir(); $calls = [];
+chmod($ro, 0555);
+if (is_writable($ro)) {
+    fwrite(STDERR, "SKIP: a read-only folder is still writable here (running as root?), so the state-not-writable checks did not run\n");
+} else {
+    for ($i = 0; $i < 3; $i++) { $r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $work . '/pull.log', $ro . '/indexnow.json', T0 + 600 * $i); }
+    ok(count($calls) === 0 && $r['sent'] === 0 && $r['reason'] === 'state', 'a state folder that cannot be written sends nothing, run after run');
+    ok(strpos(inowLog($work . '/pull.log'), 'indexnow: state file not writable, nothing sent') !== false, 'and says so');
+}
+chmod($ro, 0755);
+file_put_contents($ro . '/indexnow.json', '{"sent":{},"pending":[]}'); chmod($ro . '/indexnow.json', 0444);
+if (is_writable($ro . '/indexnow.json')) {
+    fwrite(STDERR, "SKIP: a read-only file is still writable here (running as root?), so the read-only state file check did not run\n");
+} else {
+    $r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $work . '/pull.log', $ro . '/indexnow.json', T0);
+    ok(count($calls) === 0 && $r['reason'] === 'state', 'a read-only state file sends nothing');
+}
+chmod($ro . '/indexnow.json', 0644);
+$r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), $work . '/pull.log', $work . '/missing-folder/indexnow.json', T0);
+ok(count($calls) === 0 && $r['reason'] === 'state', 'a state file in a folder that does not exist sends nothing');
+$r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $ro . '/x/indexnow.json', T0);
+ok($r['reason'] === 'none', 'with nothing changed and nothing pending the state file is not needed');
+rrmdir($site); rrmdir($work); rrmdir($ro);
+
+// the real sender posts without following redirects, so a redirect answer is a failure; every other caller keeps following them
+$seen = null;
+$send = radar_indexnow_sender(function () use (&$seen) { $seen = func_get_args(); return ['status' => 301, 'body' => '', 'error' => '']; });
+$r = $send('POST', RADAR_INDEXNOW_ENDPOINT, ['Content-Type: application/json; charset=utf-8'], '{}');
+same($seen, ['POST', RADAR_INDEXNOW_ENDPOINT, ['Content-Type: application/json; charset=utf-8'], '{}', 30, false], 'the IndexNow sender passes a 30 second timeout and turns redirects off');
+same($r['status'], 301, 'and hands back the answer as it is');
+$params = (new ReflectionFunction('radar_http'))->getParameters();
+ok(count($params) === 6 && $params[5]->getName() === 'follow' && $params[5]->getDefaultValue() === true, 'radar_http follows redirects unless told not to');
+
+// no state file path: IndexNow is skipped, with a log line
+$site = inowSite(); $work = tmpdir(); $calls = [];
+ob_start(); $r = radar_indexnow(inowIndex(), $site, $PAGES_CHANGED, inowHttp($calls), null, null, T0); $out = ob_get_clean();
+ok(count($calls) === 0 && $r['sent'] === 0, 'without a state file nothing is sent');
+ok(strpos($out, 'indexnow: no state file') !== false, 'and the printed log says why');
+same(radar_indexnow_state_file('/home/x/radar-tools/pull.log'), '/home/x/radar-tools/indexnow.json', 'the state file sits next to the log');
+same(radar_indexnow_state_file(null), null, 'no log, no state file');
+same(radar_indexnow_state_file(''), null, 'an empty log path, no state file');
+rrmdir($site); rrmdir($work);
+
+// what pull.php runs after the page sync
+$site = inowSite(); $work = tmpdir(); $calls = [];
+$pr = ['ok' => true, 'fetched' => 2, 'changed' => ['how-many-satellites-in-orbit/index.html', 'sitemap-live.xml'], 'index' => inowIndex()];
+$r = radar_pull_indexnow($pr, $site, $work . '/pull.log', true, inowHttp($calls), T0);
+ok(count($calls) === 0 && $r['sent'] === 0, '--no-indexnow sends nothing');
+ok(strpos(inowLog($work . '/pull.log'), 'indexnow: turned off (--no-indexnow)') !== false, 'and says so');
+$r = radar_pull_indexnow(['ok' => false, 'reason' => 'index', 'fetched' => 0], $site, $work . '/pull.log', false, inowHttp($calls), T0);
+ok(count($calls) === 0 && $r['sent'] === 0, 'without a pages index nothing is sent');
+ok(strpos(inowLog($work . '/pull.log'), 'indexnow: no pages index, nothing sent') !== false, 'and says so');
+$r = radar_pull_indexnow($pr, $site, $work . '/pull.log', false, inowHttp($calls, 429), T0);
+ok(count($calls) === 1 && $r['sent'] === 0, 'a refused ping inside the pull is reported, not thrown');
+$r = radar_pull_indexnow($pr, $site, $work . '/pull.log', false, inowHttp($calls), T0 + 3600);
+ok(count($calls) === 2 && $r['sent'] === 1 && is_file($work . '/indexnow.json'), 'the pull sends the changed page and keeps the state next to the log');
+rrmdir($site); rrmdir($work);
+
+// pull.php knows the switch (run without --dest it only prints its usage, so no request is made)
+$out = []; $code = null; exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../pull.php') . ' 2>&1', $out, $code);
+ok($code === 2 && strpos(implode("\n", $out), '[--no-indexnow]') !== false, 'pull.php lists --no-indexnow in its usage');
 
 ob_end_clean();
 echo "\n" . $GLOBALS['passed'] . " passed, " . count($GLOBALS['failed']) . " failed\n";

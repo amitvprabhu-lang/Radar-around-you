@@ -20,7 +20,7 @@ export const HOME_QUESTIONS = [
   "What is in the sky tonight?",
   "What is happening under my feet and around me?",
   "Why are there two satellite numbers on this site?",
-  "Who supplies the data, and what does it cost?",
+  "Who supplies the data, and does the app cost anything?",
 ];
 
 export function homeTextHtml({ countryHub = false } = {}) {
@@ -42,7 +42,7 @@ export function homeTextHtml({ countryHub = false } = {}) {
 <h2>${count}</h2>
 <p>The page ${a(SATCOUNT_FILE, "How many satellites are in orbit?")} counts only the active satellites in our feed and is rebuilt after each data collection${hub}. The "tracked objects" tile in the app gives a larger number, because it counts everything the feed holds, rocket bodies and debris included.</p>
 <h2>${free}</h2>
-<p>Using it costs nothing, and the code is published on GitHub for anyone to read and reuse, under the MIT licence. The data comes from public agencies and projects: CelesTrak for orbits, the U.S. Geological Survey for earthquakes, NOAA for space weather and hurricanes, NASA FIRMS for fires, GDACS for floods and volcanoes, MET Norway for cloud forecasts, adsb.lol for aircraft and The Space Devs for launches. Every card names its source, and the Data status screen tells you how recently each feed was confirmed current. The ${a("about/index.html", "About page")} lists every source, and ${a("methods/index.html", "How we know")} sets out the checks behind the reference pages.</p>
+<p>Using the app costs nothing, and its code is published on GitHub for anyone to read and reuse, under the MIT licence. The data comes from public agencies and projects: CelesTrak for orbits, the U.S. Geological Survey for earthquakes, NOAA for space weather and hurricanes, NASA FIRMS for fires, GDACS for floods and volcanoes, MET Norway for cloud forecasts, adsb.lol for aircraft and The Space Devs for launches. Every card names its source, and the Data status screen tells you how recently each feed was confirmed current. The ${a("about/index.html", "About page")} lists every source, and ${a("methods/index.html", "How we know")} sets out the checks behind the reference pages.</p>
 <nav class="home-links" aria-label="More pages">
 <ul>
 <li>${a("guides/index.html", "Guides to the data")}</li>
