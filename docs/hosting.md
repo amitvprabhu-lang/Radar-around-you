@@ -28,7 +28,7 @@ The first test site is `https://zeninnov8.com`, at the root of that domain, to b
 | Variable | Value while testing | Value at launch |
 | --- | --- | --- |
 | `SITE_URL` | `https://zeninnov8.com` | the final address, no trailing slash |
-| `SITE_NOINDEX` | `1` | remove it (or set `0`) |
+| `SITE_NOINDEX` | `0` (since 2026-10-05, indexable) | `0` or not set |
 
 With `SITE_NOINDEX=1` the build changes only what crawlers are told:
 - every page, and the app page, carries `<meta name="robots" content="noindex,nofollow">` instead of `index,follow,max-image-preview:large`;
@@ -45,7 +45,7 @@ Moving to the final domain:
 1. Add the new domain as a website, turn on its HTTPS certificate, create its Web App from the same repository and branch.
 2. Set `SITE_URL` to the new address and do not set `SITE_NOINDEX`.
 3. After the first deployment open `/robots.txt` (it should say `Allow: /` and name both sitemaps), open `/sitemap.xml` and `/sitemap-live.xml` (the live satellite count page's own sitemap, written only when the site is indexable), and view the source of any page to confirm the robots tag reads `index,follow,max-image-preview:large`.
-4. Take the test site on zeninnov8.com down, or keep it with `SITE_NOINDEX=1` still set, so two copies of the content are not both open to search engines.
+4. If the site moves to another domain, take zeninnov8.com down, redirect it, or set its `SITE_NOINDEX=1`, so two copies of the content are not both open to search engines.
 
 ## What the first deployment taught us
 The first deployment on zeninnov8.com showed the loader ("Starting up") and never started. Cause, reproduced in a browser with the exact deployed files: the app page was a bare HTML fragment with no doctype and no character encoding, because the places it was first published (the artifact viewer and the test harness) wrap it themselves. Hostinger serves the file as `text/html` with no charset, so the browser read it as `windows-1252`, which garbled a regular expression in the script into a syntax error, and the script did not run. The site build now writes `index.html` as a complete document (doctype, `<meta charset="utf-8">`, viewport, language, and the title and search tags in `<head>`). `test/site.test.js` checks that every page does this, and `npm run e2e:site` loads the built site in Chromium served raw with no charset and an html 404 page for the missing live folder, which is how the host behaves. That test fails on the old output and passes on the new.
