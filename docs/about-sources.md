@@ -33,6 +33,8 @@ Each statement on `/about/` and in the home page's description comes from the pl
 | Free; the code is open source under the MIT licence (data and images keep their sources' terms); code on GitHub | `LICENSE`; README.md, licence section |
 | Feeds update while you watch; new quakes, hazards, aurora, Kp, cloud forecasts and aircraft appear without a reload; new satellite orbits show a Reload prompt; the app falls back to a snapshot and the clock chip says SNAPSHOT | README.md, "Live data", "What the app does with it" |
 | Moon phases, seasons and solar eclipses compared with US Naval Observatory tables at build time; a page only quotes a check that ran | README.md, Content site; `site/verify.mjs` |
+| The aircraft data is under the ODbL 1.0 licence (sources table) | `docs/launch-licences.md`; `pipeline/config.py` (`planes` feed: "License: ODbL 1.0", read 2026-10-04); `docs/feature-sources.md`, section 7. Whether publishing the collector's aircraft output meets ODbL share-alike is NOT CONFIRMED (see the checklist) |
+| Data keeps the terms of its source; each source's page, linked on the page or named in the app's credits, has them | `docs/launch-licences.md`; README.md, Licence section ("The data and images the app uses keep the terms of their sources") |
 
 ## Statements in the author's own words (for the owner to review)
 - "It is not an emergency warning service. For safety information, follow your local authorities." The second sentence follows the fires guide's wording ("For safety information, follow your local authorities"); the first is a standard caution that is not in the README.

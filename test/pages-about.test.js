@@ -30,6 +30,12 @@ test("every data source is named, and the sources with a verified address are li
   for (const url of ["https://api.adsb.lol", "https://thespacedevs.com/llapi", "https://www.gdacs.org/About/overview.aspx", "https://codeberg.org/astronexus/hyg", "https://celestrak.org/"]) assert.ok(html.includes(`href="${url}"`), url);
 });
 
+test("the aircraft source is credited with its licence, and the data-terms sentence is present", () => {
+  assert.match(text, /adsb\.lol/);
+  assert.match(text, /ODbL 1\.0/);
+  assert.match(text, /keeps the terms of its source/);
+});
+
 test("it links to the guides and reference pages that explain each feature", () => {
   for (const to of ["../guides/aurora/", "../guides/storms/", "../guides/earthquakes/", "../guides/fires/", "../guides/asteroids/", "../guides/satellites/", "../moon-phases/", "../eclipses/", "../planets/", "../meteor-showers/", "../constellations/", "../stars/", "../sky/", "../methods/", "../how-many-satellites-in-orbit/", "../"]) {
     assert.ok(html.includes(`href="${to}"`), to);

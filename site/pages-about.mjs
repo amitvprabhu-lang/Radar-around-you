@@ -62,7 +62,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
   ["Aurora, the Kp index, solar wind and geomagnetic alerts", `${ext("https://services.swpc.noaa.gov/", "NOAA Space Weather Prediction Center")}`],
   ["Active fire detections", `${ext("https://www.earthdata.nasa.gov/earth-observation-data/near-real-time/firms/active-fire-data", "NASA FIRMS")}, from three VIIRS satellites`],
   ["Satellite orbits and the catalogue", `${ext("https://celestrak.org/", "CelesTrak")}`],
-  ["Aircraft above six cities", `${ext("https://api.adsb.lol", "adsb.lol")}`],
+  ["Aircraft above six cities", `${ext("https://api.adsb.lol", "adsb.lol")} (data under the ODbL 1.0 licence)`],
   ["Cloud forecasts for six cities", `${ext("https://api.met.no/", "MET Norway")}`],
   ["Rocket launches", `${ext("https://thespacedevs.com/llapi", "The Space Devs")} (Launch Library 2)`],
   ["Asteroid close approaches", `${ext("https://ssd-api.jpl.nasa.gov/doc/cad.html", "NASA JPL")} Close-Approach Data`],
@@ -72,7 +72,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
   ["Towns and cities for the place search", "GeoNames"],
   ["Moon phases, eclipses, planets and the seasons", "Calculated with the astronomy-engine library"],
 ] })}
-<p>The page ${a("methods/index.html", "How we know")} lists the checks made and the things we could not confirm.</p>
+<p>The page ${a("methods/index.html", "How we know")} lists the checks made and the things we could not confirm. Data keeps the terms of its source; each source's page, linked above or named in the app's credits, has them.</p>
 
 <h2 id="fresh">How fresh is the data?</h2>
 <p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes depends on its source, from every minute for earthquakes to every two hours for satellite orbits.</p>
