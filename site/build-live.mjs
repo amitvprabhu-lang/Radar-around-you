@@ -127,7 +127,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     }
   } catch (e) {
     if (/ENOENT/.test(e.message) && e.path === coastFile) throw e;
-    failed.push({ files: SATELLITE_FILES, reason: e.message });
+    failed.push({ step: "satellite pages", files: SATELLITE_FILES, reason: e.message });
     for (const f of SATELLITE_FILES) carry(f);
     satSummary = null;
   }
@@ -150,7 +150,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     } catch (e) {
       if (e && e.code === "ENOENT" && (e.path === coastFile || e.path === placesFile)) throw e;
       if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message }); }
-      else { missing[hp.key] = "data that failed its checks"; failed.push({ files: [hp.file], reason: e.message }); }
+      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `hazard page ${hp.slug}`, files: [hp.file], reason: e.message }); }
       carry(hp.file);
     }
   }
@@ -218,7 +218,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const r = buildLive({ dataDir: arg("--data"), outDir: arg("--out") });
     for (const s of r.skipped) console.log(`build-live: skipped ${s.file}: ${s.reason} (the copy already on the site stays)`);
     for (const s of r.stale) console.log(`build-live: skipped ${s.file}: ${s.reason} (the copy already on the site stays)`);
-    for (const f of r.failed) console.error(`build-live: FAILED ${f.files.join(", ")}: ${f.reason} (the copies already on the site stay)`);
+    // a failure exits 1 after the other pages are written, so the workflow step turns red and GitHub sends its failure notice
+    for (const f of r.failed) console.error(`build-live: FAILED step "${f.step}" (${f.files.join(", ")}): ${f.reason} (the copies already on the site stay)`);
     console.log(r.changed ? `build-live: wrote ${r.built.length} page(s)${r.built.length ? `: ${r.built.join(", ")}` : ""} (satellites version ${r.version}, canonical base ${SITE.url}${SITE.noindex ? ", noindex" : ""})` : `build-live: no feed the pages use has a new version and the page generator is unchanged, nothing to do`);
     if (r.failed.length) process.exit(1);
   } catch (e) {

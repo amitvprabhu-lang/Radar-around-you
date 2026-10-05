@@ -10,7 +10,7 @@ test("the registry names the five hazard pages with fixed addresses, and every f
   assert.deepEqual(HAZARD_PAGES.map((p) => p.file), ["earthquakes-today", "aurora-tonight", "asteroid-close-approaches", "tropical-storms-now", "wildfires-today"].map((s) => `${s}/index.html`));
   assert.equal(RIGHT_NOW_FILE, "right-now/index.html");
   for (const p of HAZARD_PAGES) for (const f of p.feeds) { assert.ok(MAX_AGE_HOURS[f] > 0, f); assert.equal(typeof TERMS_VERIFIED[f], "boolean", f); }
-  assert.deepEqual({ quakes: 3, kp: 6, spaceweather: 6, storms: 12, closeapproaches: 48 }, Object.fromEntries(["quakes", "kp", "spaceweather", "storms", "closeapproaches"].map((k) => [k, MAX_AGE_HOURS[k]])), "the design's limits");
+  assert.deepEqual({ quakes: 3, kp: 8, spaceweather: 6, storms: 12, closeapproaches: 48 }, Object.fromEntries(["quakes", "kp", "spaceweather", "storms", "closeapproaches"].map((k) => [k, MAX_AGE_HOURS[k]])), "the design's limits");
 });
 
 test("times: a zone-less time is UTC, anything that is not an ISO time is refused, and the output form is fixed", () => {
@@ -95,7 +95,8 @@ test("Kp: the latest value, a missing latest slot, the maximum and the periods a
   assert.throws(() => summariseKp([{ t: "2026-10-05T15:00:00", kp: 12 }], { now }), /outside 0 to 9/);
   assert.throws(() => summariseKp([{ t: "2026-10-05T15:00:00", kp: null }], { now }), /no row has a Kp value/);
   assert.throws(() => summariseKp([], { now }), /no rows/);
-  assert.throws(() => summariseKp(kpRows(), { now: new Date("2026-10-05T21:00:01Z") }), StaleError);
+  assert.equal(summariseKp(kpRows(), { now: new Date("2026-10-05T23:00:00Z") }).stale, false, "8 hours after the newest tag is still current");
+  assert.throws(() => summariseKp(kpRows(), { now: new Date("2026-10-05T23:00:01Z") }), (e) => e instanceof StaleError && /more than 8 hours old/.test(e.message));
 });
 
 test("solar wind: the newest value of each field, its six hour range, the alerts newest first, and the guard", () => {
@@ -147,7 +148,12 @@ test("close approaches: upcoming passes after the data time, the next, nearest, 
   assert.equal(s.upcoming[2].h, null);
   assert.equal(s.last, "2026-11-20T23:59:00Z");
   assert.equal(objectName("524522 Zoozve (2002 VE68"), "524522 Zoozve (2002 VE68)", "the bracket the collector leaves open is closed");
-  assert.equal(objectName("2026 TX1"), "2026 TX1");
+  assert.equal(objectName("2026 TX1"), "2026 TX1", "no brackets: unchanged");
+  assert.equal(objectName("524522 Zoozve (2002 VE68)"), "524522 Zoozve (2002 VE68)", "balanced: unchanged");
+  assert.equal(objectName("433 Eros (A898 PA (x))"), "433 Eros (A898 PA (x))", "nested and balanced: unchanged");
+  assert.equal(objectName("433 Eros (A898 PA (x)"), "433 Eros (A898 PA (x))", "nested with one left open: one closed");
+  assert.equal(objectName("A (B (C"), "A (B (C))", "two left open: both closed");
+  assert.equal(objectName("x) y"), "x) y", "a stray closing bracket is left alone");
 });
 
 test("close approaches: an empty list is a page with no passes; a zero or too large distance, a bad speed and a stale list are refused", () => {

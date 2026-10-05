@@ -336,12 +336,14 @@ test("a stale feed skips only its page with the reason; the previous copy and it
   buildLive({ dataDir: fullDataDir(), outDir: out, now: REAL_TIME, noindex: false, bounds });
   const quakeBefore = fs.readFileSync(path.join(out, "earthquakes-today/index.html"), "utf8");
   const before = readIndex(out);
-  // four hours on, with a new quakes version that is still the old data: the quake page is stale (3 hours); so is the Kp data (its newest
-  // period is tagged 15:00, more than 6 hours before); the asteroid, storm and fire pages are not
+  // four hours on, with a new quakes version that is still the old data: the quake page is stale (3 hours); the Kp data (newest tag 15:00,
+  // 7.75 hours before) is still within its 8 hours, and the other pages are current too
   const dir = fullDataDir((m, d) => newVersion(m, d, "quakes", "quakes.json", "20261005T224012Z"));
   const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T22:45:00Z"), noindex: false, bounds });
-  assert.deepEqual(r.stale.map((s) => s.file), ["earthquakes-today/index.html", "aurora-tonight/index.html"]);
-  assert.match(r.stale[1].reason, /kp data from 2026-10-05T15:00:00Z is more than 6 hours old/);
+  assert.deepEqual(r.stale.map((s) => s.file), ["earthquakes-today/index.html"]);
+  // an hour later the Kp data is past its 8 hours as well
+  const r2 = buildLive({ dataDir: fullDataDir((m, d) => newVersion(m, d, "kp", "kp.json", "20261005T234012Z")), outDir: mk(), now: new Date("2026-10-05T23:45:00Z"), noindex: false, bounds });
+  assert.ok(r2.stale.some((s) => s.file === "aurora-tonight/index.html" && /kp data from 2026-10-05T15:00:00Z is more than 8 hours old/.test(s.reason)), JSON.stringify(r2.stale));
   assert.match(r.stale[0].reason, /quakes data from 2026-10-05T18:40:02Z is more than 3 hours old/);
   assert.deepEqual(r.failed, []);
   assert.equal(fs.readFileSync(path.join(out, "earthquakes-today/index.html"), "utf8"), quakeBefore);
@@ -368,7 +370,7 @@ test("a feed that fails its guard skips its page and is reported as a failure; t
   const out2 = mk();
   const cli = spawnSync(process.execPath, [script, "--data", dir, "--out", out2], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" }, encoding: "utf8" });
   assert.notEqual(cli.status, 0);
-  assert.match(cli.stderr, /FAILED tropical-storms-now\/index\.html: hazard: storms: Rachel has wind 975 kt/);
+  assert.match(cli.stderr, /FAILED step "hazard page tropical-storms-now" \(tropical-storms-now\/index\.html\): hazard: storms: Rachel has wind 975 kt/);
   assert.ok(fs.existsSync(path.join(out2, "earthquakes-today/index.html")), "the others are still written");
 });
 
@@ -429,4 +431,31 @@ test("a malformed key stops the live build before anything is written", () => {
 test("the generator hash covers the IndexNow module", () => {
   assert.ok(GENERATOR_FILES.includes("indexnow.mjs"));
   assert.notEqual(generatorHash(GENERATOR_FILES.filter((f) => f !== "indexnow.mjs")), generatorHash());
+});
+
+test("an error in the satellite data still fails the command (exit 1) with a message naming the step, after the other pages are written", () => {
+  const script = fileURLToPath(new URL("../site/build-live.mjs", import.meta.url));
+  const env = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" };
+  // the satellite files named in the manifest are not there: the satellite step fails, the hazard pages are still built
+  const broken = fullDataDir((m) => { m.feeds.satellites = { ...m.feeds.satellites, files: { ...m.feeds.satellites.files, "details.bin": "satellites/missing/details.bin" } }; });
+  const out = mk();
+  const r = spawnSync(process.execPath, [script, "--data", broken, "--out", out], { env, encoding: "utf8" });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /build-live: FAILED step "satellite pages" \(how-many-satellites-in-orbit\/index\.html, satellites-by-country\/index\.html, [^)]*\): ENOENT[^\n]*details\.bin/);
+  for (const f of HAZARD_PAGES.map((p) => p.file)) assert.ok(fs.existsSync(path.join(out, f)), `${f} is still written`);
+  assert.ok(!fs.existsSync(path.join(out, SATCOUNT_FILE)));
+  // implausible satellite numbers too
+  const fx = buildFixture(STANDARD.slice(0, 3));
+  const r2 = spawnSync(process.execPath, [script, "--data", dataDir("VBAD", fx), "--out", mk()], { env, encoding: "utf8" });
+  assert.equal(r2.status, 1);
+  assert.match(r2.stderr, /FAILED step "satellite pages" \([^)]*\): satcount: \d+ active satellites is implausible/);
+  // stale hazard feeds are not failures: with the real bundled satellites and the hazard feeds of 5 October (stale by the time this runs,
+  // or fresh if run that evening) the command exits 0
+  const pub = fileURLToPath(new URL("../public/", import.meta.url));
+  const ok = fullDataDir((m, d) => {
+    for (const [name, src] of [["details.bin", "details.bin"], ["swarm.bin", "swarm.bin"], ["satmeta.json", "meta.json"]]) fs.copyFileSync(path.join(pub, src), path.join(d, m.feeds.satellites.files[name]));
+  });
+  const r3 = spawnSync(process.execPath, [script, "--data", ok, "--out", mk()], { env, encoding: "utf8" });
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.ok(!/FAILED/.test(r3.stderr));
 });

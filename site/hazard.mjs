@@ -10,10 +10,11 @@ import { categoryForKnots } from "../src/scales.js";
 export const HOUR_MS = 3600e3;
 
 // OURS: the oldest a feed's own time may be for its page to be published as current. Quakes, space weather, Kp, storms and close
-// approaches are the design's values (section 2); the aurora grid shares the space weather limit, and fires (not set by the design) allow
+// approaches are the design's values (section 2); Kp is 8 hours, raised from the design's first 6 because NOAA's newest Kp time tag was
+// already 3.5 hours old at a collection on 2026-10-05 (a period is tagged with one time and its value comes after it); the aurora grid shares the space weather limit, and fires (not set by the design) allow
 // for FIRMS files whose newest detection was already about 2.5 to 3 hours old when downloaded (docs/hazard-sources.md) plus the hourly
 // collection. GDACS events only add a list to the storm page and are left out when older than this.
-export const MAX_AGE_HOURS = { quakes: 3, kp: 6, spaceweather: 6, aurora: 6, storms: 12, closeapproaches: 48, fires: 8, events: 12 };
+export const MAX_AGE_HOURS = { quakes: 3, kp: 8, spaceweather: 6, aurora: 6, storms: 12, closeapproaches: 48, fires: 8, events: 12 };
 
 // Whether each source's terms are recorded as verified in docs/hazard-sources.md or docs/feature-sources.md. A test reads the table in
 // docs/hazard-pages-sources.md and checks these match it. Dataset markup goes only on a page whose every feed is verified.
@@ -213,8 +214,15 @@ export function summariseSpace({ kp, spaceweather = null, aurora = null }, { now
 export const CAD_MAX_AU = 0.05;
 export const CAD_DAYS = 60;
 
-// The collector strips brackets from the ends of JPL's full names, which leaves "524522 Zoozve (2002 VE68" with its bracket open; close it.
-export const objectName = (name) => { const t = String(name || "").trim(); return (t.match(/\(/g) || []).length > (t.match(/\)/g) || []).length ? `${t})` : t; };
+// The collector strips brackets from the ends of JPL's full names, which leaves "524522 Zoozve (2002 VE68" with its bracket open. Only an
+// opening bracket that is never closed gets a closing one at the end, as many as are open; a name with balanced brackets, nested or not,
+// or with none, is left exactly as it is. A closing bracket with no opening one before it is left alone too (nothing to repair).
+export const objectName = (name) => {
+  const t = String(name || "").trim();
+  let open = 0;
+  for (const ch of t) { if (ch === "(") open++; else if (ch === ")" && open > 0) open--; }
+  return open > 0 ? t + ")".repeat(open) : t;
+};
 
 export function summariseApproaches(doc, { now, allowStale = false } = {}) {
   if (!doc || typeof doc !== "object" || !Array.isArray(doc.approaches)) fail("closeapproaches", "the file has no approaches list");
