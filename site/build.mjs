@@ -9,7 +9,10 @@ import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { sitemapLive } from "./pages-satcount.mjs";
-import { countryPageSet, coastFromBuffer, LIVE_FILES } from "./pages-country.mjs";
+import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
+import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
+import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
+import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
@@ -49,6 +52,46 @@ export function loadSatellites() {
 
 // The app's own coastlines, for the maps on the country pages.
 export const loadCoast = () => coastFromBuffer(fs.readFileSync(path.join(root, "public/coast.bin")));
+
+// The hazard feed files bundled in public/, for the deploy-time copies of the hazard pages. Each is read only if it is there (on
+// 2026-10-06 only quakes.json was), so a page whose data is not bundled is simply not written at deploy time; the live copy comes with the
+// next pull. GDACS events are not read: the bundled list carries no data time.
+export function loadHazards(dir = path.join(root, "public")) {
+  const has = (f) => fs.existsSync(path.join(dir, f));
+  const json = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+  const bytes = (f) => fs.readFileSync(path.join(dir, f));
+  return {
+    quakes: has("quakes.json") ? json("quakes.json") : null,
+    kp: has("kp.json") ? json("kp.json") : null,
+    spaceweather: has("spaceweather.json") ? json("spaceweather.json") : null,
+    aurora: has("aurora.json") && has("aurora.bin") ? { meta: json("aurora.json"), grid: bytes("aurora.bin") } : null,
+    closeapproaches: has("closeapproaches.json") ? json("closeapproaches.json") : null,
+    storms: has("storms.json") ? json("storms.json") : null,
+    fires: has("fires.json") && has("fires.bin") ? { summary: json("fires.json"), bin: bytes("fires.bin") } : null,
+    places: has("places.json") ? json("places.json") : null,
+  };
+}
+
+// The deploy-time copies of the hazard pages and the right-now hub, from the bundled data. Old data is allowed here (the page then says it
+// is the copy bundled at deploy time); a feed that fails its guard is left out with a message. satellites: { active, dataTime }.
+export function hazardSnapshotPages(h, { now, coast, satellites, satelliteFiles = SATELLITE_FILES }) {
+  const o = { now, allowStale: true };
+  const make = {
+    quakes: () => h.quakes && summariseQuakes(h.quakes, o),
+    aurora: () => h.kp && summariseSpace({ kp: h.kp, spaceweather: h.spaceweather, aurora: h.aurora }, o),
+    asteroids: () => h.closeapproaches && summariseApproaches(h.closeapproaches, o),
+    storms: () => h.storms && summariseStorms(h.storms, o),
+    fires: () => h.fires && h.places && summariseFires(h.fires, { ...o, places: h.places }),
+  };
+  const summaries = {}, skipped = [];
+  for (const p of HAZARD_PAGES) {
+    try { const s = make[p.key](); if (s) summaries[p.key] = s; } catch (e) { skipped.push({ file: p.file, reason: e.message }); }
+  }
+  const built = [...satelliteFiles, ...HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => p.file), RIGHT_NOW_FILE];
+  const pages = HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => ({ ...HAZARD_PAGE_FUNCTIONS[p.key](summaries[p.key], { built, coast }), dataTime: summaries[p.key].dataTime }));
+  const hub = rightNowPage(hubRows({ satellites, quakes: summaries.quakes, space: summaries.aurora, approaches: summaries.asteroids, storms: summaries.storms, fires: summaries.fires }), { available: built });
+  return { pages: [...pages, hub], skipped };
+}
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
 export function wrapApp(appHtml, { noindex = SITE.noindex } = {}) {
@@ -120,7 +163,7 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
-export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast() } = {}) {
+export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast(), hazards = loadHazards() } = {}) {
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -132,7 +175,10 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   assertPlausible(satcount);
   const country = countryPageSet(satellites, { coast, updated: now });
   for (const sk of country.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
-  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages });
+  const taken = isoZ(parseTime(satcount.taken));
+  const live = hazardSnapshotPages(hazards, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
+  for (const sk of live.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
+  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages, livePages: live.pages });
   const seen = new Set();
   for (const p of pages) { if (seen.has(p.file)) throw new Error(`site: duplicate page ${p.file}`); seen.add(p.file); }
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -147,11 +193,13 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   if (!noindex) {
     // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out
     fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => !LIVE_FILES.includes(f))));
-    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString(), LIVE_FILES.filter((f) => files.includes(f))));
+    // each live page with its data time: the satellite pages the snapshot's time, the hazard pages and the hub their feeds' own times
+    const dataTime = new Map(pages.filter((p) => p.dataTime).map((p) => [p.file, p.dataTime]));
+    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(LIVE_FILES.filter((f) => files.includes(f)).map((f) => ({ file: f, lastmod: dataTime.get(f) || taken }))));
     fs.writeFileSync(path.join(outDir, "llms.txt"), buildLlmsTxt({ pages, url: SITE.url, name: SITE.name, summary: APP_DESCRIPTION }));
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
-  return { outDir, pages: files.length, checks, noindex, skipped: country.skipped };
+  return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

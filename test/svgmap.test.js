@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { worldMapSvg, coastPath, pointsPath, uniqueDots, dotWidth, MAP_UNITS_PER_DEGREE } from "../site/svgmap.mjs";
+import { worldMapSvg, regionMapSvg, coastPath, pointsPath, uniqueDots, dotWidth, MAP_UNITS_PER_DEGREE } from "../site/svgmap.mjs";
+import { xmlProblem } from "./helpers/xml.mjs";
 import { decodeCoast } from "../src/data.js";
 
 const coastFile = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
@@ -79,4 +80,16 @@ test("the map stays small: the coast and ten thousand spread points fit well und
   const svg = worldMapSvg({ coast, points: pts, id: "m", title: "t", desc: "d" });
   assert.ok(Buffer.byteLength(svg) < 300 * 1024, `with points: ${Buffer.byteLength(svg)} bytes`);
   assert.ok(paths(svg)[1].length > 0);
+});
+
+test("a region map shows the box asked for, joins the track points in order, breaks a line at the antimeridian and is well formed", () => {
+  const svg = regionMapSvg({ coast, bounds: { south: 10, north: 30, west: -130, east: -90 }, lines: [[[20, -116], [20.5, -117.3], [21, -119]]], points: [[20, -116]], labels: [{ lat: 20, lon: -116, text: "Rachel <b>" }], id: "map", title: "Storm", desc: "One storm." });
+  assert.match(svg, /viewBox="500 600 400 200"/);
+  assert.match(svg, /width="720" height="360"/);
+  assert.ok(svg.includes('d="M640 700L627 695L610 690"'), "the track as one line in order");
+  assert.ok(svg.includes("Rachel &lt;b&gt;"));
+  assert.equal(xmlProblem(svg), null);
+  const cross = regionMapSvg({ coast: [], bounds: { south: -90, north: 90, west: -180, east: 180 }, lines: [[[10, 179], [11, -179], [12, -178]]], id: "m", title: "t", desc: "d" });
+  assert.ok(cross.includes('d="M10 790L20 780"'), "the part before the antimeridian is dropped as a single point; the rest is one line");
+  assert.equal(xmlProblem(cross), null);
 });

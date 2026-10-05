@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summariseQuakes, summariseKp, summariseWind, summariseGrid, summariseSpace, summariseApproaches, summariseStorms, summariseFires, decodeFireCells,
+import { summariseQuakes, summariseKp, summariseWind, summariseGrid, summariseSpace, summariseApproaches, summariseStorms, summariseFires, decodeFireCells, objectName,
   nearestPlace, placeLabel, freshness, parseTime, isoZ, StaleError, HAZARD_PAGES, RIGHT_NOW_FILE, MAX_AGE_HOURS, TERMS_VERIFIED, PLACE_MAX_KM } from "../site/hazard.mjs";
 import { quakesDoc, kpRows, windDoc, gridBytes, gridMeta, approachesDoc, stormsDoc, gdacsEvents, fireFiles, tinyPlaces, GEN, realFeeds, realPlaces, REAL_NOW } from "./helpers/hazardfixture.mjs";
 
@@ -114,6 +114,7 @@ test("aurora grid: the highest value and how far towards the equator a value of 
   assert.equal(s.peak, 30);
   assert.deepEqual(s.north, { max: 30, edge: 58, pole: 65 });
   assert.deepEqual(s.south, { max: 20, edge: 75, pole: 75 }, "9 is under the threshold");
+  assert.deepEqual(s.points, [[-75, -60], [58, -160], [65, 10]], "the grid points of 10 or more, longitude from -180 to 180");
   const none = summariseGrid(gridMeta, gridBytes([[60, 0, 9]]), { now });
   assert.deepEqual(none.north, { max: 9, edge: null, pole: null });
   assert.throws(() => summariseGrid(gridMeta, Buffer.alloc(100), { now }), /expected 65160/);
@@ -145,6 +146,8 @@ test("close approaches: upcoming passes after the data time, the next, nearest, 
   assert.equal(s.upcoming[1].sigma, "under 1 minute");
   assert.equal(s.upcoming[2].h, null);
   assert.equal(s.last, "2026-11-20T23:59:00Z");
+  assert.equal(objectName("524522 Zoozve (2002 VE68"), "524522 Zoozve (2002 VE68)", "the bracket the collector leaves open is closed");
+  assert.equal(objectName("2026 TX1"), "2026 TX1");
 });
 
 test("close approaches: an empty list is a page with no passes; a zero or too large distance, a bad speed and a stale list are refused", () => {

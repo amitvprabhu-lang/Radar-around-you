@@ -55,6 +55,36 @@ export const uniqueDots = (points) => (pointsPath(points).match(/M/g) || []).len
 // (a tenth of a degree); at the 720 pixel size 18 units is about 3.6 pixels.
 export const dotWidth = (n) => (n > 4000 ? 8 : n > 800 ? 12 : 18);
 
+// A part of the world map, for storm tracks: bounds { south, north, west, east } in degrees (a box that crosses the antimeridian is not
+// supported; the caller then uses the whole map). lines: polylines of [lat, lon], each broken where it jumps more than 180 degrees of
+// longitude; points: [lat, lon] dots; labels: [{ lat, lon, text }]. Widths are set so the drawing looks the same at any box size. The whole
+// coastline is in the file and the view box shows the part asked for.
+export function regionMapSvg({ coast, bounds, lines = [], points = [], labels = [], id, title, desc }) {
+  const x0 = ux(bounds.west), x1 = ux(bounds.east), y0 = uy(bounds.north), y1 = uy(bounds.south);
+  const w = Math.max(10, x1 - x0), h = Math.max(10, y1 - y0);
+  const px = w / 720;  // map units per pixel at the size the map is shown
+  const runs = [];
+  for (const line of lines) {
+    let run = [], prev = null;
+    for (const [lat, lon] of line) {
+      if (!fin(lat, lon)) continue;
+      if (prev !== null && Math.abs(lon - prev) > 180) { if (run.length > 1) runs.push(run); run = []; }
+      prev = lon;
+      run.push([ux(lon), uy(lat)]);
+    }
+    if (run.length > 1) runs.push(run);
+  }
+  const ld = runs.map((r) => `M${r[0][0]} ${r[0][1]}` + r.slice(1).map(([x, y]) => `L${x} ${y}`).join("")).join("");
+  const r1 = (v) => Math.round(v * 100) / 100;
+  const text = labels.filter((l) => fin(l.lat, l.lon)).map((l) => `<text x="${ux(l.lon) + r1(8 * px)}" y="${uy(l.lat) - r1(8 * px)}" fill="var(--text)" font-size="${r1(13 * px)}">${esc(l.text)}</text>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="map" role="img" aria-labelledby="${esc(id)}-t ${esc(id)}-d" viewBox="${x0} ${y0} ${w} ${h}" width="720" height="${Math.round((720 * h) / w)}" style="max-width:100%;height:auto">` +
+    `<title id="${esc(id)}-t">${esc(title)}</title><desc id="${esc(id)}-d">${esc(desc)}</desc>` +
+    `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="var(--ink2)"></rect>` +
+    `<path d="${coastPath(coast)}" transform="scale(${COAST_STEP})" fill="none" stroke="var(--muted)" stroke-width="${r1(px / COAST_STEP)}" stroke-linejoin="round"></path>` +
+    `<path d="${ld}" fill="none" stroke="var(--signal)" stroke-width="${r1(2 * px)}" stroke-linejoin="round"></path>` +
+    `<path d="${pointsPath(points)}" fill="none" stroke="var(--signal)" stroke-width="${r1(9 * px)}" stroke-linecap="round"></path>${text}</svg>`;
+}
+
 // The points are drawn first and the coastlines on top, so the land stays readable under a dense fleet.
 export function worldMapSvg({ coast, points, id, title, desc }) {
   const d = pointsPath(points);

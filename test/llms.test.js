@@ -56,3 +56,14 @@ test("a missing page is an error, so a broken list can never ship quietly", () =
 test("the text has no en or em dashes", () => {
   assert.ok(!/[\u2013\u2014]/.test(out));
 });
+
+test("the hazard pages and the right-now hub are listed with fixed notes, only when the build wrote them", async () => {
+  const { HAZARD_NOTES } = await import("../site/llms.mjs");
+  const withLive = buildLlmsTxt({ pages: [...pages, mk("right-now/index.html", "Right now", "16,624 active satellites..."), mk("earthquakes-today/index.html", "Earthquakes today", "48 earthquakes...")], url: "https://example.org", name: "N", summary: "S" });
+  const live = withLive.slice(withLive.indexOf("## Live data"));
+  assert.ok(live.includes(`- [Right now](https://example.org/right-now/): ${HAZARD_NOTES["right-now/index.html"]}`));
+  assert.ok(live.includes(`- [Earthquakes today](https://example.org/earthquakes-today/): ${HAZARD_NOTES["earthquakes-today/index.html"]}`));
+  assert.ok(!/16,624|48 earthquakes/.test(withLive), "no volatile number");
+  assert.ok(!withLive.includes("aurora-tonight"), "a page the build did not write is not listed");
+  for (const note of Object.values(HAZARD_NOTES)) assert.ok(!/[\u2013\u2014]/.test(note) && !/\d/.test(note.replace(/2\.5|24/g, "")), note);
+});

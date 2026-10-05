@@ -11,7 +11,10 @@ import { fileURLToPath } from "node:url";
 import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, APP_FEATURES, APP_TITLE, APP_DESCRIPTION } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
-import { HUB_FILE, COUNTRY_FILES, LIVE_FILES } from "../site/pages-country.mjs";
+import { HUB_FILE, COUNTRY_FILES } from "../site/pages-country.mjs";
+import { LIVE_FILES, RIGHT_NOW_FILE } from "../site/livepages.mjs";
+import { HAZARD_PAGES } from "../site/hazard.mjs";
+import { realFeeds, realPlaces } from "./helpers/hazardfixture.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
@@ -39,8 +42,9 @@ const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<
 
 test("the site has the expected pages and no duplicates", () => {
   // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about,
-  // the satellites by country hub and its 5 country pages
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5);
+  // the satellites by country hub and its 5 country pages, and from the bundled hazard data the earthquake page and the right-now hub
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2);
+  assert.deepEqual(result.liveSkipped, []);
   assert.deepEqual(result.skipped, [], "every country page passes the guard on the bundled snapshot");
   assert.equal(pageFiles.length, result.pages);
   assert.equal(cities.length, 6);
@@ -108,7 +112,8 @@ test("the sitemap lists every page once except the live pages, which have their 
   assert.ok(!locs.some((l) => l.includes("satellites-by-country")), "nor are the country pages");
   const live = fs.readFileSync(path.join(outDir, "sitemap-live.xml"), "utf8");
   assert.ok(live.includes(`<loc>${SITE.url}/how-many-satellites-in-orbit/</loc>`));
-  assert.deepEqual([...live.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]), LIVE_FILES.map((f) => `${SITE.url}/${urlPath(f)}`), "all seven live pages");
+  assert.deepEqual([...live.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]), LIVE_FILES.filter((f) => pageFiles.includes(f)).map((f) => `${SITE.url}/${urlPath(f)}`), "every live page this build wrote");
+  assert.ok(!locs.some((l) => /earthquakes-today|right-now/.test(l)), "nor are the hazard pages and the hub");
   assert.match(live, /<lastmod>\d{4}-\d\d-\d\dT[\d:.]+Z<\/lastmod>/);
   const robotsTxt = fs.readFileSync(path.join(outDir, "robots.txt"), "utf8");
   assert.match(robotsTxt, new RegExp(`Sitemap: ${SITE.url}/sitemap.xml`));
@@ -480,4 +485,41 @@ test("the deploy-time copy writes the seven live pages from the bundled snapshot
   assert.ok(read(SATCOUNT_FILE).includes('<a href="../satellites-by-country/">satellites by country</a>'), "the count page links to the hub");
   const llms = fs.readFileSync(path.join(outDir, "llms.txt"), "utf8");
   assert.ok(llms.includes(`- [Satellites by country](${SITE.url}/satellites-by-country/): `));
+});
+
+test("the deploy-time copy writes the earthquake page and the right-now hub from the bundled data, with their data times, a nav entry and llms.txt notes", () => {
+  for (const f of ["earthquakes-today/index.html", RIGHT_NOW_FILE]) assert.ok(pageFiles.includes(f), f);
+  for (const f of HAZARD_PAGES.slice(1).map((p) => p.file)) assert.ok(!pageFiles.includes(f), `${f}: its data is not bundled, so no copy is written`);
+  const bundled = readJson("public/quakes.json").generated;
+  const q = read("earthquakes-today/index.html");
+  assert.ok(q.includes(`<time datetime="${bundled}">`), "the bundled feed's own time");
+  assert.ok(textOf(q).includes("This copy was built from the data bundled with the site when it was deployed"), "the old bundled data says so");
+  const hub = read(RIGHT_NOW_FILE);
+  assert.ok(hub.includes('href="../earthquakes-today/"') && hub.includes('href="../how-many-satellites-in-orbit/"'));
+  assert.ok(!hub.includes('href="../aurora-tonight/"'), "a page that was not written is not linked");
+  assert.ok(textOf(hub).includes("This copy was built from the data bundled with the site when it was deployed"), "the hub says its bundled data is old");
+  assert.ok(read("moon-phases/index.html").includes('<a href="../right-now/">Right now</a>'), "the nav names the hub");
+  const live = fs.readFileSync(path.join(outDir, "sitemap-live.xml"), "utf8");
+  assert.ok(live.includes(`<loc>${SITE.url}/earthquakes-today/</loc><lastmod>${bundled}</lastmod>`), "lastmod is the data time");
+  const llms = fs.readFileSync(path.join(outDir, "llms.txt"), "utf8");
+  assert.ok(llms.includes(`- [Right now](${SITE.url}/right-now/): The latest number from each live page`));
+  assert.ok(llms.includes(`- [Earthquakes today](${SITE.url}/earthquakes-today/): Earthquakes of magnitude 2.5 and above`));
+  assert.ok(!llms.includes("/aurora-tonight/"));
+});
+
+test("with every hazard feed bundled, the deploy-time copy writes all five hazard pages and the hub links them all", () => {
+  const r = realFeeds();
+  const dir = path.join(tmp, "out-hazards");
+  const res = build({ outDir: dir, appFile, publicDir: null, noindex: false, now: new Date("2026-10-05T18:45:00Z"), hazards: { ...r, places: realPlaces() } });
+  assert.deepEqual(res.liveSkipped, []);
+  const hub = fs.readFileSync(path.join(dir, RIGHT_NOW_FILE), "utf8");
+  for (const p of HAZARD_PAGES) {
+    const h = fs.readFileSync(path.join(dir, p.file), "utf8");
+    assert.match(h, /<p class="lead">As of /, p.file);
+    assert.ok(!h.includes("This copy was built from the data bundled"), `${p.file}: fresh data carries no note`);
+    assert.ok(hub.includes(`href="../${p.slug}/"`), p.slug);
+  }
+  const xml = fs.readFileSync(path.join(dir, "sitemap.xml"), "utf8");
+  assert.ok(!/earthquakes-today|aurora-tonight|asteroid-close|tropical-storms|wildfires-today|right-now/.test(xml), "the main sitemap leaves out every live page");
+  assert.equal([...fs.readFileSync(path.join(dir, "sitemap-live.xml"), "utf8").matchAll(/<loc>/g)].length, 13);
 });

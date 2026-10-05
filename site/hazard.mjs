@@ -183,7 +183,14 @@ export function summariseGrid(meta, grid, { now, allowStale = false } = {}) {
     }
     return { max, edge, pole };
   };
-  return { feed: "aurora", dataTime: isoZ(obs), forecastTime: isoZ(fc), stale, peak, north: hemi(1), south: hemi(-1) };
+  // for the map: in each hemisphere and for each longitude, the grid point nearest the equator with a value at or above the threshold, as
+  // [lat, lon] with longitude from -180 to 180 (at most 720 points, however large the oval)
+  const points = [];
+  for (let lo = 0; lo < W; lo++) for (const sign of [1, -1]) {
+    for (let a = 1; a <= 90; a++) if (grid[(sign * a + 90) * W + lo] >= GRID_THRESHOLD) { points.push([sign * a, lo >= 180 ? lo - 360 : lo]); break; }
+  }
+  points.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  return { feed: "aurora", dataTime: isoZ(obs), forecastTime: isoZ(fc), stale, peak, north: hemi(1), south: hemi(-1), points };
 }
 
 // The aurora page needs Kp; the solar wind and the grid add sections when present and fresh, and otherwise say why they are missing.
@@ -206,13 +213,16 @@ export function summariseSpace({ kp, spaceweather = null, aurora = null }, { now
 export const CAD_MAX_AU = 0.05;
 export const CAD_DAYS = 60;
 
+// The collector strips brackets from the ends of JPL's full names, which leaves "524522 Zoozve (2002 VE68" with its bracket open; close it.
+export const objectName = (name) => { const t = String(name || "").trim(); return (t.match(/\(/g) || []).length > (t.match(/\)/g) || []).length ? `${t})` : t; };
+
 export function summariseApproaches(doc, { now, allowStale = false } = {}) {
   if (!doc || typeof doc !== "object" || !Array.isArray(doc.approaches)) fail("closeapproaches", "the file has no approaches list");
   const gen = timeOf("closeapproaches", doc.generated, "generated");
   if (!inRange(doc.ldKm, 300000, 500000)) fail("closeapproaches", `the lunar distance of ${doc.ldKm} km is not plausible`);
   const list = doc.approaches.map((a, i) => {
     if (!a || typeof a !== "object") fail("closeapproaches", `row ${i} is not a record`);
-    const name = String(a.name || a.des || "").trim();
+    const name = objectName(a.name || a.des);
     if (!name) fail("closeapproaches", `row ${i} has no name`);
     if (!(fin(a.distAu) && a.distAu > 0 && a.distAu <= CAD_MAX_AU)) fail("closeapproaches", `${name} is at ${a.distAu} au, not above 0 and up to ${CAD_MAX_AU}`);
     if (!(fin(a.distLd) && a.distLd > 0) || !(fin(a.distKm) && a.distKm > 0)) fail("closeapproaches", `${name} has no usable distance`);
@@ -275,6 +285,8 @@ export function summariseStorms(doc, { now, allowStale = false, events = null } 
 export const PLACE_MAX_KM = 300;
 // OURS: the density map merges the collector's quarter degree cells into one degree squares, so the map stays small.
 export const FIRE_MAP_DEG = 1;
+// OURS: above this many one degree squares the map uses two degree squares, so the page stays under its size limit in a busy season
+export const FIRE_MAP_MAX = 8000;
 // The satellite codes in the FIRMS files and the names the app gives them (docs/hazard-sources.md).
 export const FIRE_SATELLITES = { N: "Suomi NPP", N20: "NOAA-20", N21: "NOAA-21" };
 const FIRE_REC = 12;
@@ -324,13 +336,14 @@ export function summariseFires({ summary, bin }, { now, allowStale = false, plac
     const near = places ? nearestPlace(c.lat, c.lon, places) : null;
     return { lat: c.lat, lon: c.lon, detections: c.n, place: near && near.km <= PLACE_MAX_KM ? { name: near.name, country: near.country, km: near.km } : null, nearestKm: near ? near.km : null };
   });
-  const sq = new Map();
-  for (const c of cells) { const k = `${Math.floor(c.lat / FIRE_MAP_DEG)},${Math.floor(c.lon / FIRE_MAP_DEG)}`; sq.set(k, (sq.get(k) || 0) + c.n); }
-  const mapPoints = [...sq.keys()].map((k) => { const [a, b] = k.split(",").map(Number); return [(a + 0.5) * FIRE_MAP_DEG, (b + 0.5) * FIRE_MAP_DEG]; });
+  const squares = (deg) => { const m = new Set(); for (const c of cells) m.add(`${Math.floor(c.lat / deg)},${Math.floor(c.lon / deg)}`); return m; };
+  let mapDeg = FIRE_MAP_DEG, sq = squares(mapDeg);
+  if (sq.size > FIRE_MAP_MAX) { mapDeg = FIRE_MAP_DEG * 2; sq = squares(mapDeg); }
+  const mapPoints = [...sq].map((k) => { const [a, b] = k.split(",").map(Number); return [(a + 0.5) * mapDeg, (b + 0.5) * mapDeg]; });
   const hemiN = cells.filter((c) => c.lat > 0).reduce((s, c) => s + c.n, 0);
   return {
     feed: "fires", dataTime: isoZ(newest), stale, detections: summary.detections, cells: cells.length, lowLeftOut: summary.lowConfidenceLeftOut, rows: summary.rows,
-    satellites: sats, dense, mapPoints, mapSquares: sq.size, north: hemiN, south: sum - hemiN, cellDeg: summary.cellDeg,
+    satellites: sats, dense, mapPoints, mapSquares: sq.size, mapDeg, north: hemiN, south: sum - hemiN, cellDeg: summary.cellDeg,
     places: places ? places.p.length : 0,
   };
 }

@@ -4,11 +4,21 @@
 import { urlPath } from "./layout.mjs";
 import { SATCOUNT_FILE } from "./pages-satcount.mjs";
 import { HUB_FILE } from "./satcountry.mjs";
+import { HAZARD_PAGES, RIGHT_NOW_FILE } from "./hazard.mjs";
 
 const clean = (s) => String(s).replace(/\s+/g, " ").trim();
 // OURS: the live pages' descriptions hold today's numbers, so this file uses fixed notes instead.
 const LIVE_NOTE = "A live count of active satellites in orbit, with breakdowns by owner, orbit, purpose and launch year.";
 const HUB_NOTE = "Every owner in the satellite catalogue ranked by active satellites, as the catalogue records owners, with more detail for a few of them.";
+// OURS: fixed notes for the hazard pages and the right-now hub, for the same reason. A page is listed only when the build wrote it.
+export const HAZARD_NOTES = {
+  [RIGHT_NOW_FILE]: "The latest number from each live page (satellites, earthquakes, Kp, asteroid close approaches, tropical storms and fire detections), each with its data time.",
+  "earthquakes-today/index.html": "Earthquakes of magnitude 2.5 and above in the last 24 hours from the USGS feed: counts by magnitude and by hour, the largest, and a map.",
+  "aurora-tonight/index.html": "The latest planetary Kp index, the solar wind and NOAA's aurora forecast grid, from NOAA's Space Weather Prediction Center.",
+  "asteroid-close-approaches/index.html": "Asteroid close approaches to Earth still to come in NASA JPL's list, with dates, distances in lunar distances and speeds.",
+  "tropical-storms-now/index.html": "Active tropical storms and hurricanes in the US National Hurricane Center's basins, with wind, pressure and forecast tracks.",
+  "wildfires-today/index.html": "Satellite fire detections in NASA FIRMS's 24 hour files, by satellite and densest place, with a map. Detections, not confirmed fires.",
+};
 const REFERENCE = ["moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html"];
 
 export function buildLlmsTxt({ pages, url, name, summary }) {
@@ -27,7 +37,8 @@ export function buildLlmsTxt({ pages, url, name, summary }) {
     entry("about/index.html"), entry("methods/index.html"), "",
     "## Sky reference", ...REFERENCE.map((f) => entry(f)), "",
     "## Guides", ...guides.map((f) => entry(f)), "",
-    "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE), "",
+    "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE),
+    ...[RIGHT_NOW_FILE, ...HAZARD_PAGES.map((p) => p.file)].filter((f) => byFile.has(f)).map((f) => entry(f, HAZARD_NOTES[f])), "",
   ];
   return lines.join("\n");
 }

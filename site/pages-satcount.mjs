@@ -2,11 +2,11 @@
 // Every figure on the page comes from the one `counts` value, so the lead, description, FAQ, tables and structured data cannot disagree.
 import { esc, table, sources, SITE, urlPath, href } from "./layout.mjs";
 import { ORBIT_BOUNDS, ORBIT_CHART_LABELS } from "./satcount.mjs";
-import { HUB_FILE, COUNTRY_PAGES } from "./satcountry.mjs";
+import { HUB_FILE } from "./satcountry.mjs";
+import { SATCOUNT_FILE, LIVE_FILES, SATELLITE_FILES } from "./livepages.mjs";
 
-export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
-// Every page built from the live satellite feed: this page, the satellites by country hub and the five country pages (site/pages-country.mjs).
-export const LIVE_FILES = [SATCOUNT_FILE, HUB_FILE, ...COUNTRY_PAGES.map((p) => p.file)];
+// Every live page is listed once, in site/livepages.mjs: this page, the satellites by country pages, the hazard pages and the right-now hub.
+export { SATCOUNT_FILE, LIVE_FILES, SATELLITE_FILES };
 
 export const num = (n) => n.toLocaleString("en-GB");
 export const pct = (x) => (Math.round(x * 1000) / 10).toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -14,14 +14,17 @@ export const dateLong = (iso) => new Intl.DateTimeFormat("en-GB", { day: "numeri
 export const timeUtc = (iso) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
 const trunc = (s, n) => (s.length > n ? s.slice(0, n - 3) + "..." : s);
 
-// A sitemap with the live pages and an accurate last modified time (the time the pages were last rebuilt, which only happens when the
-// satellite data or the page generator changes). Google uses lastmod only if it is consistently accurate. `files` is the list of pages
-// built in that run; it defaults to every live page.
-export const sitemapLive = (lastmodIso, files = LIVE_FILES) => `<?xml version="1.0" encoding="UTF-8"?>
+// A sitemap with the live pages, each with an accurate last modified time: the data time of the page (the feed's own time), which moves
+// only when the numbers can have changed. Google uses lastmod only if it is consistently accurate. `entries` is [{ file, lastmod }] in the
+// order of site/livepages.mjs; the older form (one time, a list of files that defaults to every live page) gives every page that time.
+export function sitemapLive(entries, files = LIVE_FILES) {
+  const list = typeof entries === "string" ? files.map((file) => ({ file, lastmod: entries })) : entries;
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${files.map((f) => `  <url><loc>${esc(`${SITE.url}/${urlPath(f)}`)}</loc><lastmod>${esc(lastmodIso)}</lastmod></url>`).join("\n")}
+${list.map((e) => `  <url><loc>${esc(`${SITE.url}/${urlPath(e.file)}`)}</loc><lastmod>${esc(e.lastmod)}</lastmod></url>`).join("\n")}
 </urlset>
 `;
+}
 
 export function barChartSvg({ id, title, desc, rows }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -35,14 +38,17 @@ export function barChartSvg({ id, title, desc, rows }) {
   return `<svg class="chart" role="img" aria-labelledby="${id}-t ${id}-d" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="max-width:100%;height:auto"><title id="${id}-t">${esc(title)}</title><desc id="${id}-d">${esc(desc)}</desc>${body}</svg>`;
 }
 
+// rows: [{ label, value, sub }]; sub is an optional second label line (a day under an hour, say). Without any sub the output is as before.
 export function columnChartSvg({ id, title, desc, rows }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
-  const colW = 38, plotH = 170, w = rows.length * colW + 20, h = plotH + 50;
+  const subs = rows.some((r) => r.sub);
+  const colW = 38, plotH = 170, w = rows.length * colW + 20, h = plotH + 50 + (subs ? 14 : 0);
   const body = rows.map((r, i) => {
     const bh = Math.max(2, Math.round((r.value / max) * plotH)), x = 10 + i * colW, y = 20 + plotH - bh;
     return `<rect x="${x + 4}" y="${y}" width="${colW - 10}" height="${bh}" rx="2" fill="var(--ion)"></rect>` +
       `<text x="${x + colW / 2 - 1}" y="${y - 4}" text-anchor="middle" fill="var(--muted)" font-size="10">${num(r.value)}</text>` +
-      `<text x="${x + colW / 2 - 1}" y="${plotH + 36}" text-anchor="middle" fill="var(--text)" font-size="11">${esc(r.label)}</text>`;
+      `<text x="${x + colW / 2 - 1}" y="${plotH + 36}" text-anchor="middle" fill="var(--text)" font-size="11">${esc(r.label)}</text>` +
+      (r.sub ? `<text x="${x + colW / 2 - 1}" y="${plotH + 50}" text-anchor="middle" fill="var(--muted)" font-size="10">${esc(r.sub)}</text>` : "");
   }).join("");
   return `<svg class="chart" role="img" aria-labelledby="${id}-t ${id}-d" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="max-width:100%;height:auto"><title id="${id}-t">${esc(title)}</title><desc id="${id}-d">${esc(desc)}</desc>${body}</svg>`;
 }

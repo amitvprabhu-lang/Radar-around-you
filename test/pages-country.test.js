@@ -383,11 +383,13 @@ test("a country page for an owner with no active satellite is refused, and a hub
   assert.ok(empty.description.length >= 60 && empty.description.length <= 160, String(empty.description.length));
 });
 
-test("the live sitemap lists every live page by default, or the pages given", () => {
-  assert.deepEqual(LIVE_FILES, [SATCOUNT_FILE, HUB_FILE, ...COUNTRY_FILES]);
+test("the live sitemap lists every live page by default, or the pages given, each with its own last modified time", () => {
+  assert.deepEqual(LIVE_FILES.slice(0, 7), [SATCOUNT_FILE, HUB_FILE, ...COUNTRY_FILES], "the satellite pages come first in the registry");
   const xml = sitemapLive("2026-10-05T09:00:00.000Z");
   const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
   assert.deepEqual(locs, LIVE_FILES.map((f) => `${SITE.url}/${urlPath(f)}`));
-  assert.equal((xml.match(/<lastmod>2026-10-05T09:00:00.000Z<\/lastmod>/g) || []).length, 7);
+  assert.equal((xml.match(/<lastmod>2026-10-05T09:00:00.000Z<\/lastmod>/g) || []).length, LIVE_FILES.length);
   assert.equal([...sitemapLive("x", [SATCOUNT_FILE]).matchAll(/<loc>/g)].length, 1);
+  const own = sitemapLive([{ file: SATCOUNT_FILE, lastmod: "2026-10-05T08:14:54Z" }, { file: HUB_FILE, lastmod: "2026-10-05T08:00:00Z" }]);
+  assert.deepEqual([...own.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)].map((m) => m[1]), ["2026-10-05T08:14:54Z", "2026-10-05T08:00:00Z"]);
 });
