@@ -206,6 +206,73 @@ function radar_prune(string $dest, array $keep): int
     return $removed;
 }
 
+// ------------------------------------------------------------------ finished pages
+// The collector's GitHub job also writes finished HTML pages into pages/ on the data branch, with pages/index.json listing each file and
+// its sha256. Only two shapes are ever fetched or written: "<folder>/index.html" one level deep, and "sitemap-live.xml". \z (not $)
+// is used so a trailing newline cannot slip through. A damaged or hostile index cannot make the script write anywhere else.
+const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the satellite count page is far smaller than this
+
+function radar_safe_page_path(string $p): bool
+{
+    return (bool) preg_match('#^(?:[a-z0-9][a-z0-9-]{0,80}/index\.html|sitemap-live\.xml)\z#', $p);
+}
+
+// Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist). Files whose hash
+// already matches are skipped. Each file is written through a temporary name and renamed, so a visitor never sees half a page, and a
+// download that does not match its hash is refused so the previous page stays.
+function radar_sync_pages(string $base, string $destRoot, ?callable $http = null, ?string $logFile = null): array
+{
+    $http = $http ?: function ($u) { return radar_http('GET', $u); };
+    $log = function ($m) use ($logFile) { radar_log($m, $logFile); };
+    $base = rtrim($base, '/') . '/';
+    $r = $http($base . 'pages/index.json');
+    if ($r['status'] !== 200) {
+        $log('pages index: HTTP ' . $r['status'] . ' ' . $r['error']);
+        return ['ok' => false, 'reason' => 'index', 'fetched' => 0];
+    }
+    $d = json_decode($r['body'], true);
+    if (!is_array($d) || ($d['schema'] ?? null) !== 1 || !isset($d['files']) || !is_array($d['files'])) {
+        $log('pages index: not a valid index, nothing changed');
+        return ['ok' => false, 'reason' => 'invalid', 'fetched' => 0];
+    }
+    if (!is_dir($destRoot)) {
+        $log('pages: the site folder ' . $destRoot . ' does not exist, nothing written');
+        return ['ok' => false, 'reason' => 'dest', 'fetched' => 0];
+    }
+    $fetched = 0; $failed = [];
+    foreach ($d['files'] as $path => $info) {
+        $path = (string) $path;
+        if (!radar_safe_page_path($path) || !is_array($info) || !isset($info['sha256']) || !preg_match('/^[0-9a-f]{64}\z/', (string) $info['sha256'])) {
+            $failed[] = json_encode($path) . ' (not an allowed page)';
+            continue;
+        }
+        $file = rtrim($destRoot, '/') . '/' . $path;
+        if (is_file($file) && hash_file('sha256', $file) === $info['sha256']) {
+            continue;
+        }
+        $f = $http($base . 'pages/' . $path);
+        if ($f['status'] !== 200 || $f['body'] === '' || strlen($f['body']) > RADAR_MAX_PAGE_BYTES) {
+            $failed[] = $path . ' (HTTP ' . $f['status'] . ')';
+            continue;
+        }
+        if (hash('sha256', $f['body']) !== $info['sha256']) {
+            $failed[] = $path . ' (the download does not match the hash in the index)';
+            continue;
+        }
+        if (!radar_write_atomic($file, $f['body'])) {
+            $failed[] = $path . ' (could not write)';
+            continue;
+        }
+        $fetched++;
+    }
+    if ($failed) {
+        $log('pages: ' . count($failed) . ' not updated: ' . implode('; ', array_slice($failed, 0, 5)));
+        return ['ok' => false, 'reason' => 'files', 'fetched' => $fetched, 'failed' => $failed];
+    }
+    $log('pages: ok, ' . $fetched . ' file(s) fetched');
+    return ['ok' => true, 'fetched' => $fetched];
+}
+
 // ------------------------------------------------------------------ asking GitHub to run the collector
 // POST /repos/{owner}/{repo}/actions/workflows/{file}/dispatches answers 204 with no body when it worked.
 function radar_trigger(array $cfg, ?callable $http = null): array

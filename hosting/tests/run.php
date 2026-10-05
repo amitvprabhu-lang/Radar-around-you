@@ -137,6 +137,52 @@ for ($i = 0; $i < 350; $i++) { radar_log("line $i", $lf); }
 ob_end_clean();
 $lines = file($lf, FILE_IGNORE_NEW_LINES); ok(count($lines) === 300 && substr($lines[299], -8) === 'line 349' && substr($lines[0], -7) === 'line 50', 'the log keeps the last 300 lines'); unlink($lf);
 
+// ---- finished pages (pages/ on the data branch, copied to the site root)
+ok(radar_safe_page_path('how-many-satellites-in-orbit/index.html'), 'a page folder with index.html is allowed');
+ok(radar_safe_page_path('sitemap-live.xml'), 'the live sitemap is allowed');
+foreach (['../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html'] as $bad) {
+    ok(!radar_safe_page_path($bad), 'unsafe page path rejected: ' . json_encode($bad));
+}
+$PAGE = '<!doctype html><title>t</title><p>7 active satellites</p>'; $SITEMAP = '<?xml version="1.0"?><urlset/>';
+function pagesIndex(array $files): string { $f = []; foreach ($files as $p => $body) { $f[$p] = ['sha256' => hash('sha256', $body), 'size' => strlen($body), 'changed' => '2026-10-05T09:00:00.000Z']; } return json_encode(['schema' => 1, 'satellitesVersion' => 'V1', 'files' => $f]); }
+$P1 = ['how-many-satellites-in-orbit/index.html' => $PAGE, 'sitemap-live.xml' => $SITEMAP];
+$srv = function (array $files, array &$log) { $map = ['pages/index.json' => pagesIndex($files)]; foreach ($files as $p => $body) { $map['pages/' . $p] = $body; } return server($map, $log); };
+$root = tmpdir(); $log = [];
+$r = radar_sync_pages(BASE, $root, $srv($P1, $log));
+ok($r['ok'] && $r['fetched'] === 2, 'the first pages sync fetches both files');
+same(file_get_contents($root . '/how-many-satellites-in-orbit/index.html'), $PAGE, 'the page is written');
+same(file_get_contents($root . '/sitemap-live.xml'), $SITEMAP, 'the sitemap is written');
+same(array_values(array_filter(files($root), function ($f) { return strpos($f, '.tmp') !== false; })), [], 'no temporary files are left behind');
+$log = []; $r = radar_sync_pages(BASE, $root, $srv($P1, $log));
+ok($r['ok'] && $r['fetched'] === 0, 'a second pages sync fetches nothing');
+same($log, [BASE . 'pages/index.json'], 'and asks only for the index');
+$P2 = ['how-many-satellites-in-orbit/index.html' => $PAGE . '<p>newer</p>', 'sitemap-live.xml' => $SITEMAP];
+$log = []; $r = radar_sync_pages(BASE, $root, $srv($P2, $log));
+ok($r['ok'] && $r['fetched'] === 1, 'a changed page is fetched and an unchanged sitemap is not');
+same(file_get_contents($root . '/how-many-satellites-in-orbit/index.html'), $PAGE . '<p>newer</p>', 'the newer page replaced the old one');
+
+// a download that does not match its hash keeps the old file
+$tampered = server(['pages/index.json' => pagesIndex(['how-many-satellites-in-orbit/index.html' => 'good body']), 'pages/how-many-satellites-in-orbit/index.html' => 'evil body'], $log);
+$r = radar_sync_pages(BASE, $root, $tampered);
+ok(!$r['ok'] && $r['reason'] === 'files', 'a body that does not match the index hash is refused');
+same(file_get_contents($root . '/how-many-satellites-in-orbit/index.html'), $PAGE . '<p>newer</p>', 'and the previous page is kept');
+
+// an index that names an unsafe path writes nothing outside
+$root2 = tmpdir(); $evilIdx = json_encode(['schema' => 1, 'files' => ['../evil/index.html' => ['sha256' => hash('sha256', 'x')], 'how-many-satellites-in-orbit/index.html' => ['sha256' => hash('sha256', $PAGE)]]]);
+$r = radar_sync_pages(BASE, $root2, server(['pages/index.json' => $evilIdx, 'pages/how-many-satellites-in-orbit/index.html' => $PAGE, 'pages/../evil/index.html' => 'x'], $log));
+ok(!$r['ok'], 'an index naming an unsafe path is reported as a failure');
+ok(!is_dir(dirname($root2) . '/evil'), 'and nothing is written outside the site folder');
+ok(is_file($root2 . '/how-many-satellites-in-orbit/index.html'), 'the safe page in the same index is still copied');
+
+// no index, an invalid index and a missing site folder
+$r = radar_sync_pages(BASE, tmpdir(), server([], $log));
+ok(!$r['ok'] && $r['reason'] === 'index', 'a missing pages index changes nothing and says so');
+$r = radar_sync_pages(BASE, tmpdir(), server(['pages/index.json' => '{"schema":2}'], $log));
+ok(!$r['ok'] && $r['reason'] === 'invalid', 'an index with the wrong schema is refused');
+$nope = sys_get_temp_dir() . '/radar-test-nope-' . bin2hex(random_bytes(4));
+$r = radar_sync_pages(BASE, $nope, $srv($P1, $log));
+ok(!$r['ok'] && $r['reason'] === 'dest' && !is_dir($nope), 'a site folder that does not exist is not created');
+
 ob_end_clean();
 echo "\n" . $GLOBALS['passed'] . " passed, " . count($GLOBALS['failed']) . " failed\n";
 exit(count($GLOBALS['failed']) ? 1 : 0);
