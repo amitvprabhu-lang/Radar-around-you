@@ -44,7 +44,7 @@ Notes on the Hostinger form (read from its screens on 2026-10-05): the "Set envi
 Moving to the final domain:
 1. Add the new domain as a website, turn on its HTTPS certificate, create its Web App from the same repository and branch.
 2. Set `SITE_URL` to the new address and do not set `SITE_NOINDEX`.
-3. After the first deployment open `/robots.txt` (it should say `Allow: /` and name the sitemap), open `/sitemap.xml`, and view the source of any page to confirm the robots tag reads `index,follow,max-image-preview:large`.
+3. After the first deployment open `/robots.txt` (it should say `Allow: /` and name both sitemaps), open `/sitemap.xml` and `/sitemap-live.xml` (the live satellite count page's own sitemap, written only when the site is indexable), and view the source of any page to confirm the robots tag reads `index,follow,max-image-preview:large`.
 4. Take the test site on zeninnov8.com down, or keep it with `SITE_NOINDEX=1` still set, so two copies of the content are not both open to search engines.
 
 ## What the first deployment taught us

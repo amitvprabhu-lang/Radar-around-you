@@ -57,6 +57,18 @@ check("a content page loads with a heading, in standards mode, as UTF-8", !!moon
 const txt = fs.readFileSync(site + "robots.txt", "utf8");
 check("robots.txt matches SITE_NOINDEX", process.env.SITE_NOINDEX === "1" ? txt.includes("Disallow: /") && !fs.existsSync(site + "sitemap.xml") : txt.includes("Allow: /") && fs.existsSync(site + "sitemap.xml"), txt.replace(/\n/g, " "));
 
+const sat = await ctx.newPage();
+await sat.goto("https://radar.test/how-many-satellites-in-orbit/", { waitUntil: "load", timeout: 60000 });
+const satInfo = await sat.evaluate(() => ({
+  h1: (document.querySelector("h1") || {}).innerText, charset: document.characterSet, compat: document.compatMode,
+  charts: document.querySelectorAll("svg[role=img]").length, robots: (document.head.querySelector('meta[name="robots"]') || {}).content,
+  canonical: (document.head.querySelector('link[rel="canonical"]') || {}).href, lead: ((document.querySelector(".lead") || {}).innerText || "").slice(0, 60),
+}));
+check("the satellite count page loads with its heading, four charts and an answer-first lead, in standards mode, as UTF-8",
+  satInfo.h1 === "How many satellites are in orbit?" && satInfo.charts >= 4 && /^As of /.test(satInfo.lead) && satInfo.compat === "CSS1Compat" && satInfo.charset === "UTF-8", JSON.stringify(satInfo));
+check("its robots tag matches SITE_NOINDEX", satInfo.robots === want, String(satInfo.robots));
+check("sitemap-live.xml exists exactly when the site is indexable", process.env.SITE_NOINDEX === "1" ? !fs.existsSync(site + "sitemap-live.xml") : fs.existsSync(site + "sitemap-live.xml"));
+
 await browser.close();
 const bad = results.filter((r) => !r).length;
 console.log(`${results.length - bad}/${results.length} site checks passed`);

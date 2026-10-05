@@ -1,4 +1,4 @@
-// Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml and robots.txt,
+// Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the one live page) and robots.txt,
 // and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
