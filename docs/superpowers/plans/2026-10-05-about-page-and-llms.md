@@ -720,6 +720,53 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 
 ---
 
+### Task 5: Position the site as a live feed
+
+**Why:** the owner asked (2026-10-05) for the site to be positioned as a "live feed" for the things it does. This changes wording only, and every new sentence stays within what the README supports.
+
+**Files:**
+- Modify: `site/build.mjs` (`APP_TITLE`, `APP_DESCRIPTION`, `APP_DETAIL`)
+- Modify: `site/pages-about.mjs`, `test/pages-about.test.js`
+- Modify: any test or e2e check that pins the old title or description (find them with `grep -rn "live satellites, ISS, sky tonight\|A free live 3D view" test e2e*.mjs site src README.md docs/*.md`); tests that import `APP_TITLE` or `APP_DESCRIPTION` follow automatically.
+- Modify: `README.md` first paragraph, `docs/about-sources.md`
+
+**The exact new text (use verbatim):**
+- `APP_TITLE`: `Radar Around You: live feed of satellites, ISS, quakes, aurora and storms`
+- `APP_DESCRIPTION`: `A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.`
+- About page `title`: `What Radar Around You is and does: a live feed of satellites, quakes and aurora`
+- About page `description` (`DESCRIPTION` constant): `Radar Around You is a free live feed, drawn in 3D, of the satellites, aircraft, sky, earthquakes, aurora, storms and fires around you. What it does, where its data comes from and what it does not do.`
+- About page `lead`: `A free live feed of what is above, around and under you: satellites and the ISS, aircraft, tonight's sky, earthquakes, aurora, storms and fires, in 3D, for any place on Earth.`
+- First sentence of the "What is Radar Around You?" section: `Radar Around You is a free live feed, drawn in 3D, of what is above you (satellites, the International Space Station and aircraft), what is in tonight's sky (stars, constellations, the Moon, planets and passes), what is under your feet (earthquakes, shown cut open through the Earth) and what is happening around you (storms, fires, aurora and other hazards).` The rest of that paragraph stays.
+- A new section placed right after "What is Radar Around You?" and before "What can you do with it?": `<h2 id="feeds">Which live feeds does it show?</h2>` with this paragraph and list (README: new quakes, hazards, aurora, Kp, cloud forecasts and aircraft appear without a reload; new satellite orbits show a Reload prompt):
+  `<p>The app follows these feeds and updates them while you watch. New earthquakes, storms, fires, aurora, Kp readings, cloud forecasts and aircraft appear without a reload. When new satellite orbits arrive the app shows a Reload prompt instead of swapping them in, because new orbits change the numbering of every object.</p>`
+  `<ul><li>Satellite orbits and the satellite catalogue</li><li>Earthquakes</li><li>Storms, floods, fires and volcanoes</li><li>Tropical storms with forecast track and cone</li><li>Aurora forecast, the Kp index, solar wind and geomagnetic alerts</li><li>Active fire detections</li><li>Cloud forecasts and aircraft for six cities</li><li>Upcoming rocket launches</li></ul>`
+  `<p>If live data is not available the app falls back to a bundled snapshot, and says so: the clock chip shows SNAPSHOT instead of LIVE.</p>`
+- Tests in `test/pages-about.test.js`: add `"feeds"` to the required section ids and `"Which live feeds does it show?"` to the question headings; add `assert.match(text, /live feed/)` and `assert.match(text, /Reload prompt/)`; keep the `Sky Lens`, forecast, SGP4 and guidance regression checks.
+- Docs: in `docs/about-sources.md` add a row: `| Feeds update while you watch; new quakes, hazards, aurora, Kp, cloud forecasts and aircraft appear without a reload; new satellite orbits show a Reload prompt; the app falls back to a snapshot and the clock chip says SNAPSHOT | README.md, "Live data", "What the app does with it" |`. In `README.md` change the first paragraph's opening description to say "live feed" in the same way (keep the rest).
+
+- [ ] **Step 1:** update the tests first (title and description pins, the new section, the regression checks) and watch the right ones fail.
+- [ ] **Step 2:** make the text changes above; run `node --test test/pages-about.test.js test/site.test.js test/llms.test.js`.
+- [ ] **Step 3:** run `npm test && npm run test:pipeline && npm run test:hosting`; scan changed files for em dashes and emoji with Python; commit: `Position the site as a live feed` (body: wording only; every sentence stays within what the README supports), ending with the co-author line.
+
+---
+
+### Task 6: Licence attributions and the pre-launch licence checklist
+
+**Why:** the app's own Data status sheet says the aircraft data's ODbL attribution and share-alike conditions "need reading before a public launch" and that the star catalogue has a non-commercial licence. The earlier research notes already say: adsb.lol is ODbL 1.0 (commercial use allowed with attribution; a database you publish must be shared under the same licence; the owner asks production users to get in touch), HYG is CC BY-SA 4.0 (share-alike applies to the star file derived from it), and Hipparcos-derived data carries a non-commercial licence. Nothing here is legal advice and none of it is confirmed with the owners of the data.
+
+**Files:**
+- Modify: `site/pages-about.mjs`, `test/pages-about.test.js` (attribution in the sources table)
+- Create: `docs/launch-licences.md`
+- Modify: `docs/handoff.md` (one short pointer), `docs/about-sources.md` (rows)
+
+- [ ] **Step 1 (test first):** in `test/pages-about.test.js` add `assert.match(text, /adsb\.lol/)` with `assert.match(text, /ODbL 1\.0/)` and `assert.match(text, /keeps the terms of its source/)`, and watch them fail.
+- [ ] **Step 2:** in `site/pages-about.mjs` change the aircraft row of the sources table to `["Aircraft above six cities", `${ext("https://api.adsb.lol", "adsb.lol")} (data under the ODbL 1.0 licence)`]` and add this sentence at the end of the paragraph that follows the table: ` Data keeps the terms of its source; each source's page, linked above or named in the app's credits, has them.` Run the page tests.
+- [ ] **Step 3:** create `docs/launch-licences.md` with exactly these sections (plain text, no personal name or address): "What this is" (a checklist of licence questions that the app's Data status sheet and the research notes flag for a public launch; not legal advice; nothing confirmed with the owners of the data); "adsb.lol aircraft data" (ODbL 1.0 per the page read on 2026-10-05 as recorded in `pipeline/config.py`; attribution is shown in the app credits and on the About page; share-alike applies to a database you publish, and the collector's output for the aircraft feed is published in the `data` branch and the site's live folder, so whether that is a published derived database is NOT CONFIRMED; the owner asks production users to get in touch, so write to them before relying on it: a short draft note follows, for the site owner to send); "Star catalogue" (the bundled Hipparcos-based file carries a non-commercial licence per `docs/feature-sources.md`; the site is free and shows no ads; keep it that way, or replace the file, before any advertising or paid use; HYG v4.4 star details are CC BY-SA 4.0 and `public/stardetails.json` is released under the same licence per the README); "CelesTrak" (usage policy covers request frequency only and says nothing about republishing or derived counts: NOT CONFIRMED whether publishing aggregate counts is acceptable; consider asking CelesTrak); "Other sources" (US government data USGS and NOAA and NASA as recorded in `docs/hazard-sources.md`; GDACS, MET Norway, The Space Devs terms as recorded in the README table and `docs/feature-sources.md`); "Draft note to adsb.lol" (four or five plain sentences: what the site is, that it uses their API for six cities at a stated low request rate read from `pipeline/config.py`, that it credits adsb.lol under ODbL 1.0, that it publishes the collector's per-city aircraft output, and a request to confirm that this is acceptable and whether they want any other credit; the owner adds their name and sends it).
+- [ ] **Step 4:** add rows to `docs/about-sources.md` for the aircraft licence sentence and the "keeps the terms of its source" sentence (source: `docs/launch-licences.md`, README table). Add one line to `docs/handoff.md` under the SEO item pointing to `docs/launch-licences.md` as the licence checklist and saying the site is indexable on the demo domain, so the checklist matters now.
+- [ ] **Step 5:** run `npm test`; scan changed files for em dashes, emoji and identifiers (no email addresses); commit: `Add licence attributions and a pre-launch licence checklist` with a short body and the co-author line.
+
+---
+
 ## Self-Review
 
 Spec coverage: About page with all sections, no hidden text, no volatile numbers, AboutPage markup without a date, no FAQPage (Task 1); richer home page noscript, `featureList`, `WebSite`, nav entry, app-sheet links (Task 2); `llms.txt` generated from page metadata, only when indexable, missing page is an error (Task 3); tests for each, `e2e:site` checks, source table with the three author-worded sentences flagged, handoff, README and instructions (Task 4). Out of scope items are untouched.
