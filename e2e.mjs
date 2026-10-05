@@ -33,6 +33,8 @@ async function suite(label, viewport, mobile) {
   // ---- A. boot and chrome
   check(L("page started and loader removed"), true);
   check(L("stats strip shows the catalogue size"), (await p.textContent("#stats")).includes("19,316"));
+  check(L("the catalogue tile is labelled tracked objects, not objects in orbit"), (await p.textContent("#stats")).includes("tracked objects") && !(await p.textContent("#stats")).includes("objects in orbit"));
+  check(L("the catalogue tile is a link to the satellite count page"), (await p.getAttribute("#stats a.stat", "href")) === "how-many-satellites-in-orbit/" && (await p.textContent("#stats a.stat")).includes("19,316"));
   check(L("place chip shows a place"), (await p.textContent("#placeChip")).length > 3);
   check(L("four tabs"), (await p.locator(".tab").count()) === 4);
   check(L("layer chips present"), (await p.locator("#layerChips .chip").count()) === 9);

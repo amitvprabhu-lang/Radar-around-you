@@ -356,7 +356,7 @@ async function main() {
     const stats = [
       dataTile(),
       ...(nextEvent ? [["next", new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: nextEvent.allDay ? "UTC" : S.place.tz }).format(nextEvent.time), nextEvent.short || nextEvent.title, () => panels.openCalendar()]] : []),
-      ["inorbit", num(D.meta.count), "objects in orbit", () => panels.openSearch()],
+      ["inorbit", num(D.meta.count), "tracked objects", "how-many-satellites-in-orbit/"],
       ["above", num(above), `above ${S.place.name} now`, () => setView("sky")],
       ["quakes", num(recent), "quakes in 24 h", () => panels.openFeed()],
       ["new", num(D.meta.newIdx.length), "launched in 30 days", () => panels.openFeed()],
@@ -367,7 +367,7 @@ async function main() {
     const key = stats.map((s) => s[1]).join("|");
     if (!force && S.statsKey === key) return;
     S.statsKey = key;
-    el.replaceChildren(...stats.map(([id, v, label, fn]) => h("button", { class: "stat glass", role: "listitem", onclick: fn }, h("b", { text: v }), h("span", { text: label }))));
+    el.replaceChildren(...stats.map(([id, v, label, to]) => h(typeof to === "string" ? "a" : "button", { class: "stat glass", role: "listitem", ...(typeof to === "string" ? { href: to } : { onclick: to }) }, h("b", { text: v }), h("span", { text: label }))));
   }
   const chipButtons = (defs, state) => defs.map((d) => h("button", { class: "chip glass", style: { "--c": d.color }, "aria-pressed": String(!!state[d.key]), onclick: () => toggleLayer(d.key) }, h("i", { class: "sw" }), d.label));
   function renderLayerChips() {
