@@ -3,12 +3,13 @@
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { allChecks } from "./verify.mjs";
 import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
-const root = new URL("../", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
 
 export const APP_TITLE = "Radar Around You: live satellites, ISS, sky tonight, quakes and aurora";
@@ -111,7 +112,7 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   return { outDir, pages: files.length, checks, noindex };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const r = build({ allowUnchecked: process.env.ALLOW_UNCHECKED === "1" });
   console.log(`site: ${r.pages} pages written to ${r.outDir} (canonical base ${SITE.url})`);
   if (r.noindex) console.log("site: NOINDEX IS ON (SITE_NOINDEX=1). Every page tells search engines to stay away and robots.txt disallows everything. Remove SITE_NOINDEX before the real launch.");

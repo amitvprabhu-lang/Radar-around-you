@@ -543,18 +543,21 @@ async function suite(label, viewport, mobile) {
   };
   const plain = await aboutLinks("dist/radar-snapshot.html");
   check("About: the bundled preview build shows no links to content pages that do not exist next to it", !/Guides and reference/.test(plain.text) && plain.links.length === 0, plain.links.length + " links");
+  await plain.p.context().close(); // free the first page before the second starts: pages left open keep drawing and slow every later page
   const site = await aboutLinks("dist/radar-sitepages.html");
   check("About: the build for the real site lists every guide and reference page, grouped", /Guides and reference/.test(site.text) && site.links.length === GUIDE_LINKS.length && GUIDE_LINKS.every((l, i) => site.links[i][0] === l.href && site.links[i][1] === l.label) && /Sky reference/.test(site.text) && /Stars and places/.test(site.text), JSON.stringify(site.links.slice(0, 3)));
   check("About: the links are plain relative addresses that open in the same tab and resolve next to the app", site.links.every((l) => l[2] === `https://radar.test/${l[0]}`) && !(await site.p.evaluate(() => [...document.querySelectorAll("#sheet .guidelinks a")].some((a) => a.target === "_blank"))), JSON.stringify(site.links.slice(0, 2)));
   check("About: the links section does not overflow the screen sideways", await site.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && [...document.querySelectorAll("#sheet .guidelinks a")].every((a) => a.getBoundingClientRect().right <= innerWidth)));
   await site.p.evaluate(() => { const s = document.querySelector("#sheet .guidelinks"); s && s.scrollIntoView(); }); await site.p.waitForTimeout(300);
   await shot(site.p, "about-guides");
+  await site.p.context().close();
 }
 await suite("phone", { width: 390, height: 780 }, true);
 await suite("desktop", { width: 1280, height: 800 }, false);
 
 const failed = results.filter((r) => !r.ok);
-const realErrors = errors.filter((e) => !/fonts\.g|ERR_FAILED/.test(e));
+// the macOS graphics driver logs a performance notice ("GPU stall due to ReadPixels") as a warning; it is not an app error and Linux never prints it
+const realErrors = errors.filter((e) => !/fonts\.g|ERR_FAILED|GL Driver Message \(OpenGL, Performance, [A-Z_]+, High\): GPU stall due to ReadPixels/.test(e));
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 console.log("console errors:", realErrors.length ? realErrors.slice(0, 10) : "none");
 for (const [k, m] of Object.entries(metrics)) console.log(k, `ready in ${m.readyMs} ms, first-load files ${m.firstFiles} (${(m.firstBytes / 1024).toFixed(0)} KB raw), all files ${m.allFiles} (${(m.allBytes / 1024).toFixed(0)} KB raw)`);

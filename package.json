@@ -25,5 +25,8 @@
     "satellite.js": "^7.1.0",
     "three": "^0.186.1"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
 }

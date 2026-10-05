@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
@@ -14,7 +15,7 @@ import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
 import { GUIDE_LINKS } from "../src/guidelinks.js";
 
-const root = new URL("../", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
 const consIdx = indexConstellations(readJson("public/constellations.json"));
 const starsDoc = readJson("public/starnames.json");

@@ -4,9 +4,10 @@
 // usage: npm run e2e:site (it builds the site first)
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { launch } from "./harness.mjs";
 
-const site = new URL("./dist/site/", import.meta.url).pathname;
+const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(ok ? "ok  " : "FAIL", name, ok ? "" : detail); };

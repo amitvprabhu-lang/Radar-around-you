@@ -2,11 +2,15 @@
 // (the sandbox proxy intercepts localhost, so requests are fulfilled by Playwright routes instead).
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { chromium } = require("/opt/node-tools/node_modules/playwright");
+// the project's own copy first; the cloud container kept one at a fixed path
+let playwright;
+try { playwright = require("playwright"); } catch { playwright = require("/opt/node-tools/node_modules/playwright"); }
+const { chromium } = playwright;
 
-export const dir = new URL(".", import.meta.url).pathname;
+export const dir = fileURLToPath(new URL(".", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".txt": "text/plain; charset=utf-8", ".webp": "image/webp", ".html": "text/html; charset=utf-8" };
 
 export async function launch() {
@@ -22,6 +26,8 @@ export async function openPage(browser, htmlFile, { viewport = { width: 390, hei
   const body = fs.readFileSync(dir + htmlFile, "utf8");
   const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${body}</body></html>`;
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  // newer Chromium has DeviceOrientationEvent.requestPermission and answers "prompt" until the sensors are allowed, which the app (like iOS) reads as a refusal
+  await ctx.grantPermissions(["accelerometer", "gyroscope", "magnetometer"], { origin: "https://radar.test" });
   const p = await ctx.newPage();
   p.on("console", (m) => { if (/Service Worker registration blocked by Playwright/.test(m.text())) return; /* the tests block workers on purpose; the worker has its own unit tests */ if (m.type() === "error" || m.type() === "warning") errors.push(`[${label}] ${m.type()}: ${m.text().slice(0, 300)}`); });
   p.on("pageerror", (e) => errors.push(`[${label}] pageerror: ${e.message}`));
