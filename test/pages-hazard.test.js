@@ -86,10 +86,16 @@ test("titles are 60 characters or fewer and unique, descriptions 160 or fewer, o
 test("each lead answers first with the feed's own data time and the headline number", () => {
   assert.equal(leadOf(smallHtml.quakes), "As of 5 October 2026, 18:00 UTC, USGS's feed of earthquakes of magnitude 2.5 and above lists 8 earthquakes in the previous 24 hours. The largest was magnitude 6.4, 120 km S of Suva, Fiji, at 15:30 UTC on 5 October 2026.");
   assert.match(leadOf(smallHtml.aurora), /^As of 5 October 2026, 17:55 UTC, the latest planetary Kp index in NOAA's data is Kp 2\.67, for the three-hour period tagged 15:00 UTC on 5 October 2026\. The solar wind measured by SOLAR1 was 480 km\/s at 17:55 UTC, with Bz -2\.0 nT \(pointing south\)\.$/);
-  assert.equal(leadOf(smallHtml.asteroids), "As of 5 October 2026, 18:00 UTC, NASA JPL's close-approach list has 4 close approaches to Earth still to come, within 0.05 au in its 60 day window. The next is 2026 BB, on 7 October 2026 at 11:20 UTC, at 12.50 lunar distances (4,805,000 km).");
-  assert.match(leadOf(smallHtml.storms), /^As of 5 October 2026, 18:00 UTC, the US National Hurricane Center lists 2 active storms in its Atlantic, Eastern Pacific and Central Pacific basins: Rachel <b> \(Hurricane, Eastern Pacific\), maximum wind 100 knots \(185 km\/h\); Alpha/);
-  assert.match(leadOf(smallHtml.fires), /^As of 5 October 2026, 16:00 UTC \(the time of the newest detection\), NASA FIRMS's 24 hour global files from 3 VIIRS satellites hold 72 fire detections in 3 cells/);
-  for (const [f, h] of realHtml) if (f !== RIGHT_NOW_FILE) assert.match(leadOf(h), /^As of \d{1,2} [A-Z][a-z]+ 2026, \d\d:\d\d UTC/, f);
+  assert.equal(leadOf(smallHtml.asteroids), "As of 5 October 2026, NASA JPL's close-approach list, as our collector read it that day, has 5 close approaches to Earth from that day on, within 0.05 au in its 60 day window. The first is 2026 AA, on 5 October 2026 at 03:00 UTC, at 4.20 lunar distances (1,614,480 km).");
+  assert.match(leadOf(smallHtml.storms), /^As of 5 October 2026, 15:00 UTC, the time of its newest advisory, the US National Hurricane Center lists 2 active storms in its Atlantic, Eastern Pacific and Central Pacific basins: Rachel <b> \(Hurricane, Eastern Pacific\), maximum wind 100 knots \(185 km\/h\); Alpha/);
+  assert.match(leadOf(smallHtml.fires), /^As of 5 October 2026, 16:00 UTC \(the time of the newest detection\), NASA FIRMS's 24 hour global files for the VIIRS instruments on Suomi NPP, NOAA-20 and NOAA-21 hold 72 fire detections in 3 cells/);
+  for (const [f, h] of realHtml) if (f !== RIGHT_NOW_FILE) assert.match(leadOf(h), f === "asteroid-close-approaches/index.html" ? /^As of 5 October 2026, NASA JPL's/ : /^As of \d{1,2} [A-Z][a-z]+ 2026, \d\d:\d\d UTC/, f);
+  // each page says what its data time is
+  const meta = (h) => textOf(h.match(/<p class="meta">([\s\S]*?)<\/p>/)[1]);
+  assert.equal(meta(smallHtml.quakes), "Data as of 5 October 2026, 18:00 UTC, the time given in the data itself. Data from the U.S. Geological Survey.");
+  assert.equal(meta(smallHtml.storms), "Data as of 5 October 2026, 15:00 UTC, the time of the newest advisory in NHC's list. Data from the US National Hurricane Center.");
+  assert.equal(meta(smallHtml.asteroids), "Data as of 5 October 2026, the day our collector read the list. Data from NASA JPL's Center for Near-Earth Object Studies.");
+  assert.equal(meta(smallHtml.fires), "Data as of 5 October 2026, 16:00 UTC, the time of the newest detection in the files. Data from NASA FIRMS (LANCE).");
   // the data time is the feed's, in a time element, and the structured date is the same data time
   for (const [k, s] of Object.entries({ quakes: S.quakes, aurora: S.space, asteroids: S.approaches, storms: S.storms, fires: S.fires })) {
     assert.ok(smallHtml[k].includes(`<time datetime="${s.dataTime}">`), k);
@@ -112,7 +118,7 @@ test("the numbers in the tables add up to the headline numbers", () => {
   const sats = cells(smallHtml.fires, "Fire detections by satellite");
   assert.equal(sum(sats.slice(0, -1), 1), 72);
   assert.equal(cells(smallHtml.aurora, "Planetary Kp per three-hour period").length, 16);
-  assert.equal(cells(smallHtml.asteroids, "Close approaches still to come, soonest first").length, 4);
+  assert.equal(cells(smallHtml.asteroids, "Close approaches from the day the list was read, soonest first").length, 5);
   const realQ = realHtml.get(HAZARD_PAGES[0].file);
   assert.equal(sum(cells(realQ, "Earthquakes by magnitude band").slice(0, -1), 1), RS.quakes.count);
   assert.equal(sum(cells(realHtml.get(HAZARD_PAGES[4].file), "Fire detections by satellite").slice(0, -1), 1), 192083);
@@ -234,9 +240,12 @@ test("edge cases render a sensible page: no big quakes, no quakes at all, a miss
   assert.ok(leadOf(kpGap).includes("is Kp 4, for the three-hour period tagged 12:00 UTC on 5 October 2026. The newest period in the data, tagged 15:00 UTC, has no value yet."), leadOf(kpGap));
   assert.ok(mainText(kpGap).includes("Not shown: the solar wind data is not available in this build."));
   assert.ok(mainText(kpGap).includes("1 period has no value and is drawn at 0."));
-  const noAp = renderPage(approachesPage(summariseApproaches(approachesDoc({ approaches: [] }), { now })));
-  assert.match(leadOf(noAp), /has no close approaches to Earth still to come within 0\.05 au/);
-  assert.ok(!/NaN|undefined|null/.test(textOf(noAp)));
+  // an empty close approach list is refused by the guard (the previous page stays); one pass earlier on the day read is still a page
+  assert.throws(() => summariseApproaches(approachesDoc({ approaches: [] }), { now }), /no close approach in its window/);
+  const onePast = renderPage(approachesPage(summariseApproaches(approachesDoc({ approaches: [approachesDoc().approaches[1]] }), { now })));
+  assert.match(leadOf(onePast), /has 1 close approach to Earth from that day on, .* The first is 2026 AA, on 5 October 2026 at 03:00 UTC/);
+  assert.ok(mainText(onePast).includes("a pass earlier that day can already be over when you read this"));
+  assert.ok(!/NaN|undefined|null/.test(textOf(onePast)));
   const calm = renderPage(stormsPage(summariseStorms(stormsDoc({ storms: [] }), { now }), { coast }));
   assert.match(leadOf(calm), /lists no active storms in its Atlantic, Eastern Pacific and Central Pacific basins\.$/);
   assert.ok(!calm.includes('class="map"'), "no empty map");
@@ -310,4 +319,47 @@ test("the five pages share little text with each other or with the count page: t
     assert.ok(jac < 0.1, `${pages[i][0]} / ${pages[j][0]}: ${jac}`);
   }
   t.diagnostic(`worst shared share of 8-word sequences: ${(worst * 100).toFixed(1)} percent`);
+});
+
+test("review fixes: the alerts table names how many it shows and leaves out replaced warnings; a broken solar wind file leaves a Kp-only page", () => {
+  const a = mainText(realHtml.get("aurora-tonight/index.html"));
+  assert.ok(a.includes("NOAA issued 14 geomagnetic messages in the 72 hours our collector keeps. 2 were warnings that a later extension replaced, and are left out. The latest 10 of the other 12 are shown, newest first, in NOAA's own words."), a);
+  assert.ok(realHtml.get("aurora-tonight/index.html").includes('aria-label="The latest 10 NOAA geomagnetic messages"'));
+  const broken = renderPage(auroraPage(summariseSpace({ kp: kpRows(), spaceweather: windDoc({ points: [{ t: "2026-10-05T17:00:00Z", speed: 9999 }] }) }, { now }), { coast }));
+  assert.match(leadOf(broken), /^As of 5 October 2026, 15:00 UTC, the latest planetary Kp index in NOAA's data is Kp 2\.67, for the three-hour period tagged 15:00 UTC on 5 October 2026\.$/);
+  assert.ok(mainText(broken).includes("Not shown: the solar wind data is not usable: it failed our checks."));
+});
+
+test("review fixes: busiest hours that tie are all named (three, then a count), the FIRMS satellites are the collector's fixed three, and no unsourced cone sentence", () => {
+  const ev = (id, h) => ({ id, mag: 3, place: "x, Fiji", time: new Date(Date.parse(GEN) - h * 3600e3).toISOString().replace(".000Z", "Z"), lat: 1, lon: 1, depth: 10, status: "reviewed", felt: 0, url: "" });
+  const two = mainText(renderPage(quakesPage(summariseQuakes({ generated: GEN, events: [ev("a", 0.5), ev("b", 2.5)] }, { now }), { coast })));
+  assert.ok(two.includes("The busiest hours, with 1 each, were the ones from 15:00 UTC and 17:00 UTC."), two);
+  const five = mainText(renderPage(quakesPage(summariseQuakes({ generated: GEN, events: [0.5, 2.5, 4.5, 6.5, 8.5].map((h, i) => ev(`e${i}`, h)) }, { now }), { coast })));
+  assert.ok(five.includes("The busiest hours, with 1 each, were the ones from 09:00 UTC, 11:00 UTC, 13:00 UTC and 2 more."), five);
+  assert.ok(mainText(smallHtml.quakes).includes("The busiest hour was the one from 17:00 UTC, with 3."));
+  const f = mainText(smallHtml.fires);
+  assert.ok(f.includes("Our collector reads NASA FIRMS's 24 hour global files for Suomi NPP, NOAA-20 and NOAA-21, one file each. This set of files holds detections from all 3."));
+  const oneSat = fireFiles(); oneSat.summary.bySatellite = { N20: oneSat.summary.detections };
+  const f1 = mainText(renderPage(firesPage(summariseFires(oneSat, { now, places: tinyPlaces }), { coast })));
+  assert.ok(f1.includes("for the VIIRS instruments on Suomi NPP, NOAA-20 and NOAA-21 hold") && f1.includes("This set of files holds detections from 1 of the 3."), f1);
+  assert.ok(!mainText(smallHtml.storms).includes("The cone of uncertainty is on each storm's NHC page"));
+  assert.ok(!mainText(smallHtml.quakes).includes("just under"));
+});
+
+test("review fixes: the hub says what each time is, and gives no structured date when there is no data", () => {
+  const t = mainText(smallHtml.hub);
+  for (const part of ["5 Oct, 14:00 (satellite data)", "5 Oct, 18:00 (USGS feed)", "Kp period tagged 5 Oct, 15:00; solar wind 5 Oct, 17:55", "5 October 2026 (the day the list was read)", "5 Oct, 15:00 (newest advisory)", "5 Oct, 16:00 (newest detection)"]) assert.ok(t.includes(part), part);
+  const empty = rightNowPage(hubRows({}));
+  const wp = empty.jsonld.find((o) => o["@type"] === "WebPage");
+  assert.ok(!("dateModified" in wp), "no 1970 date");
+  assert.ok(!renderPage(empty).includes("1970"));
+});
+
+test("review fixes: storm and asteroid pages do not change when only the collector's read time changes", () => {
+  const later = new Date("2026-10-05T23:40:00Z");
+  assert.equal(renderPage(stormsPage(summariseStorms(stormsDoc({ generated: "2026-10-05T23:30:00Z" }), { now: later }), { coast })), smallHtml.storms);
+  assert.equal(renderPage(approachesPage(summariseApproaches(approachesDoc({ generated: "2026-10-05T23:30:00Z" }), { now: later }))), smallHtml.asteroids);
+  const calm = (g) => renderPage(stormsPage(summariseStorms(stormsDoc({ storms: [], generated: g }), { now: later }), { coast }));
+  assert.equal(calm("2026-10-05T19:00:00Z"), calm("2026-10-05T23:30:00Z"), "no active storm: the same page all day");
+  assert.notEqual(calm("2026-10-05T23:30:00Z"), renderPage(stormsPage(summariseStorms(stormsDoc({ storms: [], generated: "2026-10-06T00:10:00Z" }), { now: new Date("2026-10-06T00:20:00Z") }), { coast })), "a new day is a new page");
 });

@@ -463,7 +463,9 @@ test("an indexable build writes llms.txt whose every link is a built page", () =
   for (const l of links) {
     if (l === `${SITE.url}/`) continue;
     assert.ok(l.startsWith(`${SITE.url}/`), l);
-    assert.ok(pageFiles.includes(l.slice(SITE.url.length + 1) + "index.html"), `${l} is not a built page`);
+    // a live page counts even when this build wrote no copy of it: the live copy arrives with the next pull
+    const f = l.slice(SITE.url.length + 1) + "index.html";
+    assert.ok(pageFiles.includes(f) || LIVE_FILES.includes(f), `${l} is not a built page or a live page`);
   }
   assert.ok(!/[\u2013\u2014]/.test(txt));
 });
@@ -505,7 +507,7 @@ test("the deploy-time copy writes the earthquake page and the right-now hub from
   const llms = fs.readFileSync(path.join(outDir, "llms.txt"), "utf8");
   assert.ok(llms.includes(`- [Right now](${SITE.url}/right-now/): The latest number from each live page`));
   assert.ok(llms.includes(`- [Earthquakes today](${SITE.url}/earthquakes-today/): Earthquakes of magnitude 2.5 and above`));
-  assert.ok(!llms.includes("/aurora-tonight/"));
+  for (const p of HAZARD_PAGES) assert.ok(llms.includes(`- [${p.name}](${SITE.url}/${p.slug}/): `), `${p.slug} is listed although only some copies are written at deploy time`);
 });
 
 test("with every hazard feed bundled, the deploy-time copy writes all five hazard pages and the hub links them all", () => {

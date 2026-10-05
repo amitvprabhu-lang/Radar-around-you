@@ -69,6 +69,7 @@ const approach = (name, time, distLd, speedKms, h, timeSigma = "00:10") => ({ de
 export const approachesDoc = (extra = {}) => ({
   generated: GEN, version: "1.5", ldKm: 384400,
   approaches: [
+    approach("2026 ZZ", "2026-10-04T23:59:00Z", 3.3, 6.6, 25.5),
     approach("2026 AA", "2026-10-05T03:00:00Z", 4.2, 9.1, 26.1),
     approach("2026 BB", "2026-10-07T11:20:00Z", 12.5, 5.5, 24.0, "1_02:01"),
     approach("2019 CC", "2026-10-09T08:00:00Z", 0.62, 14.8, 28.4, "< 00:01"),

@@ -11,6 +11,7 @@ import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { HUB_FILE, COUNTRY_FILES } from "../site/pages-country.mjs";
 import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE } from "../site/livepages.mjs";
 import { HAZARD_PAGES } from "../site/hazard.mjs";
+import { HAZARD_PAGE_FUNCTIONS } from "../site/pages-hazard.mjs";
 import { COUNTRY_PAGES } from "../site/satcountry.mjs";
 import { SITE, urlPath } from "../site/layout.mjs";
 import { buildFixture, STANDARD, countryFixture } from "./helpers/satfixture.mjs";
@@ -207,7 +208,7 @@ test("with owners that have pages, the hub and all five country pages are writte
 test("an owner that trips the guard is skipped and named, the rest are written, and nothing links to the skipped page", () => {
   const out = mk();
   const r = buildLive({ dataDir: dataDir("V1", countryFixture()), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 }, min: 53 });
-  assert.deepEqual(r.skipped, [{ slug: "japan", file: "satellites-by-country/japan/index.html", reason: "Japan has 52 active satellites, under 53" }]);
+  assert.deepEqual(r.skipped, [{ slug: "japan", file: "satellites-by-country/japan/index.html", reason: "Japan has 52 active satellites, under 53", kept: false }]);
   const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
   assert.ok(!("satellites-by-country/japan/index.html" in index.files));
   assert.equal(Object.keys(index.files).length, 8);
@@ -370,7 +371,14 @@ test("a feed that fails its guard skips its page and is reported as a failure; t
   const out2 = mk();
   const cli = spawnSync(process.execPath, [script, "--data", dir, "--out", out2], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" }, encoding: "utf8" });
   assert.notEqual(cli.status, 0);
-  assert.match(cli.stderr, /FAILED step "hazard page tropical-storms-now" \(tropical-storms-now\/index\.html\): hazard: storms: Rachel has wind 975 kt/);
+  assert.match(cli.stderr, /FAILED step "hazard page tropical-storms-now" \(tropical-storms-now\/index\.html\): hazard: storms: Rachel has wind 975 kt, outside 0 to 250 \(there is no previous copy in the output folder, so this page is not written\)/);
+  // with a previous copy in the folder the message says it stays
+  const out3 = mk(), cliEnv = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" };
+  spawnSync(process.execPath, [script, "--data", fullDataDir(), "--out", out3], { env: cliEnv, encoding: "utf8" });
+  assert.ok(fs.existsSync(path.join(out3, "tropical-storms-now/index.html")), "a first run wrote the storm page");
+  const again = spawnSync(process.execPath, [script, "--data", dir, "--out", out3], { env: cliEnv, encoding: "utf8" });
+  assert.equal(again.status, 1);
+  assert.match(again.stderr, /FAILED step "hazard page tropical-storms-now" \(tropical-storms-now\/index\.html\): [^\n]* \(the previous copy stays\)/);
   assert.ok(fs.existsSync(path.join(out2, "earthquakes-today/index.html")), "the others are still written");
 });
 
@@ -378,7 +386,7 @@ test("a feed missing from the manifest leaves its page out with a reason, and a 
   const out = mk();
   const dir = fullDataDir((m) => { delete m.feeds.fires; });
   const r = buildLive({ dataDir: dir, outDir: out, now: REAL_TIME, noindex: true, bounds });
-  assert.deepEqual(r.stale, [{ file: "wildfires-today/index.html", reason: "the manifest has no fires feed" }]);
+  assert.deepEqual(r.stale, [{ file: "wildfires-today/index.html", reason: "the manifest has no fires feed", kept: false }]);
   assert.ok(!fs.existsSync(path.join(out, "sitemap-live.xml")));
   assert.ok(!("sitemap-live.xml" in readIndex(out).files));
   for (const f of Object.keys(readIndex(out).files)) assert.ok(fs.readFileSync(path.join(out, f), "utf8").includes('<meta name="robots" content="noindex,nofollow">'), f);
@@ -458,4 +466,62 @@ test("an error in the satellite data still fails the command (exit 1) with a mes
   const r3 = spawnSync(process.execPath, [script, "--data", ok, "--out", mk()], { env, encoding: "utf8" });
   assert.equal(r3.status, 0, r3.stderr);
   assert.ok(!/FAILED/.test(r3.stderr));
+});
+
+test("a hazard page that fails to render is skipped on its own and reported; the other pages and the hub are written without a link to it", () => {
+  const out = mk();
+  const pageFunctions = { ...HAZARD_PAGE_FUNCTIONS, quakes: () => { throw new Error("render broke"); } };
+  const r = buildLive({ dataDir: fullDataDir(), outDir: out, now: REAL_TIME, noindex: false, bounds, pageFunctions });
+  assert.deepEqual(r.failed.map((f) => [f.step, f.files, f.reason, f.kept]), [["hazard page earthquakes-today (rendering)", ["earthquakes-today/index.html"], "render broke", false]]);
+  assert.ok(!fs.existsSync(path.join(out, "earthquakes-today/index.html")));
+  for (const f of ["aurora-tonight/index.html", "wildfires-today/index.html", RIGHT_NOW_FILE, SATCOUNT_FILE]) assert.ok(fs.existsSync(path.join(out, f)), f);
+  for (const f of ["aurora-tonight/index.html", RIGHT_NOW_FILE]) assert.ok(!fs.readFileSync(path.join(out, f), "utf8").includes('href="../earthquakes-today/"'), `${f} does not link the missing page`);
+  assert.ok(!("earthquakes-today/index.html" in readIndex(out).files));
+  // with a previous copy, that copy and its entry stay, and the failure says so
+  const before = readIndex(out);
+  const good = buildLive({ dataDir: fullDataDir(), outDir: out, now: REAL_TIME, noindex: false, bounds });
+  assert.deepEqual(good.failed, []);
+  const entry = readIndex(out).files["earthquakes-today/index.html"];
+  const again = buildLive({ dataDir: fullDataDir((m, d) => newVersion(m, d, "quakes", "quakes.json", "20261005T184999Z")), outDir: out, now: REAL_TIME, noindex: false, bounds, pageFunctions });
+  assert.equal(again.failed[0].kept, true);
+  assert.deepEqual(readIndex(out).files["earthquakes-today/index.html"], entry);
+  assert.ok(before);
+  // the hub failing to render is reported the same way, and the pages are still written
+  const out2 = mk();
+  const hubFail = buildLive({ dataDir: fullDataDir(), outDir: out2, now: REAL_TIME, noindex: false, bounds, hubPage: () => { throw new Error("hub broke"); } });
+  assert.deepEqual(hubFail.failed.map((f) => f.step), ["right-now hub (rendering)"]);
+  assert.ok(!fs.existsSync(path.join(out2, RIGHT_NOW_FILE)) && fs.existsSync(path.join(out2, "earthquakes-today/index.html")));
+});
+
+test("feeds that differ only in the collector's read time give byte-identical storm and asteroid pages and the same lastmod", () => {
+  const out = mk();
+  buildLive({ dataDir: fullDataDir(), outDir: out, now: REAL_TIME, noindex: false, bounds });
+  const before = readIndex(out), xml = fs.readFileSync(path.join(out, "sitemap-live.xml"), "utf8");
+  const pagesBefore = Object.fromEntries(["tropical-storms-now/index.html", "asteroid-close-approaches/index.html"].map((f) => [f, fs.readFileSync(path.join(out, f), "utf8")]));
+  const dir = fullDataDir((m, d) => {
+    newVersion(m, d, "storms", "storms.json", "20261005T190041Z", (t) => t.replace('"generated":"2026-10-05T18:30:40Z"', '"generated":"2026-10-05T19:00:40Z"'));
+    newVersion(m, d, "closeapproaches", "closeapproaches.json", "20261005T204039Z", (t) => t.replace('"generated":"2026-10-05T14:40:39Z"', '"generated":"2026-10-05T20:40:39Z"'));
+  });
+  assert.notEqual(fs.readFileSync(path.join(dir, "storms/20261005T190041Z/storms.json"), "utf8"), fs.readFileSync(path.join(REAL_DIR, "storms/20261005T183041Z/storms.json"), "utf8"), "the read time did change");
+  const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T21:00:00Z"), noindex: false, bounds });
+  assert.ok(!r.built.includes("tropical-storms-now/index.html") && !r.built.includes("asteroid-close-approaches/index.html"), r.built.join(" "));
+  const after = readIndex(out);
+  for (const [f, text] of Object.entries(pagesBefore)) {
+    assert.equal(fs.readFileSync(path.join(out, f), "utf8"), text, `${f}: the same bytes`);
+    assert.deepEqual(after.files[f], before.files[f], `${f}: the same entry and changed time`);
+    assert.equal(after.pages[f].dataTime, before.pages[f].dataTime, `${f}: the same data time`);
+  }
+  assert.equal(after.pages["tropical-storms-now/index.html"].dataTime, "2026-10-05T15:00:00Z", "the newest advisory");
+  assert.equal(after.pages["asteroid-close-approaches/index.html"].dataTime, "2026-10-05T00:00:00Z", "the day the list was read");
+  const lastmod = (x, slug) => x.match(new RegExp(`/${slug}/</loc><lastmod>([^<]+)<`))[1];
+  for (const slug of ["tropical-storms-now", "asteroid-close-approaches"]) assert.equal(lastmod(fs.readFileSync(path.join(out, "sitemap-live.xml"), "utf8"), slug), lastmod(xml, slug), slug);
+});
+
+test("a broken solar wind file leaves a Kp-only aurora page with a warning, not a failure", () => {
+  const out = mk();
+  const r = buildLive({ dataDir: fullDataDir((m, d) => newVersion(m, d, "spaceweather", "spaceweather.json", "20261005T184031Z", (t) => t.replace(/"speed":[\d.]+/, '"speed":99999'))), outDir: out, now: REAL_TIME, noindex: false, bounds });
+  assert.ok(!r.failed.some((f) => f.files.includes("aurora-tonight/index.html")));
+  assert.match(r.warnings[0].reason, /hazard: spaceweather: point \d+ has speed 99999/);
+  const h = fs.readFileSync(path.join(out, "aurora-tonight/index.html"), "utf8");
+  assert.ok(h.includes("Not shown: the solar wind data is not usable: it failed our checks."));
 });

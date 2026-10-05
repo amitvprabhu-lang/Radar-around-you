@@ -14,7 +14,7 @@ A free, global, real-time 3D web tool: satellites and the ISS above you, the sky
 ## Commands
 | Command | What it does | Last known result |
 | --- | --- | --- |
-| `npm test` | unit tests (`test/*.test.js`) | 436 pass (macOS, Node 24, 2026-10-06, after the live hazard pages were merged with the IndexNow key and pings and a fix round; 422 with the hazard pages alone, 393 with IndexNow alone, 380 before both, 324 before the satellites by country pages) |
+| `npm test` | unit tests (`test/*.test.js`) | 445 pass (macOS, Node 24, 2026-10-06, after the live hazard pages were merged with the IndexNow key and pings, a fix round and a review fix round; 422 with the hazard pages alone, 393 with IndexNow alone, 380 before both, 324 before the satellites by country pages) |
 | `npm run test:pipeline` | Python collector tests | 175 run, 3 skipped, none failed (macOS). The 3 skipped need raw downloads that are not in the repository (`raw/`, `raw2/` are ignored). The cloud note said 177; why the counts differ is NOT CONFIRMED. |
 | `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 425 pass (macOS with PHP 8.5.11 from Homebrew on 2026-10-06, after the IndexNow pings and two review rounds; 185 after the five satellites by country paths and the six hazard page paths were allowed; 167 before the hazard paths, 131 before the country paths, 92 before the pages option was added, on the cloud and the Mac, and 125 before the page paths were narrowed to the two live files). On PHP 8.5 it prints a deprecation notice for `$http_response_header` in `hosting/lib.php` line 41; the server runs PHP 8.3.33 where it is silent. |
 | `npm run e2e` | snapshot build in Chromium, phone and desktop | 290 pass, no console errors (macOS, Chromium 153) |

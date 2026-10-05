@@ -61,7 +61,8 @@ const HAZARD_READERS = {
   fires: (rd, o) => summariseFires({ summary: rd.json("fires", "fires.json"), bin: rd.bytes("fires", "fires.bin") }, o),
 };
 
-export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey() } = {}) {
+// pageFunctions and hubPage can be replaced in tests, to show that a page that fails to render is skipped on its own.
+export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = HAZARD_PAGE_FUNCTIONS, hubPage = rightNowPage } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("build-live: the IndexNow key must be 8 to 128 letters, digits and dashes");
   const key = noindex ? null : indexnowKey || null;  // a noindex site is never pinged, so its index names no key
   const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, "manifest.json"), "utf8"));
@@ -94,8 +95,10 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
 
   const texts = new Map();   // file -> html, built in this run
   const pages = {};          // file -> { feeds, dataTime } for every page that exists after this run
-  const kept = new Set(), skipped = [], stale = [], failed = [];
+  const kept = new Set(), skipped = [], stale = [], failed = [], warnings = [];
   const carry = (file) => { if (prev && prev.pages && prev.pages[file] && prev.files[file] && exists(file)) { pages[file] = prev.pages[file]; kept.add(file); return true; } return false; };
+  // carry several files; kept: whether at least one previous copy stays, so the message can say so only when it is true
+  const carryAll = (files) => files.map(carry).some(Boolean);
 
   // Shared inputs. A failure here stops the whole build before anything is written, as before.
   let coast = null, places = null;
@@ -123,12 +126,11 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
       for (const p of country.pages) texts.set(p.file, renderPage(p, { noindex }));
       for (const f of SATELLITE_FILES) if (texts.has(f)) pages[f] = { feeds: { satellites: satVersion }, dataTime: taken };
       // a country page left out this run keeps its earlier copy, if there is one
-      for (const s of country.skipped) { skipped.push(s); carry(s.file); }
+      for (const s of country.skipped) skipped.push({ ...s, kept: carry(s.file) });
     }
   } catch (e) {
     if (/ENOENT/.test(e.message) && e.path === coastFile) throw e;
-    failed.push({ step: "satellite pages", files: SATELLITE_FILES, reason: e.message });
-    for (const f of SATELLITE_FILES) carry(f);
+    failed.push({ step: "satellite pages", files: SATELLITE_FILES, reason: e.message, kept: carryAll(SATELLITE_FILES) });
     satSummary = null;
   }
 
@@ -138,28 +140,41 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     const names = hp.feeds;
     if (!rd.has(names[0])) {
       missing[hp.key] = "not in the collector's data";
-      stale.push({ file: hp.file, reason: `the manifest has no ${names[0]} feed` });
-      carry(hp.file);
+      stale.push({ file: hp.file, reason: `the manifest has no ${names[0]} feed`, kept: carry(hp.file) });
       continue;
     }
     try {
       const s = HAZARD_READERS[hp.key](rd, { now, places: hp.key === "fires" ? getPlaces() : undefined });
       summaries[hp.key] = s;
+      for (const w of s.warnings || []) warnings.push({ file: hp.file, reason: w });
       if (keepable(hp.file, names)) { carry(hp.file); continue; }
       pages[hp.file] = { feeds: versionsOf(names), dataTime: s.dataTime };
     } catch (e) {
       if (e && e.code === "ENOENT" && (e.path === coastFile || e.path === placesFile)) throw e;
-      if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message }); }
-      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `hazard page ${hp.slug}`, files: [hp.file], reason: e.message }); }
-      carry(hp.file);
+      if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }
+      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `hazard page ${hp.slug}`, files: [hp.file], reason: e.message, kept: carry(hp.file) }); }
     }
   }
-  // the pages that exist after this run (built or kept), so no page links to one that is not there
-  const available = LIVE_FILES.filter((f) => f === RIGHT_NOW_FILE || pages[f]);
-  for (const hp of HAZARD_PAGES) {
-    if (!summaries[hp.key] || kept.has(hp.file) || !pages[hp.file]) continue;
-    const page = HAZARD_PAGE_FUNCTIONS[hp.key](summaries[hp.key], { built: available, coast: getCoast() });
-    texts.set(hp.file, renderPage(page, { noindex }));
+  // Render each hazard page on its own: a page that fails to render is skipped (its previous copy stays) and reported as a failure. The
+  // pages that exist after this run (built or kept) are linked from each other, so a failure is followed by another pass without it.
+  let available = [];
+  for (let pass = 0; pass < HAZARD_PAGES.length + 1; pass++) {
+    available = LIVE_FILES.filter((f) => f === RIGHT_NOW_FILE || pages[f]);
+    let broke = false;
+    for (const hp of HAZARD_PAGES) {
+      if (!summaries[hp.key] || kept.has(hp.file) || !pages[hp.file]) continue;
+      try {
+        texts.set(hp.file, renderPage(pageFunctions[hp.key](summaries[hp.key], { built: available, coast: getCoast() }), { noindex }));
+      } catch (e) {
+        texts.delete(hp.file);
+        delete pages[hp.file];
+        delete summaries[hp.key];
+        missing[hp.key] = "a page that could not be built";
+        failed.push({ step: `hazard page ${hp.slug} (rendering)`, files: [hp.file], reason: e.message, kept: carry(hp.file) });
+        broke = true;
+      }
+    }
+    if (!broke) break;
   }
 
   // ---- the right-now hub: worked out every run from the same summaries; a page that is not live this run gets no number and no link
@@ -171,10 +186,15 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   });
   // a hazard page kept from an earlier run whose feed is now stale is still on the site, but the hub shows it as not updated
   const hubAvailable = available.filter((f) => f === RIGHT_NOW_FILE || SATELLITE_FILES.includes(f) || HAZARD_PAGES.some((p) => p.file === f && summaries[p.key]));
-  const hub = rightNowPage(rows, { available: hubAvailable });
-  texts.set(RIGHT_NOW_FILE, renderPage(hub, { noindex }));
+  let hub = null;
+  try {
+    hub = hubPage(rows, { available: hubAvailable });
+    texts.set(RIGHT_NOW_FILE, renderPage(hub, { noindex }));
+  } catch (e) {
+    failed.push({ step: "right-now hub (rendering)", files: [RIGHT_NOW_FILE], reason: e.message, kept: carry(RIGHT_NOW_FILE) });
+  }
   const hubFeeds = Object.fromEntries(Object.entries(versionsOf(LIVE_PAGES.find((p) => p.file === RIGHT_NOW_FILE).feeds)).sort());
-  pages[RIGHT_NOW_FILE] = { feeds: hubFeeds, dataTime: hub.dataTime || (prev && prev.pages && prev.pages[RIGHT_NOW_FILE] && prev.pages[RIGHT_NOW_FILE].dataTime) || isoZ(now.getTime()) };
+  if (hub) pages[RIGHT_NOW_FILE] = { feeds: hubFeeds, dataTime: hub.dataTime || (prev && prev.pages && prev.pages[RIGHT_NOW_FILE] && prev.pages[RIGHT_NOW_FILE].dataTime) || isoZ(now.getTime()) };
 
   // ---- the sitemap: every live page there is, in the order of the registry, each with its own data time
   const ordered = LIVE_FILES.filter((f) => pages[f]);
@@ -198,7 +218,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const index = { schema: 1, satellitesVersion: satBuilt || null, siteUrl: SITE.url, ...(key ? { indexnowKey: key } : {}), noindex, generator, built: iso, feeds: feedVersions, pages: Object.fromEntries(ordered.map((f) => [f, pages[f]])), files: sortedFiles };
   const unchanged = prev && writes.length === 0 && !(noindex && exists("sitemap-live.xml")) &&
     same({ ...prev, built: null }, { ...index, built: null });
-  if (unchanged) return { changed: false, version: satVersion, skipped, stale, failed, built: [] };
+  if (unchanged) return { changed: false, version: satVersion, skipped, stale, failed, warnings, built: [] };
   for (const [rel, buf] of writes) {
     const file = path.join(outDir, rel);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -207,7 +227,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   if (noindex) fs.rmSync(path.join(outDir, "sitemap-live.xml"), { force: true });
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 1) + "\n");
-  return { changed: true, version: satVersion, skipped, stale, failed, built: writes.map(([rel]) => rel).filter((r) => r !== "sitemap-live.xml") };
+  return { changed: true, version: satVersion, skipped, stale, failed, warnings, built: writes.map(([rel]) => rel).filter((r) => r !== "sitemap-live.xml") };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -216,10 +236,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!process.env.SITE_URL || !process.env.SITE_URL.trim()) throw new Error("build-live: SITE_URL is required (set the repository variable SITE_URL), so the page gets the right canonical address");
     if (!arg("--data") || !arg("--out")) throw new Error("build-live: usage: node site/build-live.mjs --data <collector folder> --out <pages folder>");
     const r = buildLive({ dataDir: arg("--data"), outDir: arg("--out") });
-    for (const s of r.skipped) console.log(`build-live: skipped ${s.file}: ${s.reason} (the copy already on the site stays)`);
-    for (const s of r.stale) console.log(`build-live: skipped ${s.file}: ${s.reason} (the copy already on the site stays)`);
+    const after = (kept, many) => (kept ? `(the previous ${many ? "copies stay" : "copy stays"})` : `(there is no previous copy in the output folder, so ${many ? "these pages are" : "this page is"} not written)`);
+    for (const s of [...r.skipped, ...r.stale]) console.log(`build-live: skipped ${s.file}: ${s.reason} ${after(s.kept, false)}`);
+    for (const w of r.warnings) console.log(`build-live: warning for ${w.file}: ${w.reason} (the page is built without that part)`);
     // a failure exits 1 after the other pages are written, so the workflow step turns red and GitHub sends its failure notice
-    for (const f of r.failed) console.error(`build-live: FAILED step "${f.step}" (${f.files.join(", ")}): ${f.reason} (the copies already on the site stay)`);
+    for (const f of r.failed) console.error(`build-live: FAILED step "${f.step}" (${f.files.join(", ")}): ${f.reason} ${after(f.kept, f.files.length > 1)}`);
     console.log(r.changed ? `build-live: wrote ${r.built.length} page(s)${r.built.length ? `: ${r.built.join(", ")}` : ""} (satellites version ${r.version}, canonical base ${SITE.url}${SITE.noindex ? ", noindex" : ""})` : `build-live: no feed the pages use has a new version and the page generator is unchanged, nothing to do`);
     if (r.failed.length) process.exit(1);
   } catch (e) {

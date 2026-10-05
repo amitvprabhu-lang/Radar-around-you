@@ -10,7 +10,9 @@ const clean = (s) => String(s).replace(/\s+/g, " ").trim();
 // OURS: the live pages' descriptions hold today's numbers, so this file uses fixed notes instead.
 const LIVE_NOTE = "A live count of active satellites in orbit, with breakdowns by owner, orbit, purpose and launch year.";
 const HUB_NOTE = "Every owner in the satellite catalogue ranked by active satellites, as the catalogue records owners, with more detail for a few of them.";
-// OURS: fixed notes for the hazard pages and the right-now hub, for the same reason. A page is listed only when the build wrote it.
+// OURS: fixed notes and names for the hazard pages and the right-now hub, for the same reason. They are always listed, whether or not
+// the site build wrote a copy of them (the deploy-time build writes only those whose data is bundled; the live copies arrive with the
+// next pull), because they are pages of the site.
 export const HAZARD_NOTES = {
   [RIGHT_NOW_FILE]: "The latest number from each live page (satellites, earthquakes, Kp, asteroid close approaches, tropical storms and fire detections), each with its data time.",
   "earthquakes-today/index.html": "Earthquakes of magnitude 2.5 and above in the last 24 hours from the USGS feed: counts by magnitude and by hour, the largest, and a map.",
@@ -19,6 +21,7 @@ export const HAZARD_NOTES = {
   "tropical-storms-now/index.html": "Active tropical storms and hurricanes in the US National Hurricane Center's basins, with wind, pressure and forecast tracks.",
   "wildfires-today/index.html": "Satellite fire detections in NASA FIRMS's 24 hour files, by satellite and densest place, with a map. Detections, not confirmed fires.",
 };
+const LIVE_HAZARD_LIST = [[RIGHT_NOW_FILE, "Right now"], ...HAZARD_PAGES.map((p) => [p.file, p.name])];
 const REFERENCE = ["moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html"];
 
 export function buildLlmsTxt({ pages, url, name, summary }) {
@@ -38,7 +41,7 @@ export function buildLlmsTxt({ pages, url, name, summary }) {
     "## Sky reference", ...REFERENCE.map((f) => entry(f)), "",
     "## Guides", ...guides.map((f) => entry(f)), "",
     "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE),
-    ...[RIGHT_NOW_FILE, ...HAZARD_PAGES.map((p) => p.file)].filter((f) => byFile.has(f)).map((f) => entry(f, HAZARD_NOTES[f])), "",
+    ...LIVE_HAZARD_LIST.map(([f, title]) => `- [${title}](${url}/${urlPath(f)}): ${HAZARD_NOTES[f]}`), "",
   ];
   return lines.join("\n");
 }

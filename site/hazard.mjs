@@ -59,7 +59,8 @@ export function freshness(feed, dataMs, now, { allowStale = false, maxAgeHours =
   return stale;
 }
 
-const byNum = (k, dir = 1) => (a, b) => dir * (a[k] - b[k]);
+// the start of the UTC day of a time, for data times that should change once a day at most
+export const dayStart = (ms) => { const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
 
 // ------------------------------------------------------------------ earthquakes (USGS magnitude 2.5 and above, past 7 days)
 // OURS: the magnitude bands of the page, the lower edges of USGS's own summary feeds (2.5 and 4.5) plus 6.
@@ -124,11 +125,12 @@ export function summariseKp(rows, { now, allowStale = false } = {}) {
   const valued = list.filter((r) => r.kp !== null);
   if (!valued.length) fail("kp", "no row has a Kp value");
   const newest = list[list.length - 1].t;
-  const stale = freshness("kp", newest, now, { allowStale });
   const latest = valued[valued.length - 1];
+  // the age is that of the newest row with a value: a newest row without one does not make the data current
+  const stale = freshness("kp", latest.t, now, { allowStale });
   const max = valued.reduce((a, b) => (b.kp > a.kp ? b : a));
   return {
-    feed: "kp", dataTime: isoZ(newest), stale, rows: list.map((r) => ({ t: isoZ(r.t), kp: r.kp })),
+    feed: "kp", dataTime: isoZ(latest.t), newestTag: isoZ(newest), stale, rows: list.map((r) => ({ t: isoZ(r.t), kp: r.kp })),
     latest: { t: isoZ(latest.t), kp: latest.kp }, missingLatest: latest.t !== newest,
     max: { t: isoZ(max.t), kp: max.kp }, atLeastG1: valued.filter((r) => r.kp >= KP_G1).length, missing: list.length - valued.length,
     first: isoZ(list[0].t),
@@ -156,12 +158,16 @@ export function summariseWind(doc, { now, allowStale = false } = {}) {
     const have = pts.filter((p) => p[k] !== null);
     fields[k] = have.length ? { now: have[have.length - 1][k], at: isoZ(have[have.length - 1].t), min: Math.min(...have.map((p) => p[k])), max: Math.max(...have.map((p) => p[k])), n: have.length } : null;
   }
-  const alerts = (Array.isArray(doc.alerts) ? doc.alerts : []).filter((a) => a && typeof a.headline === "string" && Number.isFinite(parseTime(a.issued)))
+  const allAlerts = (Array.isArray(doc.alerts) ? doc.alerts : []).filter((a) => a && typeof a.headline === "string" && Number.isFinite(parseTime(a.issued)));
+  // an extended or continued warning names the serial it replaces (its "supersedes" field, pipeline/hazards.py); the replaced one is left
+  // out, as the app does (docs/hazard-sources.md)
+  const replaced = new Set(allAlerts.filter((a) => Number.isInteger(a.supersedes)).map((a) => a.supersedes));
+  const alerts = allAlerts.filter((a) => !(Number.isInteger(a.serial) && replaced.has(a.serial)))
     .map((a) => ({ kind: String(a.kind || ""), headline: a.headline, issued: isoZ(parseTime(a.issued)), kp: fin(a.kp) ? a.kp : null }))
     .sort((a, b) => b.issued.localeCompare(a.issued) || a.headline.localeCompare(b.headline));
   return {
     feed: "spaceweather", dataTime: isoZ(upd), stale, from: isoZ(pts[0].t), to: isoZ(pts[pts.length - 1].t), points: pts.length,
-    bucketMin: fin(doc.bucketMin) ? doc.bucketMin : null, spacecraft: (Array.isArray(doc.spacecraft) ? doc.spacecraft : []).map(String), fields, alerts,
+    bucketMin: fin(doc.bucketMin) ? doc.bucketMin : null, spacecraft: (Array.isArray(doc.spacecraft) ? doc.spacecraft : []).map(String), fields, alerts, alertsReplaced: allAlerts.length - alerts.length,
   };
 }
 
@@ -197,16 +203,19 @@ export function summariseGrid(meta, grid, { now, allowStale = false } = {}) {
 // The aurora page needs Kp; the solar wind and the grid add sections when present and fresh, and otherwise say why they are missing.
 export function summariseSpace({ kp, spaceweather = null, aurora = null }, { now, allowStale = false } = {}) {
   const k = summariseKp(kp, { now, allowStale });
+  // a stale or broken solar wind or grid file leaves only its own section out, with the reason; the Kp page is still published
+  const warnings = [];
   const part = (feed, fn) => {
     try { return { value: fn(), reason: null }; } catch (e) {
       if (e && e.stale) return { value: null, reason: `older than ${MAX_AGE_HOURS[feed]} hours` };
-      throw e;
+      warnings.push(e.message);
+      return { value: null, reason: "not usable: it failed our checks" };
     }
   };
   const w = spaceweather ? part("spaceweather", () => summariseWind(spaceweather, { now, allowStale })) : { value: null, reason: "not available in this build" };
   const g = aurora ? part("aurora", () => summariseGrid(aurora.meta, aurora.grid, { now, allowStale })) : { value: null, reason: "not available in this build" };
   const times = [k.dataTime, w.value && w.value.dataTime, g.value && g.value.dataTime].filter(Boolean).sort();
-  return { feed: "kp", kp: k, wind: w.value, windReason: w.reason, grid: g.value, gridReason: g.reason, dataTime: times[times.length - 1], stale: k.stale || !!(w.value && w.value.stale) || !!(g.value && g.value.stale) };
+  return { feed: "kp", kp: k, wind: w.value, windReason: w.reason, grid: g.value, gridReason: g.reason, dataTime: times[times.length - 1], warnings, stale: k.stale || !!(w.value && w.value.stale) || !!(g.value && g.value.stale) };
 }
 
 // ------------------------------------------------------------------ asteroid close approaches (NASA/JPL CNEOS)
@@ -240,10 +249,15 @@ export function summariseApproaches(doc, { now, allowStale = false } = {}) {
   }).sort((a, b) => a.t - b.t || a.name.localeCompare(b.name, "en"));
   const stale = freshness("closeapproaches", gen, now, { allowStale });
   const pub = (a) => a && { name: a.name, time: isoZ(a.t), distLd: a.distLd, distKm: a.distKm, speedKms: a.speedKms, h: a.h, sigma: a.sigma };
-  const up = list.filter((a) => a.t >= gen);
+  // OURS: the page lists the passes from the start of the UTC day the list was read, and that day is its data time. The page then
+  // depends on JPL's list and the day only, not on the minute our collector read it, so it changes only when the list or the day does.
+  const day = dayStart(gen);
+  const up = list.filter((a) => a.t >= day);
+  // a 60 day window with no close approach at all is not plausible (35 on 2026-10-05); the previous page stays instead
+  if (!up.length) fail("closeapproaches", "the list has no close approach in its window");
   const pick = (cmp) => (up.length ? pub([...up].sort((a, b) => cmp(a, b) || a.t - b.t || a.name.localeCompare(b.name, "en"))[0]) : null);
   return {
-    feed: "closeapproaches", dataTime: isoZ(gen), stale, ldKm: doc.ldKm, version: String(doc.version || ""),
+    feed: "closeapproaches", dataTime: isoZ(day), readTime: isoZ(gen), stale, ldKm: doc.ldKm, version: String(doc.version || ""),
     upcoming: up.map(pub), earlier: list.length - up.length, next: pub(up[0]) || null,
     nearest: pick((a, b) => a.distLd - b.distLd), fastest: pick((a, b) => b.speedKms - a.speedKms),
     faintest: up.some((a) => a.h !== null) ? pick((a, b) => (b.h ?? -1) - (a.h ?? -1)) : null,
@@ -285,7 +299,12 @@ export function summariseStorms(doc, { now, allowStale = false, events = null } 
     }
   }
   const issued = storms.map((s) => s.issued).sort();
-  return { feed: "storms", dataTime: isoZ(gen), stale, storms, earliestAdvisory: issued[0] || null, gdacs, gdacsReason, gdacsTime: events && events.dataTime ? events.dataTime : null };
+  // the data time is the newest advisory among the active storms (its issue or update time), so the page changes only when NHC publishes
+  // something new; with no active storm it is the start of the UTC day the list was read, so an empty page changes once a day at most.
+  // Whether the list is current is still judged by when it was read (above).
+  const advisory = doc.storms.flatMap((s) => [s.issued, s.updated]).map(parseTime).filter(Number.isFinite);
+  const dataMs = storms.length && advisory.length ? Math.max(...advisory) : dayStart(gen);
+  return { feed: "storms", dataTime: isoZ(dataMs), dataKind: storms.length ? "advisory" : "day", readTime: isoZ(gen), stale, storms, earliestAdvisory: issued[0] || null, gdacs, gdacsReason };
 }
 
 // ------------------------------------------------------------------ fire detections (NASA FIRMS, VIIRS)
@@ -297,6 +316,8 @@ export const FIRE_MAP_DEG = 1;
 export const FIRE_MAP_MAX = 8000;
 // The satellite codes in the FIRMS files and the names the app gives them (docs/hazard-sources.md).
 export const FIRE_SATELLITES = { N: "Suomi NPP", N20: "NOAA-20", N21: "NOAA-21" };
+// The three files the collector reads (pipeline/config.py, FIRES_FILES), one per satellite, whatever a given run managed to load.
+export const FIRMS_SATELLITES = ["Suomi NPP", "NOAA-20", "NOAA-21"];
 const FIRE_REC = 12;
 
 // fires.bin: little-endian records of uint16 latIndex, uint16 lonIndex, uint16 detections, float32 FRP, uint16 minutes (pipeline/hazards.py)

@@ -5,7 +5,7 @@
 import { esc, table, sources, SITE, urlPath, href } from "./layout.mjs";
 import { barChartSvg, columnChartSvg, num, dateLong, timeUtc } from "./pages-satcount.mjs";
 import { worldMapSvg, regionMapSvg, uniqueDots } from "./svgmap.mjs";
-import { HAZARD_PAGES, RIGHT_NOW_FILE, MAX_AGE_HOURS, TERMS_VERIFIED, GRID_THRESHOLD, KP_G1, CAD_MAX_AU, CAD_DAYS, PLACE_MAX_KM, hazardPage } from "./hazard.mjs";
+import { HAZARD_PAGES, RIGHT_NOW_FILE, MAX_AGE_HOURS, TERMS_VERIFIED, GRID_THRESHOLD, KP_G1, CAD_MAX_AU, CAD_DAYS, PLACE_MAX_KM, FIRMS_SATELLITES, hazardPage } from "./hazard.mjs";
 import { LIVE_FILES, SATCOUNT_FILE } from "./livepages.mjs";
 import { HUB_FILE, COUNTRY_PAGES } from "./satcountry.mjs";
 
@@ -61,7 +61,9 @@ export function datasetLd({ feeds, name, description, file, dataTime, temporal, 
   };
 }
 
-const metaLine = (dataTime, source) => `Data as of ${timeEl(dataTime)}, the time given in the data itself. Data from ${esc(source)}.`;
+// how: what the data time is on that page, said plainly ("the time given in the data itself", "the newest advisory in NHC's list", ...)
+const metaLine = (dataTime, source, how = "the time given in the data itself") => `Data as of ${timeEl(dataTime)}, ${how}. Data from ${esc(source)}.`;
+const dayEl = (iso) => `<time datetime="${esc(iso)}">${esc(dateLong(iso))}</time>`;
 // The note a deploy-time copy carries when its bundled data is older than the page's live limit (site/build.mjs allows that copy only).
 const staleNote = (s, feed) => (s.stale ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, which is older than the ${MAX_AGE_HOURS[feed]} hours this page allows for live data. The live copy replaces it after the next data collection.</p>\n` : "");
 // Links to the matching guide and to the other live pages that exist in this build (built: their files), so no link points at a missing page.
@@ -86,7 +88,11 @@ export function quakesPage(s, { built = LIVE_FILES, coast = [] } = {}) {
     .concat(s.bands.map((b) => [b.to === null ? `${num(b.from)} and above` : `${num(b.from)} to under ${num(b.to)}`, num(b.count)]))
     .concat([["All in the 24 hours", num(n)]]);
   const hourRows = s.hourly.map((h) => ({ label: hhmm(h.start), value: h.count }));
-  const busiest = s.hourly.reduce((a, h) => (h.count > a.count ? h : a), s.hourly[0]);
+  const peak = Math.max(...s.hourly.map((h) => h.count));
+  // every hour that ties for the most, in time order: up to three named, then "and N more"
+  const tiedHours = s.hourly.filter((h) => h.count === peak).map((h) => `${hhmm(h.start)} UTC`);
+  const busiestText = tiedHours.length === 1 ? `The busiest hour was the one from ${esc(tiedHours[0])}, with ${num(peak)}.`
+    : `The busiest hours, with ${num(peak)} each, were the ones from ${esc(tiedHours.length > 3 ? `${tiedHours.slice(0, 3).join(", ")} and ${tiedHours.length - 3} more` : and(tiedHours))}.`;
   const topLabel = s.places[0], tied = s.places.filter((x) => topLabel && x.count === topLabel.count);
   const mapDesc = `${num(uniqueDots(s.points))} dots for ${num(s.points.length)} earthquakes in the 24 hours to ${when(s.dataTime)}.`;
   const faq = [
@@ -104,7 +110,7 @@ ${seeAlso(file, p.guide, built)}
 ${table({ caption: "Earthquakes by magnitude band", head: ["Magnitude", "Earthquakes"], numeric: [1], rows: bandRows })}
 
 <h2 id="hours">When they happened</h2>
-<p>${n ? `The busiest hour was the one from ${esc(hhmm(busiest.start))} UTC, with ${num(busiest.count)}.` : "No hour had an earthquake in the feed."} Each column is one hour, labelled with the UTC time it starts, counted back from the feed's time.</p>
+<p>${n ? busiestText : "No hour had an earthquake in the feed."} Each column is one hour, labelled with the UTC time it starts, counted back from the feed's time.</p>
 ${columnChartSvg({ id: "chart-hours", title: "Earthquakes per hour in the last 24 hours", desc: `Hourly counts from ${when(s.windowStart)} to ${when(s.dataTime)}, ${num(n)} in all. The table below gives the numbers.`, rows: hourRows })}
 ${table({ caption: "Earthquakes per hour", head: ["Hour from (UTC)", "Earthquakes"], numeric: [1], rows: s.hourly.map((h) => [esc(dayHour(h.start)), num(h.count)]) })}
 
@@ -126,7 +132,7 @@ ${table({ caption: "Most frequent USGS place labels", head: ["Place label", "Ear
 <h2 id="how">How this page is made</h2>
 <ul>
 <li>Source: the USGS summary feed of earthquakes of magnitude 2.5 and above for the past 7 days, which USGS describes as updated every minute. Our collector reads it every 10 minutes; this page counts the ${num(n)} of the feed's ${num(s.feedEvents)} events that fall in the 24 hours before the feed's own time.</li>
-<li>Counts depend on the feed's magnitude floor: smaller earthquakes are not in this feed.${s.below25 ? ` ${num(s.below25)} ${v(s.below25, "event is", "events are")} listed in it with a magnitude just under 2.5, and ${v(s.below25, "is", "are")} counted as the feed gives ${v(s.below25, "it", "them")}.` : ""}</li>
+<li>Counts depend on the feed's magnitude floor: smaller earthquakes are not in this feed.${s.below25 ? ` ${num(s.below25)} ${v(s.below25, "event is", "events are")} listed in it with a magnitude under 2.5, and ${v(s.below25, "is", "are")} counted as the feed gives ${v(s.below25, "it", "them")}.` : ""}</li>
 <li>The page is published only when the feed is less than ${MAX_AGE_HOURS.quakes} hours old; otherwise the previous copy stays.</li>
 </ul>
 
@@ -153,7 +159,7 @@ export function auroraPage(s, { built = LIVE_FILES, coast = [] } = {}) {
   const wf = (key, x) => dec(x, key === "speed" ? 0 : 1);
   const spacecraft = w && w.spacecraft.length ? and(w.spacecraft.map(esc)) : "NOAA's active spacecraft";
   const lead = `As of ${esc(when(s.dataTime))}, the latest planetary Kp index in NOAA's data is <strong>Kp ${kpText(k.latest.kp)}</strong>, for the three-hour period tagged ${esc(hhmm(k.latest.t))} UTC on ${esc(dateLong(k.latest.t))}.` +
-    (k.missingLatest ? ` The newest period in the data, tagged ${esc(hhmm(k.dataTime))} UTC, has no value yet.` : "") +
+    (k.missingLatest ? ` The newest period in the data, tagged ${esc(hhmm(k.newestTag))} UTC, has no value yet.` : "") +
     (speed ? ` The solar wind measured by ${spacecraft} was ${wf("speed", speed.now)} km/s at ${esc(timeUtc(speed.at))}${bz ? `, with Bz ${wf("bz", bz.now)} nT (${bz.now < 0 ? "pointing south" : bz.now > 0 ? "pointing north" : "zero"})` : ""}.` : "");
   const spanH = Math.round((Date.parse(k.rows[k.rows.length - 1].t) - Date.parse(k.first)) / 3600e3) + 3;
   const description = `Kp ${kpText(k.latest.kp)} for the period tagged ${hhmm(k.latest.t)} UTC on ${dateLong(k.latest.t)}; highest Kp ${kpText(k.max.kp)} in ${spanH} hours.${speed ? ` Solar wind ${wf("speed", speed.now)} km/s.` : ""} NOAA data, no forecast of ours.`;
@@ -170,7 +176,8 @@ ${table({ caption: "Solar wind and magnetic field", head: ["Measure", "Latest", 
 ${table({ caption: "Aurora forecast grid by hemisphere", head: ["Hemisphere", "Highest grid value", `Nearest the equator with a value of ${GRID_THRESHOLD} or more`], rows: [hemi(g.north, "Northern hemisphere"), hemi(g.south, "Southern hemisphere")] })}
 ${gridPoints.length ? `${worldMapSvg({ coast, points: gridPoints, id: "map", title: `Edge of NOAA's aurora grid at ${GRID_THRESHOLD} or more, ${when(g.forecastTime)}`, desc: `For each degree of longitude, the grid point nearest the equator with a value of ${GRID_THRESHOLD} or more: ${num(gridPoints.length)} points.` })}
 <p>The map marks, for each degree of longitude in each hemisphere, the grid point nearest the equator where the value is ${GRID_THRESHOLD} or more.</p>` : ""}` : `<p>Not shown: the aurora grid is ${esc(s.gridReason)}.</p>`;
-  const alerts = w ? w.alerts.slice(0, 10) : [];
+  const ALERTS_SHOWN = 10;
+  const alerts = w ? w.alerts.slice(0, ALERTS_SHOWN) : [];
   const faq = [
     ["What is the Kp index right now?", `The latest value in NOAA's data is Kp ${kpText(k.latest.kp)}, for the three-hour period tagged ${esc(hhmm(k.latest.t))} UTC on ${esc(dateLong(k.latest.t))}.`],
     [`Did Kp reach ${KP_G1} in the last ${spanH} hours?`, k.atLeastG1 ? `Yes, in ${num(k.atLeastG1)} of the ${num(k.rows.length - k.missing)} periods with a value; the highest was Kp ${kpText(k.max.kp)}, tagged ${esc(dayHour(k.max.t))} UTC. NOAA's G1 level starts at Kp ${KP_G1}.` : `No. The highest was Kp ${kpText(k.max.kp)}, tagged ${esc(dayHour(k.max.t))} UTC. NOAA's G1 level starts at Kp ${KP_G1}.`],
@@ -193,8 +200,8 @@ ${windHtml}
 ${gridHtml}
 ${alerts.length ? `
 <h2 id="alerts">NOAA geomagnetic messages</h2>
-<p>The geomagnetic alerts, warnings and watches NOAA issued in the 72 hours our collector keeps, newest first, in NOAA's own words.</p>
-${table({ caption: "NOAA geomagnetic messages", head: ["Issued (UTC)", "Kind", "NOAA's headline"], rows: alerts.map((a) => [esc(dayHour(a.issued)), esc(cap(a.kind || "message")), esc(a.headline)]) })}` : ""}
+<p>NOAA issued ${num(w.alerts.length + w.alertsReplaced)} geomagnetic ${v(w.alerts.length + w.alertsReplaced, "message", "messages")} in the 72 hours our collector keeps.${w.alertsReplaced ? ` ${num(w.alertsReplaced)} ${v(w.alertsReplaced, "was a warning", "were warnings")} that a later extension replaced, and ${v(w.alertsReplaced, "is", "are")} left out.` : ""} ${w.alerts.length > alerts.length ? `The latest ${num(alerts.length)} of the other ${num(w.alerts.length)} are` : `${w.alerts.length === 1 ? "It is" : `All ${num(w.alerts.length)} are`}`} shown, newest first, in NOAA's own words.</p>
+${table({ caption: w.alerts.length > alerts.length ? `The latest ${alerts.length} NOAA geomagnetic messages` : "NOAA geomagnetic messages", head: ["Issued (UTC)", "Kind", "NOAA's headline"], rows: alerts.map((a) => [esc(dayHour(a.issued)), esc(cap(a.kind || "message")), esc(a.headline)]) })}` : ""}
 
 <h2 id="latitude">What it means for where you are</h2>
 <p>This page does not turn Kp into a latitude. NOAA's scales page lists, for each G level, where aurora has been seen, and gives typical latitudes in geomagnetic latitude, which is measured from the magnetic pole and is not the same as a place's ordinary latitude. NOAA's aurora tutorial also says that when the Kp index is high, between 7 and 9, the aurora will be bright and the auroral oval will move to lower latitudes. Your cloud cover and how dark your sky is also decide what you can see.</p>
@@ -223,33 +230,33 @@ export function approachesPage(s, { built = LIVE_FILES } = {}) {
   const title = `Asteroid close approaches to Earth, ${date}`;
   const win = `within ${CAD_MAX_AU} au in its ${CAD_DAYS} day window`;
   const lead = n
-    ? `As of ${esc(when(s.dataTime))}, NASA JPL's close-approach list has <strong>${num(n)} close ${v(n, "approach", "approaches")}</strong> to Earth still to come, ${win}. The next is ${esc(nx.name)}, on ${esc(dateLong(nx.time))} at ${esc(timeUtc(nx.time))}, at ${ld(nx.distLd)} lunar distances (${km(nx.distKm)} km).`
-    : `As of ${esc(when(s.dataTime))}, NASA JPL's close-approach list has <strong>no close approaches</strong> to Earth still to come ${win}.`;
+    ? `As of ${esc(date)}, NASA JPL's close-approach list, as our collector read it that day, has <strong>${num(n)} close ${v(n, "approach", "approaches")}</strong> to Earth from that day on, ${win}. The first is ${esc(nx.name)}, on ${esc(dateLong(nx.time))} at ${esc(timeUtc(nx.time))}, at ${ld(nx.distLd)} lunar distances (${km(nx.distKm)} km).`
+    : `As of ${esc(date)}, NASA JPL's close-approach list, as our collector read it that day, has <strong>no close approaches</strong> to Earth from that day on ${win}.`;
   // the longest form that fits in 160 characters (object names vary in length)
   const description = (n
-    ? [`${num(n)} asteroid close approaches to Earth listed by NASA JPL on ${date}. Next: ${nx.name} at ${ld(nx.distLd)} lunar distances. Dates, distances, speeds.`,
-      `${num(n)} asteroid close approaches to Earth listed by NASA JPL on ${date}. Next: ${nx.name} at ${ld(nx.distLd)} lunar distances.`,
+    ? [`${num(n)} asteroid close approaches to Earth listed by NASA JPL on ${date}. First: ${nx.name} at ${ld(nx.distLd)} lunar distances. Dates, distances, speeds.`,
+      `${num(n)} asteroid close approaches to Earth listed by NASA JPL on ${date}. First: ${nx.name} at ${ld(nx.distLd)} lunar distances.`,
       `${num(n)} asteroid close approaches to Earth listed by NASA JPL on ${date}, with dates, distances in lunar distances and speeds.`]
     : [`NASA JPL's list on ${date} has no asteroid close approaches to Earth within ${CAD_MAX_AU} au in its next ${CAD_DAYS} days. How the list is made.`]).find((d) => d.length <= 160);
   const inside = s.upcoming.filter((a) => a.distLd < 1);
   const nearest10 = [...s.upcoming].sort((a, b) => a.distLd - b.distLd || a.time.localeCompare(b.time)).slice(0, 10);
   const faq = [
-    ["What is the next asteroid close approach?", nx ? `${esc(nx.name)}, at ${esc(when(nx.time))}, at ${ld(nx.distLd)} lunar distances (${km(nx.distKm)} km), at ${num(nx.speedKms)} km/s relative to Earth.` : "There is none in the list read at the data time."],
+    [`What is the first asteroid close approach in the list from ${date}?`, nx ? `${esc(nx.name)}, at ${esc(when(nx.time))}, at ${ld(nx.distLd)} lunar distances (${km(nx.distKm)} km), at ${num(nx.speedKms)} km/s relative to Earth.` : "There is none in the list read at the data time."],
     ["Does any pass closer than the Moon's average distance?", inside.length ? `Yes: ${num(inside.length)} of the ${num(n)}, ${and(inside.map((a) => `${esc(a.name)} (${ld(a.distLd)} lunar distances, ${esc(dateLong(a.time))})`))}. One lunar distance here is ${km(s.ldKm)} km, the Moon's average distance.` : `No. The nearest is ${s.nearest ? `${esc(s.nearest.name)} at ${ld(s.nearest.distLd)} lunar distances` : "not in the list"}.`],
     ["Which is the fastest?", s.fastest ? `${esc(s.fastest.name)}, at ${num(s.fastest.speedKms)} km/s relative to Earth, on ${esc(dateLong(s.fastest.time))}.` : "There is none in the list."],
     ["Does this page say whether an asteroid will hit Earth?", "No. It lists the passes JPL predicts, with JPL's distances and times, and makes no statement about impacts."],
   ];
   const body = `${staleNote(s, "closeapproaches")}
-${cards([[num(n), "Close approaches still to come in the list"], [s.nearest ? `${ld(s.nearest.distLd)} lunar distances` : "None", s.nearest ? `Nearest: ${esc(s.nearest.name)}` : "Nearest"], [num(s.insideMoon), "Closer than the Moon's average distance"], [s.fastest ? `${num(s.fastest.speedKms)} km/s` : "None", s.fastest ? `Fastest: ${esc(s.fastest.name)}` : "Fastest"]])}
+${cards([[num(n), `Close approaches in the list from ${esc(date)}`], [s.nearest ? `${ld(s.nearest.distLd)} lunar distances` : "None", s.nearest ? `Nearest: ${esc(s.nearest.name)}` : "Nearest"], [num(s.insideMoon), "Closer than the Moon's average distance"], [s.fastest ? `${num(s.fastest.speedKms)} km/s` : "None", s.fastest ? `Fastest: ${esc(s.fastest.name)}` : "Fastest"]])}
 ${seeAlso(file, p.guide, built)}
 
-<h2 id="list">The close approaches still to come</h2>
-${n ? table({ caption: "Close approaches still to come, soonest first", head: ["Date and time (UTC)", "Object", "Distance (lunar distances)", "Distance (km)", "Speed (km/s)", "H", "Time uncertainty (JPL)"], numeric: [2, 3, 4, 5],
-    rows: s.upcoming.map((a) => [esc(dayHour(a.time)), esc(a.name), ld(a.distLd), km(a.distKm), num(a.speedKms), a.h === null ? "Not given" : num(a.h), esc(a.sigma || "Not given")]) }) : `<p>The list our collector read at ${timeEl(s.dataTime)} has no close approach after that time. The next collection may add some.</p>`}
-${s.earlier ? `<p>${num(s.earlier)} ${v(s.earlier, "pass", "passes")} in the list ${v(s.earlier, "was", "were")} earlier than the data time and ${v(s.earlier, "is", "are")} left out.</p>` : ""}
+<h2 id="list">The close approaches in the list</h2>
+${n ? table({ caption: "Close approaches from the day the list was read, soonest first", head: ["Date and time (UTC)", "Object", "Distance (lunar distances)", "Distance (km)", "Speed (km/s)", "H", "Time uncertainty (JPL)"], numeric: [2, 3, 4, 5],
+    rows: s.upcoming.map((a) => [esc(dayHour(a.time)), esc(a.name), ld(a.distLd), km(a.distKm), num(a.speedKms), a.h === null ? "Not given" : num(a.h), esc(a.sigma || "Not given")]) }) : `<p>The list our collector read on ${dayEl(s.dataTime)} has no close approach from that day on.</p>`}
+<p>The list starts on the day our collector read it, so a pass earlier that day can already be over when you read this; each pass has its own time.${s.earlier ? ` ${num(s.earlier)} ${v(s.earlier, "pass", "passes")} in the list ${v(s.earlier, "was", "were")} before that day and ${v(s.earlier, "is", "are")} left out.` : ""}</p>
 ${nearest10.length ? `
 <h2 id="nearest">The nearest passes</h2>
-${barChartSvg({ id: "chart-nearest", title: "Nearest close approaches, in lunar distances", desc: `The ${nearest10.length} nearest passes still to come. ${nearest10[0].name} is nearest at ${ld(nearest10[0].distLd)} lunar distances.`, rows: nearest10.map((a) => ({ label: `${a.name}, ${dayShort(a.time)}`, value: a.distLd })) })}
+${barChartSvg({ id: "chart-nearest", title: "Nearest close approaches, in lunar distances", desc: `The ${nearest10.length} nearest passes in the list. ${nearest10[0].name} is nearest at ${ld(nearest10[0].distLd)} lunar distances.`, rows: nearest10.map((a) => ({ label: `${a.name}, ${dayShort(a.time)}`, value: a.distLd })) })}
 <p>${s.faintest ? `The highest absolute magnitude H in the list is ${num(s.faintest.h)}, for ${esc(s.faintest.name)}.` : ""} The last pass in the list is on ${esc(dateLong(s.last))}.</p>` : ""}
 
 <h2 id="units">What the numbers mean</h2>
@@ -262,14 +269,14 @@ ${barChartSvg({ id: "chart-nearest", title: "Nearest close approaches, in lunar 
 <h2 id="how">How this page is made</h2>
 <ul>
 <li>Source: NASA JPL's Close-Approach Data service. Our collector asks it every 6 hours for the query its documentation gives as the default: close approaches of near-Earth objects to Earth within ${CAD_MAX_AU} au in the next ${CAD_DAYS} days, sorted by date. JPL's usage policy asks that its interfaces are not embedded in a website, so we serve our own copy, and the list can be a little behind JPL's.</li>
-<li>The data time is when our collector read the list. The page is published only when that is less than ${MAX_AGE_HOURS.closeapproaches} hours old.</li>
+<li>The data time is the day our collector read the list, and the page lists the passes from that day on, so the page changes only when JPL's list or the day changes. The page is published only when the list was read less than ${MAX_AGE_HOURS.closeapproaches} hours ago.</li>
 </ul>
 
 ${faqHtml(faq)}
 ${sources([SRC.jplCad])}`;
   return {
     file, crumbTitle: p.name, title, description, h1: "Which asteroids pass close to Earth next?", kicker: "Live list",
-    lead, meta: metaLine(s.dataTime, "NASA JPL's Center for Near-Earth Object Studies"), cta: { label: "Open the live asteroid screen", query: "#asteroids" }, body,
+    lead, meta: `Data as of ${dayEl(s.dataTime)}, the day our collector read the list. Data from NASA JPL's Center for Near-Earth Object Studies.`, cta: { label: "Open the live asteroid screen", query: "#asteroids" }, body,
     jsonld: [webPage(title, description, file, s.dataTime)],
   };
 }
@@ -297,8 +304,8 @@ export function stormsPage(s, { built = LIVE_FILES, coast = [] } = {}) {
   const title = `Active hurricanes and tropical storms, ${date}`;
   const named = (x) => `${esc(x.name)} (${[x.classText, x.basin].filter(Boolean).map(esc).join(", ") || "class and basin not given"}), maximum wind ${num(x.windKt)} knots (${num(x.windKmh)} km/h)`;
   const lead = n
-    ? `As of ${esc(when(s.dataTime))}, the US National Hurricane Center lists <strong>${num(n)} active ${v(n, "storm", "storms")}</strong> in its ${NHC_BASINS} basins: ${s.storms.map(named).join("; ")}.`
-    : `As of ${esc(when(s.dataTime))}, the US National Hurricane Center lists <strong>no active storms</strong> in its ${NHC_BASINS} basins.`;
+    ? `As of ${esc(when(s.dataTime))}, the time of its newest advisory, the US National Hurricane Center lists <strong>${num(n)} active ${v(n, "storm", "storms")}</strong> in its ${NHC_BASINS} basins: ${s.storms.map(named).join("; ")}.`
+    : `As of ${esc(date)}, the day our collector read its list, the US National Hurricane Center lists <strong>no active storms</strong> in its ${NHC_BASINS} basins.`;
   const description = n
     ? `${num(n)} active ${v(n, "storm", "storms")} in NHC's basins on ${date}, strongest ${top.name} at ${num(top.windKt)} knots. Wind, pressure, position and forecast track.`
     : `No active storms in the US National Hurricane Center's Atlantic and Pacific basins on ${date}. What the page reads and where to look.`;
@@ -310,7 +317,7 @@ export function stormsPage(s, { built = LIVE_FILES, coast = [] } = {}) {
   const hurricanes = s.storms.filter((x) => x.category > 0);
   const lowest = s.storms.filter((x) => x.pressureMb !== null).sort((a, b) => a.pressureMb - b.pressureMb)[0];
   const faq = [
-    ["How many tropical storms are active now?", n ? `${num(n)} in the National Hurricane Center's ${NHC_BASINS} basins, as of ${esc(when(s.dataTime))}.` : `None in the National Hurricane Center's ${NHC_BASINS} basins, as of ${esc(when(s.dataTime))}.`],
+    ["How many tropical storms are active now?", n ? `${num(n)} in the National Hurricane Center's ${NHC_BASINS} basins, as of ${esc(when(s.dataTime))}, the time of its newest advisory.` : `None in the National Hurricane Center's ${NHC_BASINS} basins, in its list as our collector read it on ${esc(date)}.`],
     n ? ["Which storm is the strongest?", `${esc(top.name)}, with maximum wind of ${num(top.windKt)} knots (${num(top.windKmh)} km/h)${top.category ? `, Category ${top.category} on the Saffir-Simpson scale by that wind` : ""}.`] : null,
     hurricanes.length ? ["What do the hurricane categories measure?", "The Saffir-Simpson category comes from the maximum sustained wind alone. NHC says the scale does not take storm surge, rainfall flooding or tornadoes into account."] : null,
     ["Does this page cover typhoons in the western Pacific?", `No. It reads the National Hurricane Center's list, which covers the ${NHC_BASINS} basins. The live app shows storms elsewhere from GDACS.`],
@@ -326,16 +333,16 @@ ${seeAlso(file, p.guide, built)}
 <h2 id="storms">${n ? "The active storms" : "No active storms"}</h2>
 ${n ? table({ caption: "Active storms, strongest first", head: ["Storm", "Basin", "Class (NHC)", "Maximum wind", "Saffir-Simpson category", "Pressure (mb)", "Position", "Movement (direction, speed)", "Advisory", "NHC page"], numeric: [5],
     rows: s.storms.map((x) => [esc(x.name), esc(x.basin || "Not given"), esc(x.classText || "Not given"), `${num(x.windKt)} knots (${num(x.windKmh)} km/h)`, x.category ? `Category ${x.category}` : "Below hurricane strength", x.pressureMb === null ? "Not given" : num(x.pressureMb), esc(pos(x.lat, x.lon)), esc(move(x)), `${x.advisory ? `${esc(x.advisory)}, ` : ""}${esc(dayHour(x.issued))}`, x.url ? `<a href="${esc(x.url)}" rel="noopener">Graphics</a>` : "None"]) })
-    : `<p>The list our collector read at ${timeEl(s.dataTime)} had no active storm in the ${NHC_BASINS} basins.</p>`}
+    : `<p>The list our collector read on ${dayEl(s.dataTime)} had no active storm in the ${NHC_BASINS} basins.</p>`}
 ${n ? `<p>Wind is the storm's maximum wind in knots, as NHC gives it; our collector converts it to km/h. The category is the Saffir-Simpson category for that wind. The basin is where NHC places the storm now. Movement is NHC's direction in degrees and speed in knots.</p>
 ${map}
 <p>The map shows each storm's position and NHC's forecast points, joined in order.</p>
 
 <h2 id="tracks">Forecast tracks</h2>
-<p>NHC counts forecast hours from the synoptic time (00, 06, 12 or 18 UTC) at or before the advisory. NHC's own file says the official forecast track in this format is an experimental product. The cone of uncertainty is on each storm's NHC page.</p>
+<p>NHC counts forecast hours from the synoptic time (00, 06, 12 or 18 UTC) at or before the advisory. NHC's own file says the official forecast track in this format is an experimental product.</p>
 ${trackTables}` : ""}${showGdacs ? `
 <h2 id="elsewhere">Tropical cyclones GDACS lists</h2>
-<p>The Global Disaster Alert and Coordination System lists tropical cyclones worldwide, including outside NHC's basins. These are the most recent it listed when our collector read it at ${timeEl(s.gdacsTime)}. GDACS says its information is purely indicative and should not be used for any decision making without alternate sources.</p>
+<p>The Global Disaster Alert and Coordination System lists tropical cyclones worldwide, including outside NHC's basins. These are the most recent it listed when our collector last read it. GDACS says its information is purely indicative and should not be used for any decision making without alternate sources.</p>
 ${table({ caption: "Tropical cyclones listed by GDACS", head: ["Name (GDACS)", "GDACS alert level", "From (UTC)", "To (UTC)", "GDACS page"], rows: s.gdacs.map((g) => [esc(g.name), esc(g.alert || "Not given"), esc(dayHour(g.from)), esc(dayHour(g.to)), g.url ? `<a href="${esc(g.url)}" rel="noopener">Report</a>` : "None"]) })}` : ""}
 
 <h2 id="how">How this page is made</h2>
@@ -346,11 +353,11 @@ ${table({ caption: "Tropical cyclones listed by GDACS", head: ["Name (GDACS)", "
 
 ${faqHtml(faq)}
 ${sources([SRC.nhc, SRC.nhcGis, SRC.sshws, SRC.nws, ...(showGdacs ? [SRC.gdacs] : [])])}`;
-  const dataset = showGdacs ? null : datasetLd({ feeds: ["storms"], name: `Active tropical storms in NHC's basins, ${when(s.dataTime)}`, description: plain(lead), file, dataTime: s.dataTime,
+  const dataset = showGdacs ? null : datasetLd({ feeds: ["storms"], name: `Active tropical storms in NHC's basins, ${s.dataKind === "advisory" ? when(s.dataTime) : date}`, description: plain(lead), file, dataTime: s.dataTime,
     temporal: s.earliestAdvisory && s.earliestAdvisory < s.dataTime ? `${s.earliestAdvisory}/${s.dataTime}` : s.dataTime, spatial: `The ${NHC_BASINS} basins`, keywords: ["tropical storms", "hurricanes", "National Hurricane Center"], basedOn: SRC.nhcGis });
   return {
     file, crumbTitle: p.name, title, description, h1: "Which tropical storms are active now?", kicker: "Live list",
-    lead, meta: metaLine(s.dataTime, "the US National Hurricane Center"), cta: { label: "Open the live storms screen", query: "#storms" }, body,
+    lead, meta: s.dataKind === "advisory" ? metaLine(s.dataTime, "the US National Hurricane Center", "the time of the newest advisory in NHC's list") : `Data as of ${dayEl(s.dataTime)}, the day our collector read NHC's list. Data from the US National Hurricane Center.`, cta: { label: "Open the live storms screen", query: "#storms" }, body,
     jsonld: [webPage(title, description, file, s.dataTime), ...(dataset ? [dataset] : [])],
   };
 }
@@ -359,8 +366,9 @@ ${sources([SRC.nhc, SRC.nhcGis, SRC.sshws, SRC.nws, ...(showGdacs ? [SRC.gdacs] 
 export function firesPage(s, { built = LIVE_FILES, coast = [] } = {}) {
   const p = hazardPage("fires"), file = p.file, date = dateLong(s.dataTime), n = s.detections;
   const title = `Satellite fire detections in 24 hours, ${date}`;
-  const sats = s.satellites, satNames = and(sats.map((x) => esc(x.name)));
-  const lead = `As of ${esc(when(s.dataTime))} (the time of the newest detection), NASA FIRMS's 24 hour global files from ${num(sats.length)} VIIRS ${v(sats.length, "satellite", "satellites")} hold <strong>${num(n)} fire detections</strong> in ${num(s.cells)} cells of a quarter of a degree, after our collector left out ${num(s.lowLeftOut)} low-confidence detections. A detection is a place where a satellite saw heat, not a confirmed fire.`;
+  const sats = s.satellites, satNames = and(FIRMS_SATELLITES);
+  const loaded = `This set of files holds detections from ${sats.length === FIRMS_SATELLITES.length ? `all ${num(sats.length)}` : `${num(sats.length)} of the ${num(FIRMS_SATELLITES.length)}`}.`;
+  const lead = `As of ${esc(when(s.dataTime))} (the time of the newest detection), NASA FIRMS's 24 hour global files for the VIIRS instruments on ${satNames} hold <strong>${num(n)} fire detections</strong> in ${num(s.cells)} cells of a quarter of a degree, after our collector left out ${num(s.lowLeftOut)} low-confidence detections. A detection is a place where a satellite saw heat, not a confirmed fire.`;
   const description = `${num(n)} satellite fire detections in NASA FIRMS's 24 hour files to ${date}: by satellite, densest cells, a map. Detections, not confirmed fires.`;
   const top = s.dense[0];
   const placeCell = (d) => (d.place ? `${esc(d.place.name)}, ${esc(country(d.place.country))}: ${num(Math.round(d.place.km))} km` : `None within ${PLACE_MAX_KM} km`);
@@ -375,7 +383,7 @@ ${cards([[num(n), "Fire detections in the 24 hour files"], [num(s.cells), "Quart
 ${seeAlso(file, p.guide, built)}
 
 <h2 id="satellites">Detections by satellite</h2>
-<p>NASA FIRMS publishes 24 hour global files for ${satNames}. The same fire seen by two satellites, or on two passes, counts twice, so these are detections, not fires.</p>
+<p>Our collector reads NASA FIRMS's 24 hour global files for ${satNames}, one file each. ${loaded} The same fire seen by two satellites, or on two passes, counts twice, so these are detections, not fires.</p>
 ${barChartSvg({ id: "chart-satellites", title: "Fire detections by satellite", desc: `${sats.map((x) => `${x.name} ${num(x.count)}`).join(", ")}.`, rows: sats.map((x) => ({ label: x.name, value: x.count })) })}
 ${table({ caption: "Fire detections by satellite", head: ["Satellite", "Detections"], numeric: [1], rows: sats.map((x) => [esc(x.name), num(x.count)]).concat([["All", num(n)]]) })}
 
@@ -405,7 +413,7 @@ ${sources([SRC.lance, SRC.firms, SRC.geonames])}`;
     temporal: `${windowStart}/${s.dataTime}`, spatial: "Earth", keywords: ["fire detections", "NASA FIRMS", "VIIRS", "last 24 hours"], basedOn: SRC.firms });
   return {
     file, crumbTitle: p.name, title, description, h1: "How many fire detections did satellites make in the last 24 hours?", kicker: "Live count",
-    lead, meta: metaLine(s.dataTime, "NASA FIRMS (LANCE)"), cta: { label: "Open the live fires screen", query: "#fires" }, body,
+    lead, meta: metaLine(s.dataTime, "NASA FIRMS (LANCE)", "the time of the newest detection in the files"), cta: { label: "Open the live fires screen", query: "#fires" }, body,
     jsonld: [webPage(title, description, file, s.dataTime), ...(dataset ? [dataset] : [])],
   };
 }
@@ -415,7 +423,16 @@ ${sources([SRC.lance, SRC.firms, SRC.geonames])}`;
 // never linked as live. missing: { key: reason } for each page that was not built.
 export function hubRows({ satellites = null, quakes = null, space = null, approaches = null, storms = null, fires = null, missing = {} }) {
   // value: the table's text; said: the same number as a phrase for the lead
-  const row = (key, file, label, value, said, dataTime, guide, s = null) => ({ key, file, label, value, said, dataTime, guide, stale: !!(s && s.stale), reason: value === null ? missing[key] || "not available in this build" : null });
+  const row = (key, file, label, value, said, dataTime, guide, s = null) => ({ key, file, label, value, said, dataTime, guide, stale: !!(s && s.stale), reason: value === null ? missing[key] || "not available in this build" : null, timeText: dataTime ? TIME_TEXT[key](dataTime, s) : "" });
+  // what each row's time is, said beside it (the Kp row has the Kp period's tag and, when shown, the solar wind's own time)
+  const TIME_TEXT = {
+    satellites: (t) => `${dayHour(t)} (satellite data)`,
+    quakes: (t) => `${dayHour(t)} (USGS feed)`,
+    aurora: (t, x) => `Kp period tagged ${dayHour(x.kp.latest.t)}${x.wind && x.wind.fields.speed ? `; solar wind ${dayHour(x.wind.fields.speed.at)}` : ""}`,
+    asteroids: (t) => `${dateLong(t)} (the day the list was read)`,
+    storms: (t, x) => (x.dataKind === "advisory" ? `${dayHour(t)} (newest advisory)` : `${dateLong(t)} (the day the list was read)`),
+    fires: (t) => `${dayHour(t)} (newest detection)`,
+  };
   const nx = approaches && approaches.next;
   const nq = quakes && `${num(quakes.count)} ${v(quakes.count, "earthquake", "earthquakes")} in 24 hours in USGS's magnitude 2.5 and above feed`;
   const ns = storms && `${num(storms.storms.length)} active ${v(storms.storms.length, "storm", "storms")} in NHC's basins`;
@@ -423,8 +440,8 @@ export function hubRows({ satellites = null, quakes = null, space = null, approa
     row("satellites", SATCOUNT_FILE, "Satellite count", satellites ? `${num(satellites.active)} active satellites` : null, satellites ? `${num(satellites.active)} active satellites in orbit` : null, satellites ? satellites.dataTime : null, "guides/satellites/index.html"),
     row("quakes", hazardPage("quakes").file, "Earthquakes today", quakes ? `${nq}${quakes.largest ? `, largest magnitude ${num(quakes.largest.mag)}` : ""}` : null, nq, quakes ? quakes.dataTime : null, hazardPage("quakes").guide, quakes),
     row("aurora", hazardPage("aurora").file, "Aurora tonight", space ? `Kp ${num(space.kp.latest.kp)}, period tagged ${hhmm(space.kp.latest.t)} UTC` : null, space ? `a latest planetary Kp of ${num(space.kp.latest.kp)}` : null, space ? space.dataTime : null, hazardPage("aurora").guide, space),
-    row("asteroids", hazardPage("asteroids").file, "Asteroid close approaches", approaches ? (nx ? `Next: ${nx.name}, ${dateLong(nx.time)}, at ${dec(nx.distLd, 2)} lunar distances` : "No close approach still to come in the list") : null,
-      approaches ? (nx ? `the next asteroid close approach at ${dec(nx.distLd, 2)} lunar distances (${nx.name})` : "no asteroid close approach still to come in JPL's list") : null, approaches ? approaches.dataTime : null, hazardPage("asteroids").guide, approaches),
+    row("asteroids", hazardPage("asteroids").file, "Asteroid close approaches", approaches ? (nx ? `First in the list: ${nx.name}, ${dateLong(nx.time)}, at ${dec(nx.distLd, 2)} lunar distances` : "No close approach in the list") : null,
+      approaches ? (nx ? `a first asteroid close approach in JPL's list at ${dec(nx.distLd, 2)} lunar distances (${nx.name})` : "no asteroid close approach in JPL's list") : null, approaches ? approaches.dataTime : null, hazardPage("asteroids").guide, approaches),
     row("storms", hazardPage("storms").file, "Tropical storms now", ns, ns, storms ? storms.dataTime : null, hazardPage("storms").guide, storms),
     row("fires", hazardPage("fires").file, "Fire detections today", fires ? `${num(fires.detections)} fire detections in 24 hours` : null, fires ? `${num(fires.detections)} satellite fire detections in 24 hours` : null, fires ? fires.dataTime : null, hazardPage("fires").guide, fires),
   ];
@@ -446,12 +463,12 @@ export function rightNowPage(rows, { available = LIVE_FILES } = {}) {
   const snapshot = live.some((r) => r.stale);
   const body = `${snapshot ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, and some of that data is older than the limits below. The live copy replaces it after the next data collection.</p>\n` : ""}
 <h2 id="now">The live numbers</h2>
-${table({ caption: "The latest number from each live page", head: ["Live page", "Latest number", "Data time (UTC)"], rows: rows.map((r) => [cell(r), valueCell(r), r.value !== null && available.includes(r.file) ? esc(dayHour(r.dataTime)) : ""]) })}
+${table({ caption: "The latest number from each live page", head: ["Live page", "Latest number", "Data time (UTC)"], rows: rows.map((r) => [cell(r), valueCell(r), r.value !== null && available.includes(r.file) ? esc(r.timeText) : ""]) })}
 ${countries.length ? `<p>Satellites by country, from the same satellite data: ${countries.join(", ")}.</p>` : ""}
 
 <h2 id="how">How these numbers are made</h2>
 <ul>
-<li>Each number is worked out by the same code as its page, from the same feed, and the time beside it is the time given in that feed (or, where a feed gives none, when our collector read it), not the time this page was built.</li>
+<li>Each number is worked out by the same code as its page, from the same feed, and the time beside it says what it is: the time given in the feed, the time of a Kp period or of the newest advisory or detection, or for asteroid close approaches (and storms when none is active) the day our collector read the list. It is never the time this page was built.</li>
 <li>Each page has a limit on how old its data may be: earthquakes ${MAX_AGE_HOURS.quakes} hours, Kp ${MAX_AGE_HOURS.kp} hours, storms ${MAX_AGE_HOURS.storms} hours, fire detections ${MAX_AGE_HOURS.fires} hours and asteroid close approaches ${MAX_AGE_HOURS.closeapproaches} hours. A page whose data is older is not updated and is not linked from here${snapshot ? ", except in a copy built at deploy time, like this one, which shows the bundled data with its own time" : ""}.</li>
 <li>Nothing here is a forecast of ours or a warning. Each page names its source agency and links to it.</li>
 </ul>
@@ -467,7 +484,8 @@ ${sources([SRC.celestrak, SRC.usgsFeed, SRC.swpcData, SRC.jplCad, SRC.nhc, SRC.f
   return {
     file, crumbTitle: "Right now", title, description, h1: "What do the live feeds say right now?", kicker: "Live hub",
     lead, meta: newest ? `Newest data time ${timeEl(newest)}. Each row gives its own data time.` : "", cta: { label: "Open the live globe", query: "" }, body,
-    jsonld: [webPage(title, description, file, newest || "1970-01-01T00:00:00Z")], dataTime: newest,
+    // with no data there is no honest date, so the structured data gives none
+    jsonld: [newest ? webPage(title, description, file, newest) : (({ dateModified, ...rest }) => rest)(webPage(title, description, file, ""))], dataTime: newest,
   };
 }
 
