@@ -70,7 +70,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
 <p>The page ${a("methods/index.html", "How we know")} lists the checks made and the things we could not confirm.</p>
 
 <h2 id="fresh">How fresh is the data?</h2>
-<p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes depends on its source, from every minute for earthquakes to every few hours for satellite orbits.</p>
+<p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes depends on its source, from every minute for earthquakes to every two hours for satellite orbits.</p>
 
 <h2 id="limits">What does it not do?</h2>
 <ul>

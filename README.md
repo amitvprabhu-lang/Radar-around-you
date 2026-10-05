@@ -92,12 +92,16 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 
 ## Content site (search pages)
 
-`npm run site` writes `dist/site/`: the app as `index.html` (with a description, canonical link, structured data and a plain-text list of links for visitors without JavaScript), the data files next to it, `sitemap.xml`, `robots.txt` and 110 static pages:
+`npm run site` writes `dist/site/`: the app as `index.html` (with a description, canonical link, structured data and a plain-text list of links for visitors without JavaScript), the data files next to it, `sitemap.xml`, `robots.txt` and 112 static pages:
 
 - Reference pages worked out with astronomy-engine: Moon phases, equinoxes and solstices, eclipses, planet events, meteor showers (2026 and 2027).
 - Six city sky guides (Pune, New York, London, Tromso, Tokyo, Sydney): sunrise, sunset and hours of full darkness each month, which constellations never rise or never set, eclipses and meteor shower radiants for that city.
 - The 88 constellations and the 331 stars that have IAU names, from the same IAU files the app uses. Borders between constellations are found by walking the IAU boundaries.
 - Six guides (aurora, hurricanes, earthquakes, fires, asteroids, satellites) and a "How we know" page. Each factual sentence comes from `docs/hazard-sources.md` or `docs/feature-sources.md`, which record where it was read and what could not be confirmed. The G1 to G5 and Saffir-Simpson tables are printed from `src/scales.js`.
+- An About page (`/about/`) that says what the app is, what each view does, where the data comes from and what it does not do; every statement on it is traced in `docs/about-sources.md`.
+- A page on how many satellites are in orbit (`/how-many-satellites-in-orbit/`), built from a data folder after each collection (see `docs/satcount-sources.md`).
+
+An indexable build also writes llms.txt (a short summary and links in the llmstxt.org layout); a noindex build writes it no more than it writes a sitemap.
 
 While the site sits on a temporary test address, set `SITE_NOINDEX=1` for the build (and `SITE_URL` to that address). Every page then says `noindex,nofollow`, `robots.txt` disallows everything and no `sitemap.xml` is written. Remove it for the real launch. Only `1` and `0` are accepted; any other value stops the build. See `docs/hosting.md`.
 

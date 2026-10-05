@@ -69,6 +69,18 @@ check("the satellite count page loads with its heading, four charts and an answe
 check("its robots tag matches SITE_NOINDEX", satInfo.robots === want, String(satInfo.robots));
 check("sitemap-live.xml exists exactly when the site is indexable", process.env.SITE_NOINDEX === "1" ? !fs.existsSync(site + "sitemap-live.xml") : fs.existsSync(site + "sitemap-live.xml"));
 
+const about = await ctx.newPage();
+await about.goto("https://radar.test/about/", { waitUntil: "load", timeout: 60000 });
+const aboutInfo = await about.evaluate(() => ({
+  h1: (document.querySelector("h1") || {}).innerText, charset: document.characterSet, compat: document.compatMode,
+  words: (document.body.innerText.match(/\b[\w'-]+\b/g) || []).length, robots: (document.head.querySelector('meta[name="robots"]') || {}).content,
+  faq: (() => { let n = 0; for (let e = document.getElementById("faq"); e && (e = e.nextElementSibling) && e.tagName !== "H2";) if (e.tagName === "H3") n++; return n; })(),
+}));
+check("the About page loads with its heading, real text and a visible FAQ, in standards mode, as UTF-8",
+  aboutInfo.h1 === "What is Radar Around You?" && aboutInfo.words >= 700 && aboutInfo.faq === 6 && aboutInfo.compat === "CSS1Compat" && aboutInfo.charset === "UTF-8", JSON.stringify(aboutInfo));
+check("its robots tag matches SITE_NOINDEX", aboutInfo.robots === want, String(aboutInfo.robots));
+check("llms.txt exists exactly when the site is indexable", process.env.SITE_NOINDEX === "1" ? !fs.existsSync(site + "llms.txt") : fs.existsSync(site + "llms.txt"));
+
 await browser.close();
 const bad = results.filter((r) => !r).length;
 console.log(`${results.length - bad}/${results.length} site checks passed`);

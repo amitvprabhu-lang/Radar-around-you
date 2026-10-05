@@ -14,7 +14,7 @@ A free, global, real-time 3D web tool: satellites and the ISS above you, the sky
 ## Commands
 | Command | What it does | Last known result |
 | --- | --- | --- |
-| `npm test` | unit tests (`test/*.test.js`) | 299 pass (macOS, Node 24, 2026-10-05) |
+| `npm test` | unit tests (`test/*.test.js`) | 315 pass (macOS, Node 24, 2026-10-05) |
 | `npm run test:pipeline` | Python collector tests | 175 run, 3 skipped, none failed (macOS). The 3 skipped need raw downloads that are not in the repository (`raw/`, `raw2/` are ignored). The cloud note said 177; why the counts differ is NOT CONFIRMED. |
 | `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 125 pass (macOS with PHP 8.5.11 from Homebrew on 2026-10-05; 92 passed before the pages option was added, on the cloud and the Mac). On PHP 8.5 it prints a deprecation notice for `$http_response_header` in `hosting/lib.php` line 41; the server runs PHP 8.3.33 where it is silent. |
 | `npm run e2e` | snapshot build in Chromium, phone and desktop | 286 pass, no console errors (macOS, Chromium 153) |
@@ -30,4 +30,4 @@ First time on a machine: `npm ci`, then `npx playwright install chromium` (the h
 - Browser-pane and Chrome sessions are not the same login as `gh`: being signed in to GitHub in a browser does not let git push.
 
 ## Layout
-`src/` app (three.js, bundled by esbuild); `site/` content-page generator (`SITE_URL`, `SITE_NOINDEX`); `pipeline/` Python collector; `hosting/` PHP glue for Hostinger (`pull.php`, `trigger.php`); `test/`, `e2e*.mjs`, `harness.mjs` tests; `docs/` source verification records and hosting notes; `public/` data files the app loads. `site/satcount.mjs`, `site/pages-satcount.mjs` and `site/build-live.mjs` make the live satellite count page (see `docs/superpowers/specs/2026-10-05-satellite-count-page-design.md`); GitHub builds it into the data branch's pages/ folder and `hosting/pull.php --pages-dest` copies it to the site.
+`src/` app (three.js, bundled by esbuild); `site/` content-page generator (`SITE_URL`, `SITE_NOINDEX`); `pipeline/` Python collector; `hosting/` PHP glue for Hostinger (`pull.php`, `trigger.php`); `test/`, `e2e*.mjs`, `harness.mjs` tests; `docs/` source verification records and hosting notes; `public/` data files the app loads. `site/satcount.mjs`, `site/pages-satcount.mjs` and `site/build-live.mjs` make the live satellite count page (see `docs/superpowers/specs/2026-10-05-satellite-count-page-design.md`); GitHub builds it into the data branch's pages/ folder and `hosting/pull.php --pages-dest` copies it to the site. `site/pages-about.mjs` and `site/llms.mjs` make the About page and llms.txt; every statement on the About page is traced in `docs/about-sources.md`.

@@ -43,6 +43,9 @@ test("privacy, limits and the free licence are stated", () => {
   assert.match(text, /Sky Lens is new and has not yet been tested on a real phone/);
   assert.match(text, /heat signal, not a confirmed wildfire/);
   assert.match(text, /MIT licence/);
+  assert.match(text, /weather or hazard forecasts of its own/);
+  assert.match(text, /launched in the last 30 days come from SGP4/);
+  assert.match(text, /no more often than its published guidance allows/);
   assert.match(text, /Pune, New York, London, Troms\u00f8?[a-z]*, Tokyo and Sydney|Pune, New York, London, Tromso, Tokyo and Sydney/);
 });
 

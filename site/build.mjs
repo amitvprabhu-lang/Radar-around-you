@@ -24,7 +24,7 @@ export const APP_FEATURES = [
   "A first-person sky view for any place, with the Moon, planets, stars, constellations and satellite passes",
   "A Tonight verdict for your place from cloud, the Moon, the dark hours and aurora chance, with what to look for",
   "Earthquakes shown inside a cutaway of the Earth, with the waves travelling to you",
-  "Aurora, storm, fire and launch information from named agencies, each with its source and time",
+  "Aurora, storm, fire and launch information from named sources, each with its source and time",
   "A sky calendar for the next 90 days: Moon phases, eclipses, planets and meteor showers",
 ];
 const APP_DETAIL = "Everything is drawn in 3D, and every object can be tapped for details or searched for by name. Each card says where its information comes from, and the data comes from agencies and projects such as USGS, NOAA, NASA and CelesTrak.";
