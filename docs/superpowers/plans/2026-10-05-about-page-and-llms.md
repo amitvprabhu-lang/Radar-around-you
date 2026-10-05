@@ -212,7 +212,7 @@ ${table({ caption: "Sources of the data", head: ["What", "Source"], rows: [
 <p>The page ${a("methods/index.html", "How we know")} lists the checks made and the things we could not confirm.</p>
 
 <h2 id="fresh">How fresh is the data?</h2>
-<p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes depends on its source, from every minute for earthquakes to every few hours for satellite orbits.</p>
+<p>The app can run on a bundled snapshot or on live data. A collector asks each source no more often than its published guidance allows, where the source gives any, checks the answer, and keeps the last good copy if a source fails. The clock chip in the app says LIVE only when live data is in use; otherwise it says SNAPSHOT. The Data status screen shows when each feed was last updated and whether it is fresh, retrying, stale or paused. How often a feed changes depends on its source, from every minute for earthquakes to every two hours for satellite orbits.</p>
 
 <h2 id="limits">What does it not do?</h2>
 <ul>
@@ -375,7 +375,7 @@ export const APP_FEATURES = [
   "A first-person sky view for any place, with the Moon, planets, stars, constellations and satellite passes",
   "A Tonight verdict for your place from cloud, the Moon, the dark hours and aurora chance, with what to look for",
   "Earthquakes shown inside a cutaway of the Earth, with the waves travelling to you",
-  "Aurora, storm, fire and launch information from named agencies, each with its source and time",
+  "Aurora, storm, fire and launch information from named sources, each with its source and time",
   "A sky calendar for the next 90 days: Moon phases, eclipses, planets and meteor showers",
 ];
 const APP_DETAIL = "Everything is drawn in 3D, and every object can be tapped for details or searched for by name. Each card says where its information comes from, and the data comes from agencies and projects such as USGS, NOAA, NASA and CelesTrak.";
@@ -628,7 +628,7 @@ await about.goto("https://radar.test/about/", { waitUntil: "load", timeout: 6000
 const aboutInfo = await about.evaluate(() => ({
   h1: (document.querySelector("h1") || {}).innerText, charset: document.characterSet, compat: document.compatMode,
   words: (document.body.innerText.match(/\b[\w'-]+\b/g) || []).length, robots: (document.head.querySelector('meta[name="robots"]') || {}).content,
-  faq: [...document.querySelectorAll("#faq h3")].length,
+  faq: (() => { let n = 0; for (let e = document.getElementById("faq"); e && (e = e.nextElementSibling) && e.tagName !== "H2";) if (e.tagName === "H3") n++; return n; })(),
 }));
 check("the About page loads with its heading, real text and a visible FAQ, in standards mode, as UTF-8",
   aboutInfo.h1 === "What is Radar Around You?" && aboutInfo.words >= 700 && aboutInfo.faq === 6 && aboutInfo.compat === "CSS1Compat" && aboutInfo.charset === "UTF-8", JSON.stringify(aboutInfo));
@@ -664,11 +664,13 @@ Each statement on `/about/` and in the home page's description comes from the pl
 | Share cards; shareable links; a red light mode that leaves only red light on the screen | README.md, Share cards and Phone and night use (the install-to-home-screen claim is NOT made: the README says it was not tried on a real phone) |
 | Source list (USGS, GDACS, NHC, SWPC, NASA FIRMS, CelesTrak, adsb.lol, MET Norway, The Space Devs, JPL, IAU, HYG, NASA Exoplanet Archive, GeoNames, astronomy-engine) | README.md, "Live data" table and feature bullets; `site/pages-guides.mjs` source lists; addresses read from `docs/*.md` and `pipeline/config.py` (GeoNames and NASA Exoplanet Archive are named without a link because no address is recorded in the repository) |
 | Collector asks each source no more often than its published guidance allows, where the source gives any (several sources state none), keeps the last good copy; LIVE only when live data is in use, otherwise SNAPSHOT; Data status screen shows fresh, retrying, stale or paused | README.md, "Live data" (the table says where a limit is not stated) and "Sources on every card" |
-| A feed changes as often as its source does, from every minute for earthquakes to every few hours for satellite orbits | README.md, "Live data" table (USGS "Updated every minute"; CelesTrak "once every 2 hours"). No delay estimate is given on the page. |
+| A feed changes as often as its source does, from every minute for earthquakes to every two hours for satellite orbits | README.md, "Live data" table (USGS "Updated every minute"; CelesTrak "once every 2 hours"). No delay estimate is given on the page. |
 | No weather or hazard forecasts of its own; storms, fires, quakes and aurora are what the agencies publish, with their times | `site/pages-guides.mjs` methods page ("The live app is not forecast by us"); README.md, Around you ("nothing in it is predicted by this app"). The app does calculate pass times, the Tonight verdict and the calendar; the page does not claim otherwise. |
 | Fire detection is a heat signal, not a confirmed wildfire | README.md, Fires |
 | Cloud forecasts and aircraft for six cities: Pune, New York, London, Tromso, Tokyo, Sydney | README.md, Any place; `snapshot.json` cities |
 | Sky Lens is new and has not yet been tested on a real phone; it has been tested in a browser with a fake camera; its starting field of view is a guess | README.md, Sky Lens ("Tested in a real browser with a fake camera, not on a phone"; 60 degrees is a guess); `docs/handoff.md` open item on real-device checks |
+| Its starting field of view is a guess that you adjust by pinching | README.md, Sky Lens ("Pinch to zoom until the sky matches the picture: the start value of 60 degrees is a guess") |
+| Active fire detections come from three VIIRS satellites (NASA FIRMS) | README.md, Fires ("heat detections from three VIIRS satellites") |
 | You can choose to use your device's position; it is used on the device to name your place and never leaves it; the camera picture is never recorded or sent | README.md, Any place and Sky Lens |
 | Place search covers towns and cities of about 15,000 people or more | README.md, Any place (GeoNames) |
 | Free; the code is open source under the MIT licence (data and images keep their sources' terms); code on GitHub | `LICENSE`; README.md, licence section |
@@ -681,7 +683,7 @@ Each statement on `/about/` and in the home page's description comes from the pl
 
 ## What the page does not say
 - Any count of objects, tests or pages (they change). The satellite count page shows its own numbers with their data time.
-- Any refresh interval for a source, or any estimate of how long new data takes to arrive (they can drift). The page points to the app's Data status screen.
+- Any delay estimate, or a per-source table of refresh intervals (they can drift). The page gives only the range "from every minute for earthquakes to every two hours for satellite orbits", sourced from the README's "Live data" table, and points to the app's Data status screen.
 - Anything about cookies, analytics or accounts: not recorded in the repository, so not claimed.
 
 ## llms.txt
@@ -692,7 +694,7 @@ Each statement on `/about/` and in the home page's description comes from the pl
 
 In `README.md`, in the "Content site (search pages)" section: change the page counts in its first paragraph to say 112 pages if (and only if) the build prints that number (run `npm run build:hosting` and read `site: N pages written`; use the printed number), mention the new About page and the satellite count page in the list of pages, and add one sentence: `An indexable build also writes llms.txt (a short summary and links in the llmstxt.org layout); a noindex build writes it no more than it writes a sitemap.` Do not change other README text.
 
-In `docs/handoff.md` add a short paragraph under the SEO item: the About page, richer home page and `llms.txt` are built (spec `docs/superpowers/specs/2026-10-05-about-page-and-llms-design.md`, plan `docs/superpowers/plans/2026-10-05-about-page-and-llms.md`, sources `docs/about-sources.md`); the three author-worded sentences need the owner's review; at launch the owner decides which crawlers `robots.txt` names (the default `Allow: /` admits all); `llms.txt` is unproven. In `CLAUDE.md`'s Layout paragraph add: `site/pages-about.mjs and site/llms.mjs make the About page and llms.txt; every statement on the About page is traced in docs/about-sources.md.` Update the numeric test counts in `CLAUDE.md` to what the commands print now.
+In `docs/handoff.md` add a short paragraph under the SEO item: the About page, richer home page and `llms.txt` are built (spec `docs/superpowers/specs/2026-10-05-about-page-and-llms-design.md`, plan `docs/superpowers/plans/2026-10-05-about-page-and-llms.md`, sources `docs/about-sources.md`); the one author-worded sentence (the safety note) needs the owner's review; at launch the owner decides which crawlers `robots.txt` names (the default `Allow: /` admits all); `llms.txt` is unproven. In `CLAUDE.md`'s Layout paragraph add: `site/pages-about.mjs and site/llms.mjs make the About page and llms.txt; every statement on the About page is traced in docs/about-sources.md.` Update the numeric test counts in `CLAUDE.md` to what the commands print now.
 
 - [ ] **Step 4: Run the unit tests, then the site browser suite**
 
@@ -769,7 +771,7 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 
 ## Self-Review
 
-Spec coverage: About page with all sections, no hidden text, no volatile numbers, AboutPage markup without a date, no FAQPage (Task 1); richer home page noscript, `featureList`, `WebSite`, nav entry, app-sheet links (Task 2); `llms.txt` generated from page metadata, only when indexable, missing page is an error (Task 3); tests for each, `e2e:site` checks, source table with the three author-worded sentences flagged, handoff, README and instructions (Task 4). Out of scope items are untouched.
+Spec coverage: About page with all sections, no hidden text, no volatile numbers, AboutPage markup without a date, no FAQPage (Task 1); richer home page noscript, `featureList`, `WebSite`, nav entry, app-sheet links (Task 2); `llms.txt` generated from page metadata, only when indexable, missing page is an error (Task 3); tests for each, `e2e:site` checks, source table with the author-worded sentence flagged, handoff, README and instructions (Task 4). Out of scope items are untouched.
 
 Placeholder scan: every code step carries its code; the only conditional instruction (delete `page.cta` if two buttons render) says exactly what to do.
 

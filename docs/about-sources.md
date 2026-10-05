@@ -26,6 +26,8 @@ Each statement on `/about/` and in the home page's description comes from the pl
 | Fire detection is a heat signal, not a confirmed wildfire | README.md, Fires |
 | Cloud forecasts and aircraft for six cities: Pune, New York, London, Tromso, Tokyo, Sydney | README.md, Any place; `snapshot.json` cities |
 | Sky Lens is new and has not yet been tested on a real phone; it has been tested in a browser with a fake camera; its starting field of view is a guess | README.md, Sky Lens ("Tested in a real browser with a fake camera, not on a phone"; 60 degrees is a guess); `docs/handoff.md` open item on real-device checks |
+| Its starting field of view is a guess that you adjust by pinching | README.md, Sky Lens ("Pinch to zoom until the sky matches the picture: the start value of 60 degrees is a guess") |
+| Active fire detections come from three VIIRS satellites (NASA FIRMS) | README.md, Fires ("heat detections from three VIIRS satellites") |
 | You can choose to use your device's position; it is used on the device to name your place and never leaves it; the camera picture is never recorded or sent | README.md, Any place and Sky Lens |
 | Place search covers towns and cities of about 15,000 people or more | README.md, Any place (GeoNames) |
 | Free; the code is open source under the MIT licence (data and images keep their sources' terms); code on GitHub | `LICENSE`; README.md, licence section |
@@ -38,7 +40,7 @@ Each statement on `/about/` and in the home page's description comes from the pl
 
 ## What the page does not say
 - Any count of objects, tests or pages (they change). The satellite count page shows its own numbers with their data time.
-- Any refresh interval for a source, or any estimate of how long new data takes to arrive (they can drift). The page points to the app's Data status screen.
+- Any delay estimate, or a per-source table of refresh intervals (they can drift). The page gives only the range "from every minute for earthquakes to every two hours for satellite orbits", sourced from the README's "Live data" table, and points to the app's Data status screen.
 - Anything about cookies, analytics or accounts: not recorded in the repository, so not claimed.
 
 ## llms.txt
