@@ -15,6 +15,7 @@ import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CON
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
 import { GUIDE_LINKS } from "../src/guidelinks.js";
+import { homeTextHtml, homeBodyHtml, HOME_STYLE, HOME_TEXT_CSS, HOME_QUESTIONS, HOME_ID, COUNTRY_HUB_FILE } from "../site/home-text.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -267,9 +268,11 @@ test("the app page gains search metadata and nothing else changes", () => {
   assert.match(h, /"@type":"WebApplication"/);
   assert.ok(h.indexOf("<noscript>") < h.indexOf('<div id="app"'));
   assert.ok(h.includes('<script>var x=1</script>'));
-  // removing what was added gives back the original
-  const stripped = h.replace(/<title>[\s\S]*?(?=<link rel="manifest")/, "<title>Radar Around You</title>\n").replace(/<noscript>[\s\S]*?<\/noscript>\n/, "");
+  // removing what was added gives back the original (the home text's style block and section are removed by their exact text)
+  const strip = (x) => x.replace(/<title>[\s\S]*?(?=<link rel="manifest")/, "<title>Radar Around You</title>\n").replace(/<noscript>[\s\S]*?<\/noscript>\n/, "");
+  const stripped = strip(h).replace(HOME_STYLE, "").replace(homeBodyHtml(), "");
   assert.equal(stripped, APP);
+  assert.equal(strip(wrapApp(APP, { homeText: false })), APP, "without the home text, only the search tags and noscript are added");
   assert.throws(() => wrapApp("<p>no title</p>"), /no expected <title>/);
   assert.throws(() => wrapApp("<title>Radar Around You</title><p>no app</p>"), /no #app/);
   const noscriptLinks = [...h.matchAll(/<noscript>[\s\S]*?<\/noscript>/g)][0][0].match(/href="([^"]+)"/g);
@@ -461,4 +464,126 @@ test("a noindex build writes no llms.txt, like it writes no sitemap", () => {
   const dir = path.join(tmp, "out-noindex-llms");
   build({ outDir: dir, appFile, publicDir: null, noindex: true });
   assert.ok(!fs.existsSync(path.join(dir, "llms.txt")));
+});
+
+// ---- the text section on the home page (site/home-text.mjs, docs/home-sources.md)
+const homePage = () => read("index.html");
+const sectionOf = (h) => { const m = h.match(new RegExp(`<section id="${HOME_ID}"[\\s\\S]*?</section>`)); assert.ok(m, "the home page has the text section"); return m[0]; };
+const wordsOf = (html) => (textOf(html).replace(/&[a-z#0-9]+;/g, " ").match(/\b[\w'-]+\b/g) || []).length;
+
+test("the built home page carries the text section, with its questions in order and 500 to 700 words", () => {
+  const home = homePage(), section = sectionOf(home);
+  assert.equal(countOf(home, `id="${HOME_ID}"`), 1);
+  assert.deepEqual([...section.matchAll(/<h2>([^<]*)<\/h2>/g)].map((m) => m[1]), HOME_QUESTIONS);
+  assert.ok(!/<h1[ >]/.test(section), "no h1 in the section: the page keeps its own title");
+  for (const q of HOME_QUESTIONS) assert.notEqual(q, APP_TITLE);
+  for (const hub of [false, true]) {
+    const n = wordsOf(homeTextHtml({ countryHub: hub }));
+    assert.ok(n >= 500 && n <= 700, `${n} words (country hub ${hub})`);
+  }
+  // it comes after the app, after a one-screen spacer, with the read-more link after it; none of it is inside noscript
+  const at = (s) => home.indexOf(s);
+  assert.ok(at('<div id="app"') < at('<div id="top" class="home-spacer"') && at('<div id="top" class="home-spacer"') < at(`<section id="${HOME_ID}"`), "spacer then section, after the app");
+  assert.ok(at(`<section id="${HOME_ID}"`) < at(`<a class="home-more" href="#${HOME_ID}">What is this? Read more</a>`));
+  assert.ok(at(`<section id="${HOME_ID}"`) > at("</noscript>"), "the section is not inside noscript");
+  assert.ok(section.includes('<p class="home-back"><a href="#top">Back to the globe</a></p>'), "Back to the globe at the top of the section");
+  assert.ok(home.includes(homeBodyHtml()), "the built page has exactly the block the module makes");
+});
+
+test("the home text section is visible text: no hidden-text markup in the section or in the rules that style it", () => {
+  const section = sectionOf(homePage());
+  assert.ok(!/\shidden[\s>=]|\sstyle=|aria-hidden|visually-hidden|sr-only|display:\s*none|font-size:\s*0/i.test(section), "no hidden attribute, inline style or hiding class in the section");
+  const SECTION_PARTS = /home-text|home-inner|home-lead|home-back|home-links|about-home/;
+  let seen = 0;
+  for (const [, sel, decl] of HOME_TEXT_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!SECTION_PARTS.test(sel)) continue;
+    seen++;
+    assert.ok(!/display:\s*none|visibility:\s*hidden|font-size:\s*0|opacity:\s*0|clip|text-indent|(?:^|;)\s*height:\s*0|left:\s*-|color:\s*transparent/.test(decl), `${sel.trim()} hides text: ${decl}`);
+  }
+  assert.ok(seen >= 6, `found the section's rules (${seen})`);
+  // the section sits above the fixed app, opaque, in the app's own colours and fonts, at a readable measure, inside the safe area
+  assert.match(HOME_TEXT_CSS, /\.home-text \{ position: relative; z-index: 2; background: var\(--ink-2\);/);
+  assert.match(HOME_TEXT_CSS, /\.home-inner \{ max-width: 70ch;/);
+  assert.match(HOME_TEXT_CSS, /font: 400 17px\/1\.65 var\(--f-body\)/);
+  assert.match(HOME_TEXT_CSS, /safe-area-inset-right/); assert.match(HOME_TEXT_CSS, /safe-area-inset-left/); assert.match(HOME_TEXT_CSS, /var\(--safe-b\)/);
+});
+
+test("every link in the home text section resolves to a built page or an anchor on the home page", () => {
+  const home = homePage();
+  const block = home.slice(home.indexOf('<div id="top" class="home-spacer"'));
+  const ids = (h) => new Set([...h.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+  const homeIds = ids(home);
+  const links = [...block.matchAll(/ href="([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(links.length >= 10, String(links.length));
+  for (const link of links) {
+    assert.ok(!/^(https?:|\/\/|\/)/.test(link), `${link}: a relative address, so it works wherever the site is hosted`);
+    const [p, frag] = link.split("#");
+    if (p === "") { assert.ok(homeIds.has(frag), `#${frag} is on the home page`); continue; }
+    const target = p.endsWith("/") ? p + "index.html" : p;
+    assert.ok(pageFiles.includes(target), `${link} -> ${target} does not exist`);
+    if (frag) assert.ok(ids(read(target)).has(frag), `anchor #${frag} missing in ${target}`);
+  }
+  // the row of links at the end: guides, About, the count page, the methods page, and the country hub when the build has it
+  const row = sectionOf(home).match(/<nav class="home-links"[\s\S]*?<\/nav>/)[0];
+  for (const want of ["guides/", "about/", "how-many-satellites-in-orbit/", "methods/"]) assert.ok(row.includes(`href="${want}"`), want);
+  const hubBuilt = pageFiles.includes(COUNTRY_HUB_FILE);
+  assert.equal(home.includes('href="satellites-by-country/"'), hubBuilt, "the country hub is linked exactly when the build has its page");
+  const withHub = homeTextHtml({ countryHub: true });
+  assert.equal(countOf(withHub, 'href="satellites-by-country/"'), 2, "with the hub: once in the count answer and once in the row");
+  assert.ok(!homeTextHtml().includes("satellites-by-country"));
+  assert.ok(wrapApp(APP, { countryHub: true }).includes('href="satellites-by-country/"'));
+  // the count answer explains the two numbers and links the count page
+  const count = withHub.match(/<h2>How many satellites are in orbit\?<\/h2>\n<p>([\s\S]*?)<\/p>/)[1];
+  assert.equal((textOf(count).trim().match(/[.!?](?=\s+["A-Z]|$)/g) || []).length, 2, "two sentences");
+  assert.match(count, /href="how-many-satellites-in-orbit\/"/);
+  assert.match(textOf(count), /active satellites/); assert.match(textOf(count), /tracked objects/); assert.match(textOf(count), /debris included/);
+  // the safety line lives on the About page; the section links there instead of repeating it
+  assert.ok(!/warning service|local authorities/i.test(textOf(withHub)));
+  assert.ok(withHub.includes('href="about/#limits"'));
+});
+
+test("the home text keeps the house style and holds no numbers that go stale", () => {
+  for (const t of [homeBodyHtml({ countryHub: true }), HOME_TEXT_CSS]) {
+    assert.ok(!t.includes("—") && !t.includes("–"), "em or en dash");
+    assert.ok(!/\p{Extended_Pictographic}/u.test(t), "emoji");
+  }
+  const text = textOf(homeBodyHtml({ countryHub: true }));
+  // only fixed figures from the README: satellites launched in the last 30 days, the 90-day calendar, places of 15,000 people or more
+  const numbers = [...text.matchAll(/\b\d[\d,.]*\b/g)].map((m) => m[0]);
+  assert.deepEqual([...new Set(numbers)].sort(), ["15,000", "30", "90"], numbers.join(" "));
+  assert.ok(!/%|percent|\b(thousands|millions) of\b/i.test(text));
+  // the claims that must stay limited, as the README and the About page limit them
+  assert.match(text, /six cities only/, "aircraft over six cities only");
+  assert.match(text, /For the ISS, other bright objects and satellites launched in the last 30 days, pass times come from SGP4/);
+  assert.ok(!/tested on a (real )?phone|works on (every|any) phone/i.test(text), "no claim of phone testing");
+});
+
+test("the injected style exists only in the content-site build: in the home page head, after the template's styles, and nowhere else", () => {
+  const home = homePage();
+  assert.equal(countOf(home, HOME_STYLE.trimEnd()), 1);
+  const head = home.slice(0, home.indexOf("</head>"));
+  assert.ok(head.includes('<style id="home-text-css">'), "in head");
+  assert.ok(head.indexOf("<style>") < head.indexOf('<style id="home-text-css">'), "after the template's own style block, so its rules win");
+  // the overrides the design calls for
+  for (const rule of ["html { overflow-y: auto; scrollbar-width: none; }", "html::-webkit-scrollbar { display: none; }", "body { height: auto; }", "#app * { overscroll-behavior: contain; }", ".home-spacer { height: 100vh; pointer-events: none; }"]) {
+    assert.ok(HOME_TEXT_CSS.includes(rule), rule);
+  }
+  // the noscript block is unchanged and still ends with </noscript> and a newline, straight before the app
+  assert.equal(countOf(home, "<noscript>"), 1);
+  assert.ok(home.includes('</noscript>\n<div id="app"'));
+  // no other page carries any of it
+  for (const f of pageFiles) {
+    if (f === "index.html") continue;
+    const h = read(f);
+    assert.ok(!h.includes("home-text-css") && !h.includes(`id="${HOME_ID}"`) && !h.includes("home-more"), f);
+  }
+  // the app itself does not: the template and the app bundler know nothing of it, so the snapshot builds are untouched
+  const template = fs.readFileSync(path.join(root, "template.html"), "utf8");
+  for (const s of ["home-text", "home-more", "home-spacer", HOME_ID, "overflow-y: auto"]) assert.ok(!template.includes(s), `template.html has ${s}`);
+  assert.ok(template.includes("html, body { margin: 0; height: 100%; background: var(--ink); color: var(--text); font: 400 15px/1.45 var(--f-body); overflow: hidden; overscroll-behavior: none; }"), "the template's full-screen rule is as it was");
+  assert.ok(template.includes("#app { position: fixed; inset: 0;"));
+  assert.ok(!fs.readFileSync(path.join(root, "build.mjs"), "utf8").includes("home-text"));
+  // and wrapApp without the text adds nothing of it
+  const plain = wrapApp(APP, { homeText: false });
+  assert.ok(!plain.includes("home-text") && !plain.includes(HOME_ID));
 });

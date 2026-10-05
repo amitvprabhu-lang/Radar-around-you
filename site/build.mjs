@@ -10,6 +10,7 @@ import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
+import { HOME_STYLE, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -45,7 +46,10 @@ export function loadSatellites() {
 }
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
-export function wrapApp(appHtml, { noindex = SITE.noindex } = {}) {
+// homeText adds the text section below the first screen (site/home-text.mjs): its style block goes just before the noscript block, so
+// asDocument moves it into <head> after the template's own styles, and the section goes at the end of the page. countryHub says
+// whether the build has the satellites by country hub, so the section links it only when the page exists.
+export function wrapApp(appHtml, { noindex = SITE.noindex, homeText = true, countryHub = false } = {}) {
   if (!appHtml.includes("<title>Radar Around You</title>")) throw new Error("site: the app page has no expected <title>; update wrapApp");
   if (!appHtml.includes('<div id="app"')) throw new Error("site: the app page has no #app element; update wrapApp");
   const canonical = `${SITE.url}/`;
@@ -70,7 +74,8 @@ ${robotsMeta(noindex)}
   const nav = NAV.filter(([f]) => f !== "").map(([f, label]) => `<li><a href="${f}">${esc(label)}</a></li>`).join("");
   const features = APP_FEATURES.map((f) => `<li>${esc(f)}</li>`).join("");
   const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><h1>${esc(SITE.name)}</h1><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
-  return appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => noscript + '<div id="app"');
+  const wrapped = appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => (homeText ? HOME_STYLE : "") + noscript + '<div id="app"');
+  return homeText ? wrapped + homeBodyHtml({ countryHub }) : wrapped;
 }
 
 // The built app is a fragment: no doctype, charset or viewport, because the places it was first published (the artifact viewer, the
@@ -134,7 +139,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     fs.mkdirSync(path.dirname(f), { recursive: true });
     fs.writeFileSync(f, renderPage(p, { noindex }));
   }
-  fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex })));
+  const countryHub = pages.some((p) => p.file === COUNTRY_HUB_FILE);
+  fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex, countryHub })));
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
     fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => f !== SATCOUNT_FILE)));
