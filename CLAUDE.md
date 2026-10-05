@@ -1,0 +1,28 @@
+# Radar Around You: instructions for Claude Code
+
+A free, global, real-time 3D web tool: satellites and the ISS above you, the sky tonight, quakes under you, hazards around you. Personal side project, budget about 500 rupees a month, aiming to be the most helpful astronomy resource and to rank in search. Read `docs/handoff.md` first: it holds the current state, what is done, what is open and what is unverified.
+
+## How the owner wants work done (standing rules)
+- Plain, human tone. No em dashes and no emoji, in chat, code comments, docs and commit messages.
+- Never state a guess as a fact. Flag any number you are not sure of and say how to verify it. Never invent sources, URLs, function names or API syntax; if unsure, say so and check the current documentation.
+- Data must come from the source feeds, not from model memory. Every figure shown to users needs a verified source recorded in `docs/` (see `docs/star-sources.md` for the pattern: what was read, when, and what is NOT CONFIRMED).
+- Ask a clarifying question instead of assuming, and state the plan before building.
+- Code follows best practice, is unit tested and regression tested, and must not break other code. Run the whole test set before committing.
+- Push only after the browser tests pass. Commit messages end with the attribution lines the harness gives.
+- Never ask for, accept or store passwords. Tokens and secrets never go in the repository (`hosting/radar-config.php` is ignored on purpose). The GitHub token for the server must be fine-grained, one repository, Actions read and write only.
+
+## Commands
+| Command | What it does | Last known result |
+| --- | --- | --- |
+| `npm test` | unit tests (`test/*.test.js`) | 270 pass |
+| `npm run test:pipeline` | Python collector tests | 177 pass |
+| `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 92 pass |
+| `npm run e2e` | snapshot build in Chromium, phone and desktop | 286 pass |
+| `npm run e2e:live` | live-mode states in Chromium | 112 pass |
+| `npm run e2e:site` | the built content site served raw, as a web host serves it | 11 pass |
+| `npm run build:hosting` | what Hostinger runs: app plus content site into `dist/site` | |
+
+The browser suites take roughly 10 to 15 minutes each on a slow software renderer. Delete old output before a run and do not run other heavy jobs at the same time: timing checks have been flaky under load (see the handoff note).
+
+## Layout
+`src/` app (three.js, bundled by esbuild); `site/` content-page generator (`SITE_URL`, `SITE_NOINDEX`); `pipeline/` Python collector; `hosting/` PHP glue for Hostinger (`pull.php`, `trigger.php`); `test/`, `e2e*.mjs`, `harness.mjs` tests; `docs/` source verification records and hosting notes; `public/` data files the app loads.
