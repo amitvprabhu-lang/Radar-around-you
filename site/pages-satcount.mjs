@@ -56,7 +56,9 @@ export function satelliteCountPage(c, { updated }) {
   const active = num(c.active), date = dateLong(c.taken), time = timeUtc(c.taken);
   const top = c.owners[0];
   const share = pct(c.starlinkShare);
-  const description = `${active} active satellites were in orbit on ${date}, ${share} percent of them Starlink. Counted from CelesTrak's active list, with breakdowns by owner, orbit, purpose and launch year.`;
+  const description = `${active} active satellites were in orbit on ${date}, ${share} percent of them Starlink. By owner, orbit, purpose and launch year, from CelesTrak.`;
+  // OURS: titles stay at 60 characters or fewer for the longest date ("30 September 2026"); a test checks it
+  const title = `How many satellites are in orbit? As of ${date}`;
   const url = `${SITE.url}/${urlPath(SATCOUNT_FILE)}`;
 
   const ownerRows = c.owners.map((o) => ({ label: o.name, value: o.count }));
@@ -127,12 +129,12 @@ ${sources([CELESTRAK, SATCAT, STATUS])}`;
 
   return {
     file: SATCOUNT_FILE, crumbTitle: "Satellite count",
-    title: `How many satellites are in orbit? Live count, ${date}`, description,
+    title, description,
     h1: "How many satellites are in orbit?", kicker: "Live count",
     lead: `As of ${esc(date)}, ${esc(time)}, there are <strong>${active} active satellites</strong> in orbit, by CelesTrak's active list and our definition of active (below). ${num(c.starlink)} of them, ${share} percent, are Starlink.`,
     meta: `Data as of <time datetime="${esc(c.taken)}">${esc(date)}, ${esc(time)}</time>. Page updated <time datetime="${esc(upIso)}">${esc(dateLong(upIso))}, ${esc(timeUtc(upIso))}</time>. Satellite data from CelesTrak.`,
     cta: { label: "See them on the live globe", query: "" },
     body,
-    jsonld: [{ "@context": "https://schema.org", "@type": "WebPage", name: `How many satellites are in orbit? Live count, ${date}`, description, url, dateModified: upIso }],
+    jsonld: [{ "@context": "https://schema.org", "@type": "WebPage", name: title, description, url, dateModified: upIso }],
   };
 }

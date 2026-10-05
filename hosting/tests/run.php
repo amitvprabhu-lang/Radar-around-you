@@ -146,7 +146,8 @@ foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-man
     'satellites-by-country/a/b/index.html', 'satellites-by-country/UPPER/index.html', 'satellites-by-country/x.php', 'satellites-by-country//index.html',
     'satellites-by-country/../about/index.html', 'satellites-by-country/-japan/index.html', 'satellites-by-country/japan-/index.html', 'satellites-by-country/united--states/index.html',
     'satellites-by-country/japan2/index.html', 'satellites-by-country/japan/index.html.bak', "satellites-by-country/japan/index.html\n", 'satellites-by-country/japan/', 'satellites-by-country/japan/x.html',
-    'satellites-by-country/index.html.bak', 'satellites-by-country', 'satellites-by-country/', 'Satellites-by-country/japan/index.html', 'x/satellites-by-country/japan/index.html'] as $bad) {
+    'satellites-by-country/index.html.bak', 'satellites-by-country', 'satellites-by-country/', 'Satellites-by-country/japan/index.html', 'x/satellites-by-country/japan/index.html',
+    'satellites-by-country/france/index.html', 'satellites-by-country/italy/index.html', 'satellites-by-country/united-states-of-america/index.html', 'satellites-by-country/chinaa/index.html', 'satellites-by-country/japan-x/index.html'] as $bad) {
     ok(!radar_safe_page_path($bad), 'unsafe page path rejected: ' . json_encode($bad));
 }
 $PAGE = '<!doctype html><title>t</title><p>7 active satellites</p>'; $SITEMAP = '<?xml version="1.0"?><urlset/>';

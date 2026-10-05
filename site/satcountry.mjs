@@ -36,13 +36,19 @@ const zeroOrbits = () => Object.fromEntries(ORBIT_ORDER.map((k) => [k, 0]));
 
 // Every owner the feed names (including owners with no active satellite) and "Not recorded" when an active satellite has no owner, in one
 // pass. Owners come back ranked by active satellites, then by name.
-export function countOwners({ meta, details, swarm }) {
+// OURS: a name family is the run of letters at the start of a satellite's catalogue name ("STARLINK-1234" is STARLINK, "COSMOS 2545" is
+// COSMOS). It is a reading aid, not a catalogue field; names that start with anything else have no family.
+export const nameFamily = (name) => { const m = /^[A-Z]{2,}/.exec(String(name || "").toUpperCase()); return m ? m[0] : null; };
+
+// names (optional): the feed's names.txt as a string or an array of lines, in feed order. Without it, families are empty.
+export function countOwners({ meta, details, swarm, names = null }) {
+  const nameList = names === null ? null : Array.isArray(names) ? names : String(names).split("\n");
   const count = meta.count;
   checkDetails(details, count);
   const { f32, u16 } = readSwarm(swarm, count);
   const by = new Map();
   const get = (name) => {
-    if (!by.has(name)) by.set(name, { name, active: 0, starlink: 0, last30: 0, orbits: zeroOrbits(), purposes: new Map(), years: new Map(), unknownYear: 0 });
+    if (!by.has(name)) by.set(name, { name, active: 0, starlink: 0, last30: 0, orbits: zeroOrbits(), purposes: new Map(), years: new Map(), families: new Map(), recent: [], oldest: null, newest: null, unknownYear: 0 });
     return by.get(name);
   };
   for (const name of meta.owners || []) get(name);
@@ -60,13 +66,24 @@ export function countOwners({ meta, details, swarm }) {
     bump(o.purposes, meta.purposes[d.purpose] || "Unspecified");
     const date = launchDateFromDay(d.launchDay);
     if (date) bump(o.years, date.getUTCFullYear()); else o.unknownYear++;
+    const fam = nameList ? nameFamily(nameList[i]) : null;
+    if (fam) bump(o.families, fam);
+    // the oldest and newest launch among this owner's active satellites, by launch day then feed order (named only when names are given)
+    if (d.launchDay && nameList && nameList[i] && nameList[i].trim()) {
+      const it = { name: nameList[i].trim(), day: d.launchDay };
+      if (!o.oldest || d.launchDay < o.oldest.day) o.oldest = it;
+      if (!o.newest || d.launchDay > o.newest.day) o.newest = it;
+    }
   }
   // the same loop as countSatellites, so the 30 day numbers add up to its total
-  for (const i of meta.newIdx || []) if (ownerOf[i]) { ownerOf[i].last30++; world.last30++; }
+  for (const i of meta.newIdx || []) if (ownerOf[i]) { ownerOf[i].last30++; world.last30++; if (nameList && nameList[i]) ownerOf[i].recent.push(nameList[i].trim()); }
   const rows = (map) => [...map].map(([name, n]) => ({ name, count: n })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "en"));
   const owners = [...by.values()].map((o) => ({
     name: o.name, active: o.active, starlink: o.starlink, last30: o.last30, orbits: o.orbits, purposes: rows(o.purposes),
-    launchYears: [...o.years].sort((a, b) => a[0] - b[0]).map(([year, n]) => ({ year, count: n })), unknownYear: o.unknownYear,
+    launchYears: [...o.years].sort((a, b) => a[0] - b[0]).map(([year, n]) => ({ year, count: n })), unknownYear: o.unknownYear, families: rows(o.families),
+    recent: [...new Set(o.recent)].filter(Boolean).sort((a, b) => a.localeCompare(b, "en")),
+    oldest: o.oldest && { name: o.oldest.name, date: launchDateFromDay(o.oldest.day).toISOString().slice(0, 10) },
+    newest: o.newest && { name: o.newest.name, date: launchDateFromDay(o.newest.day).toISOString().slice(0, 10) },
   })).sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, "en"));
   return { taken: meta.taken, ...world, owners };
 }
@@ -79,8 +96,9 @@ export function pageGuard(counts, page, { min = MIN_ACTIVE_FOR_PAGE } = {}) {
   return null;
 }
 
-// [lat, lon] in degrees of the point below each active satellite of one owner, in feed order, for the time `at` (the data time unless
-// given). Uses the swarm model the live globe uses (decodeSwarm and swarmPositionEcef), so positions are approximate.
+// [lat, lon, orbit] for each active satellite of one owner, in feed order: the point below it in degrees, for the time `at` (the data
+// time unless given), and its orbit group (orbitClass). Uses the swarm model the live globe uses (decodeSwarm and swarmPositionEcef), so
+// positions are approximate.
 export function ownerPositions({ meta, details, swarm }, owner, at = new Date(meta.taken)) {
   const count = meta.count;
   checkDetails(details, count);
@@ -93,7 +111,7 @@ export function ownerPositions({ meta, details, swarm }, owner, at = new Date(me
     const [s] = decodeSwarm(f32.subarray(i * 2, i * 2 + 2), u16.subarray(i * 6, i * 6 + 6), meta.ref);
     const p = swarmPositionEcef(s, at);
     const g = ecefToGeodetic(p.x, p.y, p.z);
-    if (Number.isFinite(g.lat) && Number.isFinite(g.lon)) out.push([Math.max(-90, Math.min(90, g.lat)), Math.max(-180, Math.min(180, g.lon))]);
+    if (Number.isFinite(g.lat) && Number.isFinite(g.lon)) out.push([Math.max(-90, Math.min(90, g.lat)), Math.max(-180, Math.min(180, g.lon)), orbitClass(f32[i * 2 + 1], u16[i * 6] / 65535)]);
   }
   return out;
 }
@@ -110,4 +128,18 @@ export function busiestBand(points) {
   if (!points.length) return null;
   const best = latitudeBands(points).reduce((a, b) => (b.count > a.count ? b : a));
   return { ...best, share: best.count / points.length };
+}
+
+// OURS: a satellite this close to the equator is left out of the north, south and band statements, because the approximate swarm model
+// cannot say which side of the equator it is on. Geostationary satellites sit within a few tenths of a degree of it.
+export const NEAR_EQUATOR_DEG = 1;
+
+// What the map's text says about latitude, from [lat, lon, orbit] points: how many sit within NEAR_EQUATOR_DEG of the equator (and how
+// many of those are in the geostationary belt), and, for the others only, the busiest 30 degree band and how many are north.
+export function latitudeSummary(points) {
+  const near = points.filter((p) => Math.abs(p[0]) < NEAR_EQUATOR_DEG), far = points.filter((p) => Math.abs(p[0]) >= NEAR_EQUATOR_DEG);
+  return {
+    total: points.length, near: near.length, nearGeo: near.filter((p) => p[2] === "geostationary").length,
+    considered: far.length, band: busiestBand(far), north: far.filter((p) => p[0] > 0).length,
+  };
 }

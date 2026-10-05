@@ -16,9 +16,13 @@ test("the page has its own address, one h1 written as the question, and sane tit
   assert.equal(page.file, SATCOUNT_FILE);
   assert.equal((html.match(/<h1[ >]/g) || []).length, 1);
   assert.equal(page.h1, "How many satellites are in orbit?");
-  assert.equal(page.title, "How many satellites are in orbit? Live count, 5 October 2026");
-  assert.ok(page.title.length >= 15 && page.title.length <= 85);
-  assert.ok(page.description.length >= 60 && page.description.length <= 320, String(page.description.length));
+  assert.equal(page.title, "How many satellites are in orbit? As of 5 October 2026");
+  assert.ok(page.title.length >= 15 && page.title.length <= 60, String(page.title.length));
+  assert.ok(page.description.length >= 60 && page.description.length <= 160, String(page.description.length));
+  // the longest date and a five digit count still fit
+  const long = satelliteCountPage({ ...counts, active: 59999, starlinkShare: 0.999, taken: "2026-09-30T23:59:00Z" }, { updated });
+  assert.ok(long.title.length <= 60, long.title);
+  assert.ok(long.description.length <= 160, long.description);
 });
 
 test("the answer comes first, and the same number appears in the lead, description, FAQ and structured data", () => {

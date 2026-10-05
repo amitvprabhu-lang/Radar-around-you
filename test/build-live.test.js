@@ -6,7 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildLive, GENERATOR_FILES } from "../site/build-live.mjs";
+import { buildLive, GENERATOR_FILES, generatorHash } from "../site/build-live.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { HUB_FILE, COUNTRY_FILES, LIVE_FILES } from "../site/pages-country.mjs";
 import { COUNTRY_PAGES } from "../site/satcountry.mjs";
@@ -211,8 +211,13 @@ test("a failure while building never leaves a partial set: the previous pages an
   for (const [f, text] of Object.entries(before)) assert.equal(fs.readFileSync(path.join(out, f), "utf8"), text, f);
 });
 
-test("the generator hash covers the new modules and the coastlines", () => {
-  for (const f of ["satcountry.mjs", "svgmap.mjs", "pages-country.mjs", "../public/coast.bin"]) assert.ok(GENERATOR_FILES.includes(f), f);
+test("the generator hash covers the new modules, the app modules they import and the coastlines, and follows its input list", () => {
+  for (const f of ["satcountry.mjs", "svgmap.mjs", "pages-country.mjs", "../public/coast.bin", "../src/core.js", "../src/data.js", "../src/info.js"]) assert.ok(GENERATOR_FILES.includes(f), f);
+  for (const f of GENERATOR_FILES) assert.ok(fs.existsSync(fileURLToPath(new URL(f, new URL("../site/", import.meta.url)))), `${f} exists`);
+  const full = generatorHash();
+  assert.equal(full, generatorHash(GENERATOR_FILES), "the default is the full list");
+  assert.notEqual(generatorHash(GENERATOR_FILES.filter((f) => f !== "../src/core.js")), full, "leaving out the orbit model changes the hash");
+  assert.notEqual(generatorHash([...GENERATOR_FILES].reverse()), full, "the order and names are part of the hash");
 });
 
 test("the command line prints a message for a skipped page and still succeeds", () => {

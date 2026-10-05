@@ -43,6 +43,7 @@ export function loadSatellites() {
     meta: readJson("public/meta.json"),
     details: fs.readFileSync(path.join(root, "public/details.bin")),
     swarm: fs.readFileSync(path.join(root, "public/swarm.bin")),
+    names: fs.readFileSync(path.join(root, "public/names.txt"), "utf8"),
   };
 }
 

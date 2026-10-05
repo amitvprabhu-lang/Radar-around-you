@@ -22,13 +22,15 @@ import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
 const NEED = ["details.bin", "satmeta.json", "swarm.bin"];
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 
-// The files whose contents decide what the pages look like and say, relative to site/. A change to any of them rebuilds the pages on the
-// next run. The coastlines are the app's own file, read from the repository (the workflow checks the repository out).
-export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs", "../public/coast.bin"];
+// The files whose contents decide what the pages look like and say. Paths are relative to site/, so the app modules the page code
+// imports (the orbit model and the decoders in src/) and the coastlines are named with "../". A change to any of them rebuilds the
+// pages on the next run. Everything is read from the repository (the workflow checks the repository out).
+export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs",
+  "../src/core.js", "../src/data.js", "../src/info.js", "../public/coast.bin"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
-export function generatorHash() {
+export function generatorHash(files = GENERATOR_FILES) {
   const h = crypto.createHash("sha256");
-  for (const name of GENERATOR_FILES) h.update(`${name}\n`).update(fs.readFileSync(new URL(`./${name}`, import.meta.url))).update("\n");
+  for (const name of files) h.update(`${name}\n`).update(fs.readFileSync(fileURLToPath(new URL(name, import.meta.url)))).update("\n");
   return h.digest("hex");
 }
 
@@ -52,7 +54,8 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
 
   // Everything below is built in memory; nothing is written until every page is ready, so a failure keeps the previous set whole.
   const read = (name) => fs.readFileSync(path.join(dataDir, feed.files[name]));
-  const satellites = { meta: JSON.parse(read("satmeta.json").toString("utf8")), details: read("details.bin"), swarm: read("swarm.bin") };
+  // names.txt is optional: without it the country pages leave out the name families
+  const satellites = { meta: JSON.parse(read("satmeta.json").toString("utf8")), details: read("details.bin"), swarm: read("swarm.bin"), names: feed.files["names.txt"] ? read("names.txt").toString("utf8") : null };
   const counts = countSatellites(satellites);
   assertPlausible(counts, bounds);  // throws before anything is written, so the previous pages stay
   const coast = coastFromBuffer(fs.readFileSync(coastFile));

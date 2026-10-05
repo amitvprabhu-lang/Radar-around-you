@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { countSatellites, ORBIT_ORDER } from "../site/satcount.mjs";
-import { COUNTRY_PAGES, HUB_FILE, MIN_ACTIVE_FOR_PAGE, NOT_RECORDED, countOwners, ownerPositions, pageGuard, latitudeBands, busiestBand } from "../site/satcountry.mjs";
+import { COUNTRY_PAGES, HUB_FILE, MIN_ACTIVE_FOR_PAGE, NOT_RECORDED, NEAR_EQUATOR_DEG, countOwners, ownerPositions, pageGuard, latitudeBands, busiestBand, latitudeSummary, nameFamily } from "../site/satcountry.mjs";
 import { buildFixture, STANDARD, countryFixture, nAtAltitude } from "./helpers/satfixture.mjs";
 
 const fx = countryFixture();
@@ -137,4 +137,47 @@ test("files of the wrong size are refused with a message that names the file", (
   assert.throws(() => countOwners({ ...fx, details: fx.details.subarray(1) }), /details\.bin has \d+ bytes/);
   assert.throws(() => countOwners({ ...fx, swarm: fx.swarm.subarray(1) }), /swarm\.bin has \d+ bytes/);
   assert.throws(() => ownerPositions({ ...fx, meta: { ...fx.meta, ref: undefined } }, "Japan"), /no reference time/);
+});
+
+test("each position carries its orbit group, and geostationary satellites are counted as near the equator", () => {
+  const jp = ownerPositions(fx, "Japan");
+  assert.deepEqual(jp.filter((_, j) => j % 2 === 1).map((p) => p[2]), Array(26).fill("geostationary"));
+  assert.deepEqual(jp.filter((_, j) => j % 2 === 0).map((p) => p[2]), Array(26).fill("low"));
+  const s = latitudeSummary(jp);
+  assert.equal(NEAR_EQUATOR_DEG, 1);
+  assert.ok(s.near >= 26 && s.nearGeo === 26, JSON.stringify(s));
+  assert.equal(s.near + s.considered, 52);
+});
+
+test("the latitude summary leaves out points within one degree of the equator, so their side never decides anything", () => {
+  const far = [[45, 0, "low"], [50, 1, "low"], [-20, 2, "low"]];
+  const a = latitudeSummary([...far, [0.4, 3, "geostationary"], [0.3, 4, "geostationary"], [-0.2, 5, "low"]]);
+  const b = latitudeSummary([...far, [-0.4, 3, "geostationary"], [-0.3, 4, "geostationary"], [0.2, 5, "low"]]);
+  assert.deepEqual(a, b, "flipping the side of near-equator points changes nothing");
+  assert.deepEqual(a, { total: 6, near: 3, nearGeo: 2, considered: 3, band: { from: 30, to: 60, count: 2, share: 2 / 3 }, north: 2 });
+  assert.deepEqual(latitudeSummary([[0.5, 0, "geostationary"], [-0.9, 0, "geostationary"]]), { total: 2, near: 2, nearGeo: 2, considered: 0, band: null, north: 0 });
+  assert.deepEqual(latitudeSummary([[1, 0, "low"], [-1, 0, "low"]]).considered, 2, "exactly one degree counts as placed");
+  assert.deepEqual(latitudeSummary([]), { total: 0, near: 0, nearGeo: 0, considered: 0, band: null, north: 0 });
+});
+
+test("name families, recent names and the oldest and newest satellites come from names.txt, and are empty without it", () => {
+  assert.deepEqual(["STARLINK-1234", "COSMOS 2545", "COSMOS 2620 [GLONASS-K1]", "2026-205A", "", "X", "qianfan-1"].map(nameFamily), ["STARLINK", "COSMOS", "COSMOS", null, null, null, "QIANFAN"]);
+  const us = owner("United States");
+  assert.deepEqual(us.families, [{ name: "STARLINK", count: 70 }, { name: "FLOCK", count: 30 }, { name: "USA", count: 30 }]);
+  assert.deepEqual(us.recent, ["FLOCK 4Y-75", "STARLINK-1000", "STARLINK-1001"]);
+  assert.deepEqual(owner("Commonwealth of Independent States (former USSR)").recent, ["MOLNIYA 2-14"]);
+  assert.deepEqual(us.oldest, { name: "USA 372", date: "2008-05-01" });
+  assert.equal(us.newest.date, "2025-05-01");
+  const noNames = countOwners({ ...fx, names: null });
+  for (const o of noNames.owners) { assert.deepEqual(o.families, []); assert.deepEqual(o.recent, []); assert.equal(o.oldest, null); }
+  assert.deepEqual(noNames.owners.map((o) => o.active), c.owners.map((o) => o.active), "names change no count");
+  assert.deepEqual(countOwners({ ...fx, names: fx.names.join("\n") }).owners[0].families, us.families, "a string works as well as an array");
+});
+
+test("the server's allowed page list in hosting/lib.php names exactly the slugs in COUNTRY_PAGES", () => {
+  const php = fs.readFileSync(fileURLToPath(new URL("../hosting/lib.php", import.meta.url)), "utf8");
+  const m = php.match(/satellites-by-country\/\(\?:([a-z|-]+)\)\/index/);
+  assert.ok(m, "the slug list is in radar_safe_page_path");
+  assert.deepEqual(m[1].split("|").sort(), COUNTRY_PAGES.map((p) => p.slug).sort());
+  for (const p of COUNTRY_PAGES) assert.ok(php.includes(p.slug), p.slug);
 });
