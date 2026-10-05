@@ -52,6 +52,23 @@ $r = radar_sync(BASE, $dest . '/live', server(['manifest.json' => $m2] + $files2
 ok($r['ok'] && $r['removed'] === 1, 'one run later the old version is removed');
 ok(!is_file($dest . "/live/quakes/$V1/quakes.json") && !is_dir($dest . "/live/quakes/$V1"), 'its folder is gone too');
 ok(is_file($dest . "/live/kp/$V1/kp.json"), 'an unchanged feed is untouched');
+
+// ---- a redeploy of the site wipes live/ (found on the real host on 2026-10-05): the next sync restores everything by itself
+$before = files($dest . '/live');
+rrmdir($dest . '/live');
+ok(!is_dir($dest . '/live'), 'the redeploy removed the whole live folder');
+$log = []; $r = radar_sync(BASE, $dest . '/live', server(['manifest.json' => $m2] + $files2, $log));
+ok($r['ok'] && $r['fetched'] === 2, 'the next sync fetches every file the manifest names, although the remote manifest did not change');
+same(files($dest . '/live'), ["kp/$V1/kp.json", 'manifest.json', "quakes/$V2/quakes.json"], 'and the folder is back with the current data');
+same(file_get_contents($dest . '/live/manifest.json'), $m2, 'with the current manifest');
+same(files($dest . '/live'), $before, 'the restored folder is exactly what was there before the wipe');
+// wiped again while a file cannot be fetched: no manifest is written, so visitors never meet a manifest that points at missing data
+rrmdir($dest . '/live');
+$log = []; $r = radar_sync(BASE, $dest . '/live', server(['manifest.json' => $m2, "kp/$V1/kp.json" => 500, "quakes/$V2/quakes.json" => '{"a":22}'], $log));
+ok(!$r['ok'] && $r['reason'] === 'files', 'a failed file after a wipe is reported');
+ok(!is_file($dest . '/live/manifest.json'), 'and no manifest is written until every file is in place');
+$log = []; $r = radar_sync(BASE, $dest . '/live', server(['manifest.json' => $m2] + $files2, $log));
+ok($r['ok'] && $r['fetched'] === 1 && is_file($dest . '/live/manifest.json'), 'the following run fetches only what is still missing and then writes the manifest');
 rrmdir($dest);
 
 // ---- failures keep the last good copy
