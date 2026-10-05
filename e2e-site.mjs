@@ -69,6 +69,25 @@ check("the satellite count page loads with its heading, four charts and an answe
 check("its robots tag matches SITE_NOINDEX", satInfo.robots === want, String(satInfo.robots));
 check("sitemap-live.xml exists exactly when the site is indexable", process.env.SITE_NOINDEX === "1" ? !fs.existsSync(site + "sitemap-live.xml") : fs.existsSync(site + "sitemap-live.xml"));
 
+await sat.close();
+
+// the satellites by country hub and one country page, served raw: status, canonical, robots tag, a number and (on the country page) the map
+for (const [url, want1] of [["https://radar.test/satellites-by-country/", "Which countries have the most satellites?"], ["https://radar.test/satellites-by-country/japan/", "How many satellites does Japan have?"]]) {
+  const cp = await ctx.newPage();
+  const resp = await cp.goto(url, { waitUntil: "load", timeout: 60000 });
+  const info = await cp.evaluate(() => ({
+    h1: (document.querySelector("h1") || {}).innerText, charset: document.characterSet, compat: document.compatMode,
+    robots: (document.head.querySelector('meta[name="robots"]') || {}).content, canonical: (document.head.querySelector('link[rel="canonical"]') || {}).href,
+    lead: ((document.querySelector(".lead") || {}).innerText || "").slice(0, 160), map: !!document.querySelector("svg.map[role=img] title"),
+  }));
+  const path1 = new URL(url).pathname;
+  check(`${path1} answers 200 with its heading, an answer-first lead with a number, in standards mode, as UTF-8`,
+    resp && resp.status() === 200 && info.h1 === want1 && /^As of /.test(info.lead) && /\d+ active satellites/.test(info.lead) && info.compat === "CSS1Compat" && info.charset === "UTF-8", JSON.stringify({ status: resp && resp.status(), ...info }));
+  check(`${path1} has its own canonical address and a robots tag that matches SITE_NOINDEX`, (info.canonical || "").endsWith(path1) && info.robots === want, JSON.stringify(info));
+  if (path1 !== "/satellites-by-country/") check(`${path1} carries the map as an inline SVG image`, info.map, JSON.stringify(info));
+  await cp.close();
+}
+
 const about = await ctx.newPage();
 await about.goto("https://radar.test/about/", { waitUntil: "load", timeout: 60000 });
 const aboutInfo = await about.evaluate(() => ({

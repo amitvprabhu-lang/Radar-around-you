@@ -3,10 +3,12 @@
 // Nothing read says search engines or AI assistants use this file for ordinary sites; it is a small optional extra.
 import { urlPath } from "./layout.mjs";
 import { SATCOUNT_FILE } from "./pages-satcount.mjs";
+import { HUB_FILE } from "./satcountry.mjs";
 
 const clean = (s) => String(s).replace(/\s+/g, " ").trim();
-// OURS: the live satellite page's description holds today's numbers, so this file uses a fixed note instead.
+// OURS: the live pages' descriptions hold today's numbers, so this file uses fixed notes instead.
 const LIVE_NOTE = "A live count of active satellites in orbit, with breakdowns by owner, orbit, purpose and launch year.";
+const HUB_NOTE = "Every owner in the satellite catalogue ranked by active satellites, as the catalogue records owners, with more detail for a few of them.";
 const REFERENCE = ["moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html"];
 
 export function buildLlmsTxt({ pages, url, name, summary }) {
@@ -25,7 +27,7 @@ export function buildLlmsTxt({ pages, url, name, summary }) {
     entry("about/index.html"), entry("methods/index.html"), "",
     "## Sky reference", ...REFERENCE.map((f) => entry(f)), "",
     "## Guides", ...guides.map((f) => entry(f)), "",
-    "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), "",
+    "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE), "",
   ];
   return lines.join("\n");
 }

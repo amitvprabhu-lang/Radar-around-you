@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { worldMapSvg, coastPath, pointsPath, uniqueDots, MAP_UNITS_PER_DEGREE } from "../site/svgmap.mjs";
+import { worldMapSvg, coastPath, pointsPath, uniqueDots, dotWidth, MAP_UNITS_PER_DEGREE } from "../site/svgmap.mjs";
 import { decodeCoast } from "../src/data.js";
 
 const coastFile = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
@@ -35,6 +35,8 @@ test("points are placed equirectangularly, rounded to 0.1 degree, deduplicated a
   assert.equal(pointsPath([[NaN, 0], [0, Infinity]]), "");
   assert.equal(pointsPath([]), "");
   assert.equal(uniqueDots([[1, 1], [1.01, 1.01], [2, 2]]), 2, "the number of dots drawn");
+  assert.deepEqual([1, 800, 801, 4000, 4001].map(dotWidth), [18, 18, 12, 12, 8], "dots shrink as there are more of them");
+  assert.match(worldMapSvg({ coast: [], points: [[1, 1]], id: "m", title: "t", desc: "d" }), /stroke-width="18"/);
 });
 
 test("coast lines are drawn as one path, and a line that crosses the antimeridian is broken there", () => {

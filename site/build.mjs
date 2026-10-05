@@ -1,4 +1,4 @@
-// Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the one live page) and robots.txt,
+// Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the live pages) and robots.txt,
 // and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
@@ -8,7 +8,8 @@ import { allChecks } from "./verify.mjs";
 import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
-import { SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
+import { sitemapLive } from "./pages-satcount.mjs";
+import { countryPageSet, coastFromBuffer, LIVE_FILES } from "./pages-country.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
@@ -34,8 +35,9 @@ export function loadCities() {
   return readJson("snapshot.json").cities.map(({ id, name, country, lat, lon, tz }) => ({ id, name, country, lat, lon, tz }));
 }
 
-// The satellite snapshot bundled with the repository (public/), used for the deploy-time copy of the satellite count page so the address
-// never returns 404 after a redeploy. The live copy replaces it within minutes, built on GitHub from the collector's data.
+// The satellite snapshot bundled with the repository (public/), used for the deploy-time copy of the live pages (the satellite count page
+// and the satellites by country pages) so their addresses never return 404 after a redeploy. The live copies replace them within
+// minutes, built on GitHub from the collector's data.
 export function loadSatellites() {
   return {
     meta: readJson("public/meta.json"),
@@ -43,6 +45,9 @@ export function loadSatellites() {
     swarm: fs.readFileSync(path.join(root, "public/swarm.bin")),
   };
 }
+
+// The app's own coastlines, for the maps on the country pages.
+export const loadCoast = () => coastFromBuffer(fs.readFileSync(path.join(root, "public/coast.bin")));
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
 export function wrapApp(appHtml, { noindex = SITE.noindex } = {}) {
@@ -114,7 +119,7 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
-export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites() } = {}) {
+export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast() } = {}) {
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -124,7 +129,9 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   const details = fs.existsSync(path.join(root, "public/stardetails.json")) ? readJson("public/stardetails.json") : null;
   const satcount = countSatellites(satellites);
   assertPlausible(satcount);
-  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now });
+  const country = countryPageSet(satellites, { coast, updated: now });
+  for (const sk of country.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
+  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages });
   const seen = new Set();
   for (const p of pages) { if (seen.has(p.file)) throw new Error(`site: duplicate page ${p.file}`); seen.add(p.file); }
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -137,12 +144,13 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex })));
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
-    fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => f !== SATCOUNT_FILE)));
-    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString()));
+    // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out
+    fs.writeFileSync(path.join(outDir, "sitemap.xml"), sitemap(files.filter((f) => !LIVE_FILES.includes(f))));
+    fs.writeFileSync(path.join(outDir, "sitemap-live.xml"), sitemapLive(now.toISOString(), LIVE_FILES.filter((f) => files.includes(f))));
     fs.writeFileSync(path.join(outDir, "llms.txt"), buildLlmsTxt({ pages, url: SITE.url, name: SITE.name, summary: APP_DESCRIPTION }));
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
-  return { outDir, pages: files.length, checks, noindex };
+  return { outDir, pages: files.length, checks, noindex, skipped: country.skipped };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

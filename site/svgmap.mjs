@@ -51,10 +51,16 @@ export function pointsPath(points) {
 
 export const uniqueDots = (points) => (pointsPath(points).match(/M/g) || []).length;
 
+// OURS: dots get smaller as there are more of them, so a fleet of thousands does not become one solid block. Widths are in map units
+// (a tenth of a degree); at the 720 pixel size 18 units is about 3.6 pixels.
+export const dotWidth = (n) => (n > 4000 ? 8 : n > 800 ? 12 : 18);
+
+// The points are drawn first and the coastlines on top, so the land stays readable under a dense fleet.
 export function worldMapSvg({ coast, points, id, title, desc }) {
+  const d = pointsPath(points);
   return `<svg xmlns="http://www.w3.org/2000/svg" class="map" role="img" aria-labelledby="${esc(id)}-t ${esc(id)}-d" viewBox="0 0 ${W} ${H}" width="720" height="360" style="max-width:100%;height:auto">` +
     `<title id="${esc(id)}-t">${esc(title)}</title><desc id="${esc(id)}-d">${esc(desc)}</desc>` +
     `<rect width="${W}" height="${H}" fill="var(--ink2)"></rect>` +
-    `<path d="${coastPath(coast)}" transform="scale(${COAST_STEP})" fill="none" stroke="var(--dim)" stroke-width="0.8" stroke-linejoin="round"></path>` +
-    `<path d="${pointsPath(points)}" fill="none" stroke="var(--ion)" stroke-width="13" stroke-linecap="round"></path></svg>`;
+    `<path d="${d}" fill="none" stroke="var(--ion)" stroke-opacity="0.85" stroke-width="${dotWidth((d.match(/M/g) || []).length)}" stroke-linecap="round"></path>` +
+    `<path d="${coastPath(coast)}" transform="scale(${COAST_STEP})" fill="none" stroke="var(--muted)" stroke-width="0.6" stroke-linejoin="round"></path></svg>`;
 }

@@ -6,9 +6,13 @@ import { ORBIT_ORDER, ORBIT_LABELS, ORBIT_CHART_LABELS, ORBIT_BOUNDS } from "./s
 import { COUNTRY_PAGES, HUB_FILE, NOT_RECORDED, MIN_ACTIVE_FOR_PAGE, countOwners, ownerPositions, pageGuard, busiestBand } from "./satcountry.mjs";
 import { SATCOUNT_FILE, LIVE_FILES, sitemapLive, barChartSvg, columnChartSvg, num, pct, dateLong, timeUtc, CELESTRAK, SATCAT, STATUS } from "./pages-satcount.mjs";
 import { worldMapSvg, uniqueDots } from "./svgmap.mjs";
+import { decodeCoast } from "../src/data.js";
 
 export { HUB_FILE, LIVE_FILES, sitemapLive };
 export const COUNTRY_FILES = COUNTRY_PAGES.map((p) => p.file);
+
+// public/coast.bin (the app's coastlines) read with fs, as polylines of [lat, lon]. decodeCoast wants an ArrayBuffer, not a Node Buffer.
+export const coastFromBuffer = (buf) => decodeCoast(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
 
 const ordinal = (n) => { const t = n % 100; if (t >= 11 && t <= 13) return `${n}th`; return `${n}${["th", "st", "nd", "rd"][n % 10 > 3 ? 0 : n % 10]}`; };
 const share = (part, whole) => (whole ? part / whole : 0);
@@ -17,9 +21,10 @@ const pctText = (x) => (x > 0 && x < 0.0005 ? "under 0.1" : pct(x));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 // lower case orbit names for sentences, built from the same groups as ORBIT_LABELS
 const ORBIT_PROSE = { low: "low Earth orbit", medium: "medium Earth orbit", geostationary: "the geostationary belt", highElliptical: "high elliptical orbits", beyond: "orbits beyond the geostationary belt" };
-const bandLabel = (b) => {
-  const part = (v) => (v === 0 ? "the equator" : `${Math.abs(v)} degrees ${v < 0 ? "south" : "north"}`);
-  return b.from < 0 && b.to <= 0 ? `${part(b.to)} to ${part(b.from)}` : `${part(b.from)} to ${part(b.to)}`;
+// "30 to 60 degrees north", "the equator to 30 degrees south"
+export const bandLabel = (b) => {
+  const south = b.to <= 0, near = south ? -b.to : b.from, far = south ? -b.from : b.to, side = south ? "south" : "north";
+  return near === 0 ? `the equator to ${far} degrees ${side}` : `${near} to ${far} degrees ${side}`;
 };
 const ranked = (counts) => counts.owners.filter((o) => o.active > 0 && o.name !== NOT_RECORDED);
 const yearRowsOf = (launchYears) => {

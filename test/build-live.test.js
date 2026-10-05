@@ -6,9 +6,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildLive } from "../site/build-live.mjs";
+import { buildLive, GENERATOR_FILES } from "../site/build-live.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
-import { buildFixture, STANDARD } from "./helpers/satfixture.mjs";
+import { HUB_FILE, COUNTRY_FILES, LIVE_FILES } from "../site/pages-country.mjs";
+import { COUNTRY_PAGES } from "../site/satcountry.mjs";
+import { SITE, urlPath } from "../site/layout.mjs";
+import { buildFixture, STANDARD, countryFixture } from "./helpers/satfixture.mjs";
 
 const bounds = { min: 5, max: 100 };  // the fixture is tiny; the real bounds are tested in satcount.test.js
 const tmps = [];
@@ -25,15 +28,19 @@ function dataDir(version, fx = buildFixture(STANDARD, { newIdx: [1] })) {
   return dir;
 }
 const sha = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+// The standard fixture's owners are Alpha, Beta and Gamma, so every country page is skipped and only the count page and the hub are built.
+const ALL = COUNTRY_PAGES.map((p) => p.slug);
+const slugs = (r) => (r.skipped ? { ...r, skipped: r.skipped.map((x) => x.slug) } : r);
+const built = (version, skipped = ALL) => ({ changed: true, version, skipped });
 
 test("the first build writes the page, the live sitemap and an index whose hashes match the files", () => {
   const out = mk();
   const r = buildLive({ dataDir: dataDir("V1"), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });
-  assert.deepEqual(r, { changed: true, version: "V1" });
+  assert.deepEqual(slugs(r), built("V1"));
   const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
   assert.equal(index.schema, 1);
   assert.equal(index.satellitesVersion, "V1");
-  assert.deepEqual(Object.keys(index.files).sort(), [SATCOUNT_FILE, "sitemap-live.xml"]);
+  assert.deepEqual(Object.keys(index.files).sort(), [SATCOUNT_FILE, HUB_FILE, "sitemap-live.xml"].sort());
   for (const [p, info] of Object.entries(index.files)) {
     assert.equal(info.sha256, sha(path.join(out, p)), p);
     assert.equal(info.size, fs.statSync(path.join(out, p)).size, p);
@@ -68,7 +75,7 @@ test("the same version and the same generator skips; a different generator rebui
   const same = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds, generator: "G1" });
   assert.deepEqual(same, { changed: false, version: "V1" });
   const other = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T11:00:00Z"), noindex: false, bounds, generator: "G2" });
-  assert.deepEqual(other, { changed: true, version: "V1" });
+  assert.deepEqual(slugs(other), built("V1"));
   const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
   assert.equal(index.generator, "G2");
   assert.equal(index.files[SATCOUNT_FILE].changed, "2026-10-05T11:00:00.000Z");
@@ -81,7 +88,7 @@ test("an old index without a generator rebuilds", () => {
   delete old.generator;
   fs.writeFileSync(path.join(out, "index.json"), JSON.stringify(old));
   const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds, generator: "G1" });
-  assert.deepEqual(r, { changed: true, version: "V1" });
+  assert.deepEqual(slugs(r), built("V1"));
   assert.equal(JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8")).generator, "G1");
 });
 
@@ -89,7 +96,7 @@ test("a new satellites version rebuilds and moves the last modified time", () =>
   const out = mk();
   buildLive({ dataDir: dataDir("V1"), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });
   const r = buildLive({ dataDir: dataDir("V2"), outDir: out, now: new Date("2026-10-05T11:00:00Z"), noindex: false, bounds });
-  assert.deepEqual(r, { changed: true, version: "V2" });
+  assert.deepEqual(slugs(r), built("V2"));
   const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
   assert.equal(index.satellitesVersion, "V2");
   assert.equal(index.files[SATCOUNT_FILE].changed, "2026-10-05T11:00:00.000Z");
@@ -102,7 +109,7 @@ test("a corrupt or non-object index.json counts as no previous build and is over
     buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });
     fs.writeFileSync(path.join(out, "index.json"), bad);
     const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T10:00:00Z"), noindex: false, bounds });
-    assert.deepEqual(r, { changed: true, version: "V1" }, bad);
+    assert.deepEqual(slugs(r), built("V1"), bad);
     const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
     assert.equal(index.satellitesVersion, "V1");
     for (const [p, info] of Object.entries(index.files)) assert.equal(info.sha256, sha(path.join(out, p)), p);
@@ -119,7 +126,8 @@ test("noindex builds the page with a noindex tag, writes no sitemap and removes 
   assert.ok(!fs.existsSync(path.join(out, "sitemap-live.xml")));
   assert.ok(fs.readFileSync(path.join(out, SATCOUNT_FILE), "utf8").includes('<meta name="robots" content="noindex,nofollow">'));
   const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
-  assert.deepEqual(Object.keys(index.files), [SATCOUNT_FILE]);
+  assert.deepEqual(Object.keys(index.files), [SATCOUNT_FILE, HUB_FILE]);
+  assert.ok(fs.readFileSync(path.join(out, HUB_FILE), "utf8").includes('<meta name="robots" content="noindex,nofollow">'));
 });
 
 test("implausible numbers write nothing and keep the previous page", () => {
@@ -145,7 +153,13 @@ test("the real bundled snapshot passes the real plausibility bounds", () => {
   const out = mk();
   const r = buildLive({ dataDir: dataDir("VREAL", fx), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false });
   assert.equal(r.changed, true);
+  assert.deepEqual(r.skipped, [], "every country page passes the guard on the real data");
   assert.ok(/<strong>[\d,]+ active satellites<\/strong>/.test(fs.readFileSync(path.join(out, SATCOUNT_FILE), "utf8")));
+  for (const f of LIVE_FILES) {
+    const h = fs.readFileSync(path.join(out, f), "utf8");
+    assert.ok(Buffer.byteLength(h) < 400 * 1024, `${f}: ${Buffer.byteLength(h)}`);
+    assert.ok(/<strong>[\d,]+ active satellites<\/strong>/.test(h), f);
+  }
 });
 
 test("the command line needs SITE_URL and says so", () => {
@@ -154,4 +168,63 @@ test("the command line needs SITE_URL and says so", () => {
   const r = spawnSync(process.execPath, [script, "--data", mk(), "--out", mk()], { env, encoding: "utf8" });
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /SITE_URL is required/);
+});
+
+test("with owners that have pages, the hub and all five country pages are written, listed in the index and in the live sitemap", () => {
+  const out = mk();
+  const r = buildLive({ dataDir: dataDir("V1", countryFixture()), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 } });
+  assert.deepEqual(slugs(r), built("V1", []));
+  const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+  assert.deepEqual(Object.keys(index.files).sort(), [...LIVE_FILES, "sitemap-live.xml"].sort());
+  for (const [p, info] of Object.entries(index.files)) assert.equal(info.sha256, sha(path.join(out, p)), p);
+  const xml = fs.readFileSync(path.join(out, "sitemap-live.xml"), "utf8");
+  assert.deepEqual([...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]), LIVE_FILES.map((f) => `${SITE.url}/${urlPath(f)}`));
+  assert.equal((xml.match(/<lastmod>2026-10-05T09:00:00.000Z<\/lastmod>/g) || []).length, 7);
+  assert.ok(fs.readFileSync(path.join(out, COUNTRY_FILES[0]), "utf8").includes("130 active satellites"));
+  // every link from one live page to another lands on a file that was written
+  for (const f of LIVE_FILES) {
+    for (const m of fs.readFileSync(path.join(out, f), "utf8").matchAll(/ href="([^"#]+)"/g)) {
+      if (/^https?:/.test(m[1])) continue;
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(f), m[1])).replace(/\/$/, "/index.html");
+      if (LIVE_FILES.some((x) => x.split("/")[0] === target.split("/")[0])) assert.ok(fs.existsSync(path.join(out, target)), `${f}: ${m[1]}`);
+    }
+  }
+});
+
+test("an owner that trips the guard is skipped and named, the rest are written, and nothing links to the skipped page", () => {
+  const out = mk();
+  const r = buildLive({ dataDir: dataDir("V1", countryFixture()), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 }, min: 53 });
+  assert.deepEqual(r.skipped, [{ slug: "japan", file: "satellites-by-country/japan/index.html", reason: "Japan has 52 active satellites, under 53" }]);
+  const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+  assert.ok(!("satellites-by-country/japan/index.html" in index.files));
+  assert.equal(Object.keys(index.files).length, 7);
+  assert.ok(!fs.existsSync(path.join(out, "satellites-by-country/japan/index.html")));
+  assert.ok(!fs.readFileSync(path.join(out, "sitemap-live.xml"), "utf8").includes("/japan/"));
+  assert.ok(!fs.readFileSync(path.join(out, HUB_FILE), "utf8").includes('japan/"'));
+});
+
+test("a failure while building never leaves a partial set: the previous pages and index stay as they were", () => {
+  const out = mk();
+  buildLive({ dataDir: dataDir("V1", countryFixture()), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 } });
+  const before = Object.fromEntries([...LIVE_FILES, "index.json", "sitemap-live.xml"].map((f) => [f, fs.readFileSync(path.join(out, f), "utf8")]));
+  assert.throws(() => buildLive({ dataDir: dataDir("V2", countryFixture()), outDir: out, now: new Date("2026-10-05T11:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 }, coastFile: path.join(mk(), "missing.bin") }), /ENOENT/);
+  for (const [f, text] of Object.entries(before)) assert.equal(fs.readFileSync(path.join(out, f), "utf8"), text, f);
+});
+
+test("the generator hash covers the new modules and the coastlines", () => {
+  for (const f of ["satcountry.mjs", "svgmap.mjs", "pages-country.mjs", "../public/coast.bin"]) assert.ok(GENERATOR_FILES.includes(f), f);
+});
+
+test("the command line prints a message for a skipped page and still succeeds", () => {
+  const root = fileURLToPath(new URL("../public/", import.meta.url));
+  const meta = JSON.parse(fs.readFileSync(root + "meta.json", "utf8"));
+  meta.owners = meta.owners.map((o) => (o === "Japan" ? "Japan (renamed in this test)" : o));
+  const fx = { meta, details: fs.readFileSync(root + "details.bin"), swarm: fs.readFileSync(root + "swarm.bin") };
+  const script = fileURLToPath(new URL("../site/build-live.mjs", import.meta.url));
+  const out = mk();
+  const r = spawnSync(process.execPath, [script, "--data", dataDir("VCLI", fx), "--out", out], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" }, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /skipped satellites-by-country\/japan\/index\.html: Japan is not in the feed/);
+  assert.match(r.stdout, /built the live pages for satellites version VCLI/);
+  assert.ok(fs.existsSync(path.join(out, HUB_FILE)) && !fs.existsSync(path.join(out, "satellites-by-country/japan/index.html")));
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { hubPage, countryPage, countryPageSet, COUNTRY_FILES, HUB_FILE, LIVE_FILES, sitemapLive } from "../site/pages-country.mjs";
+import { hubPage, countryPage, countryPageSet, bandLabel, COUNTRY_FILES, HUB_FILE, LIVE_FILES, sitemapLive } from "../site/pages-country.mjs";
 import { COUNTRY_PAGES, countOwners, ownerPositions, busiestBand } from "../site/satcountry.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { ORBIT_ORDER } from "../site/satcount.mjs";
@@ -79,6 +79,11 @@ test("the numbers on each country page match countOwners", () => {
   assert.ok(us.includes("the largest fleet of the 6 owners with at least one active satellite"), "rank, with the unrecorded owner left out");
   assert.ok(!textOf(bySlug("china")).includes("Starlink satellites,"), "no Starlink card when there are none");
   assert.ok(textOf(bySlug("china")).includes("2nd of 6"));
+});
+
+test("latitude bands are named plainly", () => {
+  assert.deepEqual([-90, -60, -30, 0, 30, 60].map((from) => bandLabel({ from, to: from + 30 })), [
+    "60 to 90 degrees south", "30 to 60 degrees south", "the equator to 30 degrees south", "the equator to 30 degrees north", "30 to 60 degrees north", "60 to 90 degrees north"]);
 });
 
 test("the busiest band and orbit sentences are computed, not typed", () => {

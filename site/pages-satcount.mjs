@@ -81,7 +81,7 @@ export function satelliteCountPage(c, { updated }) {
 ${table({ caption: "Satellites in the feed by recorded status", head: ["Status", "Satellites"], numeric: [1], rows: c.statusRows.map((r) => [esc(r.name), num(r.count)]) })}
 
 <h2 id="who">Which countries and operators have the most satellites?</h2>
-<p>${top ? `${esc(top.name)} has the most, with ${num(top.count)} active satellites. ` : ""}Owners are shown as the catalogue records them, which mixes countries and organisations.</p>
+<p>${top ? `${esc(top.name)} has the most, with ${num(top.count)} active satellites. ` : ""}Owners are shown as the catalogue records them, which mixes countries and organisations. Every owner is ranked on <a href="${href(SATCOUNT_FILE, HUB_FILE)}">satellites by country</a>.</p>
 ${barChartSvg({ id: "chart-owners", title: "Active satellites by owner", desc: `The ${c.owners.length} owners with the most active satellites. ${top ? `${top.name} is highest with ${num(top.count)}.` : ""}`, rows: ownerRows })}
 ${table({ caption: "Active satellites by owner", head: ["Owner", "Active satellites"], numeric: [1], rows: c.owners.map((o) => [esc(o.name), num(o.count)]).concat(c.ownersOther ? [["All other owners", num(c.ownersOther)]] : []) })}
 

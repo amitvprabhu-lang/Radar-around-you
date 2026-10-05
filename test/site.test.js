@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, APP_FEATURES, APP_TITLE, APP_DESCRIPTION } from "../site/build.mjs";
 import { buildPages } from "../site/pages.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
+import { HUB_FILE, COUNTRY_FILES, LIVE_FILES } from "../site/pages-country.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
@@ -37,8 +38,10 @@ const read = (f) => fs.readFileSync(path.join(outDir, f), "utf8");
 const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ");
 
 test("the site has the expected pages and no duplicates", () => {
-  // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1);
+  // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about,
+  // the satellites by country hub and its 5 country pages
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5);
+  assert.deepEqual(result.skipped, [], "every country page passes the guard on the bundled snapshot");
   assert.equal(pageFiles.length, result.pages);
   assert.equal(cities.length, 6);
 });
@@ -94,16 +97,18 @@ test("href() builds relative links between page files", () => {
   assert.equal(href("index.html", "index.html"), "./");
 });
 
-test("the sitemap lists every page once except the live page, which has its own sitemap with an accurate last modified time", () => {
+test("the sitemap lists every page once except the live pages, which have their own sitemap with an accurate last modified time", () => {
   const xml = fs.readFileSync(path.join(outDir, "sitemap.xml"), "utf8");
   const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  const listed = pageFiles.filter((f) => f !== SATCOUNT_FILE);
+  const listed = pageFiles.filter((f) => !LIVE_FILES.includes(f));
   assert.equal(locs.length, listed.length);
   assert.equal(new Set(locs).size, locs.length);
   for (const f of listed) assert.ok(locs.includes(`${SITE.url}/${urlPath(f)}`), f);
   assert.ok(!locs.some((l) => l.includes("how-many-satellites")), "the live page is not in the main sitemap");
+  assert.ok(!locs.some((l) => l.includes("satellites-by-country")), "nor are the country pages");
   const live = fs.readFileSync(path.join(outDir, "sitemap-live.xml"), "utf8");
   assert.ok(live.includes(`<loc>${SITE.url}/how-many-satellites-in-orbit/</loc>`));
+  assert.deepEqual([...live.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]), LIVE_FILES.map((f) => `${SITE.url}/${urlPath(f)}`), "all seven live pages");
   assert.match(live, /<lastmod>\d{4}-\d\d-\d\dT[\d:.]+Z<\/lastmod>/);
   const robotsTxt = fs.readFileSync(path.join(outDir, "robots.txt"), "utf8");
   assert.match(robotsTxt, new RegExp(`Sitemap: ${SITE.url}/sitemap.xml`));
@@ -461,4 +466,18 @@ test("a noindex build writes no llms.txt, like it writes no sitemap", () => {
   const dir = path.join(tmp, "out-noindex-llms");
   build({ outDir: dir, appFile, publicDir: null, noindex: true });
   assert.ok(!fs.existsSync(path.join(dir, "llms.txt")));
+});
+
+test("the deploy-time copy writes the seven live pages from the bundled snapshot, so a redeploy never answers 404 for them", () => {
+  for (const f of [SATCOUNT_FILE, HUB_FILE, ...COUNTRY_FILES]) {
+    assert.ok(pageFiles.includes(f), f);
+    const h = read(f);
+    assert.match(h, /<strong>[\d,]+ active satellites<\/strong>/, f);
+    assert.ok(Buffer.byteLength(h) < 400 * 1024, `${f}: ${Buffer.byteLength(h)}`);
+  }
+  for (const f of COUNTRY_FILES) assert.match(read(f), /<svg [^>]*class="map" role="img"/, f);
+  assert.ok(read("moon-phases/index.html").includes('<a href="../satellites-by-country/">By country</a>'), "the nav names the hub");
+  assert.ok(read(SATCOUNT_FILE).includes('<a href="../satellites-by-country/">satellites by country</a>'), "the count page links to the hub");
+  const llms = fs.readFileSync(path.join(outDir, "llms.txt"), "utf8");
+  assert.ok(llms.includes(`- [Satellites by country](${SITE.url}/satellites-by-country/): `));
 });

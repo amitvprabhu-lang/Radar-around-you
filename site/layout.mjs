@@ -64,6 +64,7 @@ export const NAV = [
   ["meteor-showers/", "Meteor showers"],
   ["planets/", "Planets"],
   ["how-many-satellites-in-orbit/", "Satellite count"],
+  ["satellites-by-country/", "By country"],
   ["sky/", "Sky by city"],
   ["guides/", "Guides"],
   ["methods/", "How we know"],
