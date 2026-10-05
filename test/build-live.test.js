@@ -12,6 +12,7 @@ import { HUB_FILE, COUNTRY_FILES, LIVE_FILES } from "../site/pages-country.mjs";
 import { COUNTRY_PAGES } from "../site/satcountry.mjs";
 import { SITE, urlPath } from "../site/layout.mjs";
 import { buildFixture, STANDARD, countryFixture } from "./helpers/satfixture.mjs";
+import { readIndexNowKey } from "../site/indexnow.mjs";
 
 const bounds = { min: 5, max: 100 };  // the fixture is tiny; the real bounds are tested in satcount.test.js
 const tmps = [];
@@ -247,4 +248,52 @@ test("names.txt named in the manifest feeds the name families, and one of the wr
   const plain = mk();
   buildLive({ dataDir: dataDir("V1", fx), outDir: plain, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds: { min: 5, max: 1000 } });
   assert.ok(!fs.readFileSync(path.join(plain, COUNTRY_FILES[0]), "utf8").includes('id="names"'), "without names.txt the section is left out");
+});
+
+test("an indexable build writes the IndexNow key into index.json next to siteUrl; noindex or no key leaves the field out", () => {
+  const at = new Date("2026-10-05T09:00:00Z");
+  const out = mk();
+  buildLive({ dataDir: dataDir("V1"), outDir: out, now: at, noindex: false, bounds, indexnowKey: "Test-Key-1234" });
+  const index = JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
+  assert.equal(index.indexnowKey, "Test-Key-1234");
+  assert.deepEqual(Object.keys(index).slice(0, 4), ["schema", "satellitesVersion", "siteUrl", "indexnowKey"]);
+  const off = mk();
+  buildLive({ dataDir: dataDir("V1"), outDir: off, now: at, noindex: true, bounds, indexnowKey: "Test-Key-1234" });
+  assert.ok(!("indexnowKey" in JSON.parse(fs.readFileSync(path.join(off, "index.json"), "utf8"))), "noindex: no key");
+  const none = mk();
+  buildLive({ dataDir: dataDir("V1"), outDir: none, now: at, noindex: false, bounds, indexnowKey: null });
+  assert.ok(!("indexnowKey" in JSON.parse(fs.readFileSync(path.join(none, "index.json"), "utf8"))), "no key file: no key");
+});
+
+test("by default the committed key is used", () => {
+  const out = mk();
+  buildLive({ dataDir: dataDir("V1"), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8")).indexnowKey, readIndexNowKey());
+});
+
+test("adding, changing or removing the key rewrites index.json on the next run, even for the same satellites version", () => {
+  const out = mk(), dir = dataDir("V1");
+  const run = (indexnowKey, hour) => buildLive({ dataDir: dir, outDir: out, now: new Date(`2026-10-05T${hour}:00:00Z`), noindex: false, bounds, generator: "G1", indexnowKey });
+  const key = () => JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8")).indexnowKey;
+  run(null, "09");
+  assert.equal(key(), undefined);
+  assert.equal(run(null, "10").changed, false, "no key either time: nothing to do");
+  assert.equal(run("Key-AAAA-1", "11").changed, true);
+  assert.equal(key(), "Key-AAAA-1");
+  assert.equal(run("Key-AAAA-1", "12").changed, false, "the same key: nothing to do");
+  assert.equal(run("Key-BBBB-2", "13").changed, true);
+  assert.equal(key(), "Key-BBBB-2");
+  assert.equal(run(null, "14").changed, true);
+  assert.equal(key(), undefined);
+});
+
+test("a malformed key stops the live build before anything is written", () => {
+  const out = mk();
+  assert.throws(() => buildLive({ dataDir: dataDir("V1"), outDir: out, now: new Date("2026-10-05T09:00:00Z"), noindex: false, bounds, indexnowKey: "../x" }), /IndexNow key/);
+  assert.deepEqual(fs.readdirSync(out), []);
+});
+
+test("the generator hash covers the IndexNow module", () => {
+  assert.ok(GENERATOR_FILES.includes("indexnow.mjs"));
+  assert.notEqual(generatorHash(GENERATOR_FILES.filter((f) => f !== "indexnow.mjs")), generatorHash());
 });

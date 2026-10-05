@@ -4,9 +4,11 @@
 // Output (in --out): how-many-satellites-in-orbit/index.html, satellites-by-country/index.html and satellites-by-country/<slug>/index.html,
 // sitemap-live.xml (only when the site is indexable) and index.json, which lists each file with its hash so hosting/pull.php copies only
 // what changed. Shape of index.json:
-//   { schema: 1, satellitesVersion, siteUrl, noindex, generator, built, files: { "<path>": { sha256, size, changed } } }
+//   { schema: 1, satellitesVersion, siteUrl, indexnowKey?, noindex, generator, built, files: { "<path>": { sha256, size, changed } } }
+// indexnowKey is the IndexNow key from site/indexnow.key; it is left out when there is no key file or the site is noindex, and then
+// hosting/pull.php sends no IndexNow pings. Readers take only the fields they need, so a reader older than a field ignores it.
 // generator is a sha256 over the source files that shape the pages (GENERATOR_FILES). The pages are rebuilt only when the satellites feed
-// has a new version, or the site address, the noindex mode or the generator changed, so the last modified time in the sitemap moves
+// has a new version, or the site address, the noindex mode, the IndexNow key or the generator changed, so the last modified time in the sitemap moves
 // only when the numbers or the pages themselves can have changed.
 // Every page is built in memory first and written only when all of them are ready, so a failure never leaves a partial set. A country
 // page whose owner trips the guard (missing, or under 50 active satellites) is left out with a message; the copy on the site stays.
@@ -18,6 +20,7 @@ import { SITE, renderPage } from "./layout.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { satelliteCountPage, SATCOUNT_FILE, sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
+import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 
 const NEED = ["details.bin", "satmeta.json", "swarm.bin"];
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
@@ -26,7 +29,7 @@ const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 // imports (the orbit model and the decoders in src/) and the coastlines are named with "../". A change to any of them rebuilds the
 // pages on the next run. Everything is read from the repository (the workflow checks the repository out).
 export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs",
-  "../src/core.js", "../src/data.js", "../src/info.js", "../public/coast.bin"];
+  "indexnow.mjs", "../src/core.js", "../src/data.js", "../src/info.js", "../public/coast.bin"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
 export function generatorHash(files = GENERATOR_FILES) {
   const h = crypto.createHash("sha256");
@@ -34,7 +37,9 @@ export function generatorHash(files = GENERATOR_FILES) {
   return h.digest("hex");
 }
 
-export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, min } = {}) {
+export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, min, indexnowKey = readIndexNowKey() } = {}) {
+  if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("build-live: the IndexNow key must be 8 to 128 letters, digits and dashes");
+  const key = noindex ? null : indexnowKey || null;  // a noindex site is never pinged, so its index names no key
   const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, "manifest.json"), "utf8"));
   const feed = manifest.feeds && manifest.feeds.satellites;
   if (!feed || !feed.version || !feed.files) throw new Error("build-live: the manifest has no satellites feed");
@@ -48,7 +53,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     if (parsed && typeof parsed === "object" && typeof parsed.satellitesVersion === "string") prev = parsed;
   } catch { /* missing, unreadable or invalid: no previous build */ }
   const pagePath = path.join(outDir, SATCOUNT_FILE);
-  if (prev && prev.satellitesVersion === feed.version && prev.noindex === noindex && prev.siteUrl === SITE.url && prev.generator === generator && fs.existsSync(pagePath)) {
+  if (prev && prev.satellitesVersion === feed.version && prev.noindex === noindex && prev.siteUrl === SITE.url && prev.generator === generator && (prev.indexnowKey ?? null) === key && fs.existsSync(pagePath)) {
     return { changed: false, version: feed.version };
   }
 
@@ -76,7 +81,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     files[rel] = { sha256: sha256(buf), size: buf.length, changed: iso };
   }
   if (noindex) fs.rmSync(path.join(outDir, "sitemap-live.xml"), { force: true });
-  fs.writeFileSync(indexPath, JSON.stringify({ schema: 1, satellitesVersion: feed.version, siteUrl: SITE.url, noindex, generator, built: iso, files }, null, 1) + "\n");
+  fs.writeFileSync(indexPath, JSON.stringify({ schema: 1, satellitesVersion: feed.version, siteUrl: SITE.url, ...(key ? { indexnowKey: key } : {}), noindex, generator, built: iso, files }, null, 1) + "\n");
   return { changed: true, version: feed.version, skipped: country.skipped };
 }
 
