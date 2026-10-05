@@ -14,15 +14,20 @@ A free, global, real-time 3D web tool: satellites and the ISS above you, the sky
 ## Commands
 | Command | What it does | Last known result |
 | --- | --- | --- |
-| `npm test` | unit tests (`test/*.test.js`) | 270 pass |
-| `npm run test:pipeline` | Python collector tests | 177 pass |
-| `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 92 pass |
-| `npm run e2e` | snapshot build in Chromium, phone and desktop | 286 pass |
-| `npm run e2e:live` | live-mode states in Chromium | 112 pass |
-| `npm run e2e:site` | the built content site served raw, as a web host serves it | 11 pass |
+| `npm test` | unit tests (`test/*.test.js`) | 270 pass (macOS, Node 24, 2026-10-05) |
+| `npm run test:pipeline` | Python collector tests | 175 run, 3 skipped, none failed (macOS). The 3 skipped need raw downloads that are not in the repository (`raw/`, `raw2/` are ignored). The cloud note said 177; why the counts differ is NOT CONFIRMED. |
+| `npm run test:hosting` | PHP checks for the server scripts (needs `php`) | 92 pass in the cloud. NOT run on the Mac: PHP is not installed there. |
+| `npm run e2e` | snapshot build in Chromium, phone and desktop | 286 pass, no console errors (macOS, Chromium 153) |
+| `npm run e2e:live` | live-mode states in Chromium | 112 pass. One run on the same code failed 9 checks (the page stayed on the snapshot) and the rerun passed; not diagnosed. |
+| `npm run e2e:site` | the built content site served raw, as a web host serves it | 11 pass only with `SITE_URL=https://zeninnov8.com SITE_NOINDEX=1` set. Without them the canonical check fails, because the default address has a path. |
 | `npm run build:hosting` | what Hostinger runs: app plus content site into `dist/site` | |
 
-The browser suites take roughly 10 to 15 minutes each on a slow software renderer. Delete old output before a run and do not run other heavy jobs at the same time: timing checks have been flaky under load (see the handoff note).
+First time on a machine: `npm ci`, then `npx playwright install chromium` (the harness uses the project's own Playwright and falls back to the cloud container's copy). The browser suites take roughly 10 to 15 minutes each on a software renderer. Delete old output before a run, never run two suites at once, and close other heavy programs first: on this Mac a load average above about 10 made pages take over 60 seconds to start and failed the suite at its 60 second waits. Test pages must be closed when their checks are done, because open pages keep drawing and starve the next one.
+
+## Working here
+- Local folder is `/Users/Amit/Radar Near You/Radar-around-you`. The space in the name is why paths in scripts must come from `fileURLToPath`, not `new URL(...).pathname` (fixed in the files that had it).
+- `gh` is logged in on the owner's Mac (HTTPS, scopes repo, workflow, read:org, gist). It can start and read Actions runs. Commits in this repository use the owner's GitHub no-reply address as author, set for this repository only.
+- Browser-pane and Chrome sessions are not the same login as `gh`: being signed in to GitHub in a browser does not let git push.
 
 ## Layout
 `src/` app (three.js, bundled by esbuild); `site/` content-page generator (`SITE_URL`, `SITE_NOINDEX`); `pipeline/` Python collector; `hosting/` PHP glue for Hostinger (`pull.php`, `trigger.php`); `test/`, `e2e*.mjs`, `harness.mjs` tests; `docs/` source verification records and hosting notes; `public/` data files the app loads.
