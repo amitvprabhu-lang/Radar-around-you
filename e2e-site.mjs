@@ -12,6 +12,7 @@ import { SKY_PAGES } from "./site/sky.mjs";
 import { HOME_H1 } from "./site/home-text.mjs";
 import { STRIP_FIGURES, STRIP_LIMITS, stripFigures } from "./site/home-strip.mjs";
 import { livePack } from "./test/livepack.js";
+import { appScriptOf, APP_SCRIPT_RE, APP_GUARD_SCRIPT, appScriptTag } from "./build.mjs";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
@@ -45,6 +46,10 @@ const serve = (c, { home = null, missing = notFound, live = null } = {}) => c.ro
   return route.fulfill({ status: 200, headers: { "content-type": MIME[path.extname(f)] || "application/octet-stream" }, body: fs.readFileSync(f) });
 });
 await serve(ctx);
+// the production build loads the app from one external script (build.mjs --external-script): its answers and every request are counted
+const appAnswers = [], requested = [];
+p.on("response", (r) => { if (APP_SCRIPT_RE.test(new URL(r.url()).pathname.slice(1))) appAnswers.push({ status: r.status(), type: r.headers()["content-type"] }); });
+p.on("request", (r) => requested.push([r.resourceType(), new URL(r.url()).pathname]));
 
 await p.goto("https://radar.test/", { waitUntil: "commit", timeout: 60000 });
 const started = await p.waitForFunction(() => !document.getElementById("loader") && !!window.__radar, null, { timeout: 120000 }).then(() => true, () => false);
@@ -62,6 +67,17 @@ const want = process.env.SITE_NOINDEX === "1" ? "noindex,nofollow" : "index,foll
 check(`the page's robots tag matches SITE_NOINDEX (${want})`, robots === want, String(robots));
 check("no page errors, no failed requests and no console errors on the home page", problems.length === 0, problems.join(" | "));
 check("only the not-yet-connected live folder was missing", notFound.every((u) => u.startsWith("/live/")), notFound.join(" "));
+// the app script: exactly one app.<hash>.js in the site, named in the head of a home page under 150 KB, answered 200 as JavaScript, and
+// the only script the page requests from the site
+const homeRaw = fs.readFileSync(site + "index.html", "utf8");
+const appFiles = fs.readdirSync(site).filter((f) => APP_SCRIPT_RE.test(f));
+const appFile = appScriptOf(homeRaw);
+const headRaw = homeRaw.slice(0, homeRaw.indexOf("</head>"));
+check("the home page names its one app script, app.<hash>.js, in the head with defer, and carries no inline bundle", appFiles.length === 1 && appFile === appFiles[0] && headRaw.includes(appScriptTag(appFile)) && headRaw.includes(APP_GUARD_SCRIPT) && Buffer.byteLength(homeRaw) < 150 * 1024, JSON.stringify({ appFiles, appFile, bytes: Buffer.byteLength(homeRaw) }));
+const siteScripts = requested.filter(([t, u]) => t === "script" && !u.startsWith("/live/"));
+check("the app script answers 200 as JavaScript, once, and is the only script the home page requests", appAnswers.length === 1 && appAnswers[0].status === 200 && /javascript/.test(appAnswers[0].type || "") && siteScripts.length === 1 && siteScripts[0][1] === "/" + appFile, JSON.stringify({ appAnswers, siteScripts }));
+if (!appFile || !fs.existsSync(site + appFile)) { console.error("the home page names no app script that exists; was dist/site built with npm run build:hosting?"); process.exit(2); }
+console.log(`     home page: ${requested.length} requests while starting (${Buffer.byteLength(homeRaw)} bytes of HTML, ${fs.statSync(site + appFile).size} bytes of script)`);
 // the home page's row of live pages: every registered live page, the right-now hub first; each one this build wrote answers 200 raw
 const liveRow = await p.evaluate(() => [...document.querySelectorAll(".home-live-links a")].map((a) => [a.getAttribute("href"), a.textContent]));
 check("the home page lists every registered live page, the right-now hub first, each by its name", liveRow.length === LIVE_PAGES.length && liveRow[0][0] === "right-now/" && LIVE_PAGES.every((pg) => liveRow.some(([h, t]) => h + "index.html" === pg.file && t === pg.name)), JSON.stringify(liveRow));
@@ -289,6 +305,11 @@ await ctx.close(); // pages left open keep drawing and slow every later page
 // The comparison page is the same built app wrapped without the section, so the first screen can be compared box by box.
 const { wrapApp, asDocument } = await import("./site/build.mjs");
 const plainHome = asDocument(wrapApp(fs.readFileSync(fileURLToPath(new URL("./dist/radar.html", import.meta.url)), "utf8"), { homeText: false }));
+// the same home page with the app's script inline, as every build made it before the external script: the guard and the script tag
+// taken out of the head and the bundle put back where the template had it, just before the one-screen spacer (test/app-script.test.js
+// shows that this is exactly the inline build)
+const inlineHome = homeRaw.replace(APP_GUARD_SCRIPT + "\n" + appScriptTag(appFile) + "\n", "")
+  .replace('<div class="home-spacer"', () => `<script>${fs.readFileSync(site + appFile, "utf8").replace(/<\/script/gi, "<\\/script")}</script>\n<div class="home-spacer"`);
 const openHome = async (viewport, mobile, home = null) => {
   const c = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: mobile ? 2 : 1, ignoreHTTPSErrors: true, serviceWorkers: "block" });
   const errs = [];
@@ -321,10 +342,14 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   const plain = await openHome(viewport, mobile, plainHome);
   const before = plain.up ? await firstScreen(plain.pg) : null;
   await plain.c.close();
+  const inl = await openHome(viewport, mobile, inlineHome);
+  const inlineBoxes = inl.up ? await firstScreen(inl.pg) : null;
+  await inl.c.close();
   const { c, pg, up, errs } = await openHome(viewport, mobile);
   check(`${label}: the home page with the text section starts`, up && plain.up, errs.join(" | "));
   if (!up) { await c.close(); continue; }
   const after = await firstScreen(pg);
+  check(`${label}: the first screen is laid out exactly as with the app's script inline (stats strip, tab bar, canvas, top bar, layer chips)`, inl.up && JSON.stringify(inlineBoxes) === JSON.stringify(after), `${JSON.stringify(inlineBoxes)} against ${JSON.stringify(after)}`);
   // once the app has loaded, the loader's h1 is gone and the text section's h1 is the page's one rendered h1
   const h1s = await pg.evaluate(() => [...document.querySelectorAll("h1")].filter((e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden").map((e) => e.textContent));
   check(`${label}: after load there is exactly one rendered h1, the text section's`, h1s.length === 1 && h1s[0] === HOME_H1, JSON.stringify(h1s));
@@ -427,6 +452,34 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   check("with JavaScript off, the read-more link is shown on a phone and brings the text into view", shown && st.y > 0 && st.top >= 0 && st.top < st.vh, JSON.stringify({ shown, st }));
   const strip = await pg.evaluate(() => ({ labels: [...document.querySelectorAll("#home-strip dt")].map((e) => e.textContent), values: [...document.querySelectorAll("#home-strip dd")].map((e) => e.textContent), status: document.querySelector(".home-strip-status").textContent, note: document.querySelector(".home-strip-note").textContent, h1: [...document.querySelectorAll("#about-home h1")].length }));
   check("with JavaScript off, the strip shows its labels, a dash for every value and where the figures come from", JSON.stringify(strip.labels) === JSON.stringify(STRIP_FIGURES.map(([, l]) => l)) && strip.values.every((v) => v === "-") && strip.values.length === 6 && strip.status === "" && /These figures load from the site's live data in your browser/.test(strip.note) && strip.h1 === 1, JSON.stringify(strip));
+  await c.close();
+}
+
+// the app script cannot be downloaded: blocked (a network error), or gone (a 404: an old cached page naming a script that a later deploy
+// removed). The loader then says so with a reload link, the read-more link to the text is offered as when WebGL fails, and nothing throws.
+// The reload link brings the app up once the script can be fetched again.
+for (const [label, how] of [["blocked", "abort"], ["missing (404)", "404"]]) {
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serve(c, { missing: [] });
+  const block = /\/app\.[0-9a-f]{10}\.js$/;
+  await c.route(block, (route) => (how === "abort" ? route.abort("failed") : route.fulfill({ status: 404, headers: { "content-type": "text/html" }, body: "<html><body>Not found</body></html>" })));
+  const pg = await c.newPage();
+  const errs = [];
+  pg.on("pageerror", (e) => errs.push("pageerror: " + e.message.slice(0, 200)));
+  await pg.goto("https://radar.test/", { waitUntil: "load", timeout: 60000 });
+  const shown = await pg.waitForFunction(() => { const n = document.getElementById("nogl"); return !!n && /The app could not load/.test(n.textContent); }, null, { timeout: 20000 }).then(() => true, () => false);
+  const st = await pg.evaluate(() => {
+    const n = document.getElementById("nogl"), a = n && n.querySelector("a"), m = document.querySelector(".home-more"), b = m.getBoundingClientRect();
+    return { text: n ? n.innerText.replace(/\s+/g, " ") : null, href: a && a.getAttribute("href"), more: getComputedStyle(m).display !== "none" && getComputedStyle(m).visibility === "visible" && b.width > 0, radar: !!window.__radar, loader: !!document.getElementById("loader"), status: !!document.getElementById("loadText") };
+  });
+  check(`app script ${label}: the loader says "The app could not load" with a reload link, the read-more link shows, no page errors`,
+    shown && /Its script did not arrive\. Check the connection, then reload the page\./.test(st.text || "") && st.href === "https://radar.test/" && st.more && !st.radar && st.loader && !st.status && errs.length === 0, JSON.stringify({ shown, st, errs }));
+  if (how === "abort" && shown) {
+    await c.unroute(block);
+    await Promise.all([pg.waitForNavigation({ waitUntil: "commit", timeout: 60000 }), pg.click("#nogl a")]);
+    const up = await pg.waitForFunction(() => !document.getElementById("loader") && !!window.__radar, null, { timeout: 120000 }).then(() => true, () => false);
+    check("app script blocked: once the script can be fetched, the reload link brings the app up", up && errs.length === 0, errs.join(" | "));
+  }
   await c.close();
 }
 

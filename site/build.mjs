@@ -1,6 +1,7 @@
 // Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the live pages) and robots.txt,
 // live-pages.js (the live pages' shared script, site/live-pages-js.mjs),
-// the IndexNow key file <key>.txt (only when the site is indexable and site/indexnow.key exists), and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
+// the IndexNow key file <key>.txt (only when the site is indexable and site/indexnow.key exists), and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`. When the app page names an
+// external script (build.mjs --external-script, which npm run build:hosting uses), that app.<hash>.js is copied next to index.html.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
 import path from "node:path";
@@ -20,6 +21,7 @@ import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 import { LIVE_SCRIPT_FILE, liveScriptSource } from "./live-pages-js.mjs";
 import { indexConstellations } from "../src/constellations.js";
+import { APP_SCRIPT_RE, appScriptOf, appScriptName } from "../build.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -137,7 +139,9 @@ ${ogImageTags()}
 // the loader never went away. The site's index.html is therefore a complete document.
 // The fragment starts with its title, meta, link and style elements (and wrapApp adds the search tags there). Those lead elements go
 // into <head>, where search engines look for them; everything from the first other element on stays in <body>, byte for byte.
-const HEAD_PART = /^\s*(?:<title>[\s\S]*?<\/title>|<meta\b[^>]*>|<link\b[^>]*>|<style\b[^>]*>[\s\S]*?<\/style>|<script type="application\/ld\+json">[\s\S]*?<\/script>)/i;
+// In the production build (build.mjs --external-script) the app's script is a separate file named in the head: the small guard script
+// (id app-guard) and the <script src="app.<hash>.js" defer> element are lead elements too, so they stay in <head>.
+const HEAD_PART = /^\s*(?:<title>[\s\S]*?<\/title>|<meta\b[^>]*>|<link\b[^>]*>|<style\b[^>]*>[\s\S]*?<\/style>|<script type="application\/ld\+json">[\s\S]*?<\/script>|<script id="app-guard">[\s\S]*?<\/script>|<script src="app\.[0-9a-f]{10}\.js" defer[^>]*><\/script>)/i;
 export function asDocument(fragment) {
   if (/^\s*<!doctype|<html[\s>]/i.test(fragment)) throw new Error("site: the app page is already a complete document; asDocument would wrap it twice");
   let head = "", rest = fragment;
@@ -178,6 +182,8 @@ export const OG_IMAGE_SOURCE = path.join(root, "site/assets/og-image.png");
 export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast(), hazards = loadHazards(), indexnowKey = readIndexNowKey() } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("site: the IndexNow key must be 8 to 128 letters, digits and dashes");
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
+  const appHtml = fs.readFileSync(appFile, "utf8");
+  const appScript = findAppScript(appHtml, path.dirname(appFile));
   if (!fs.existsSync(OG_IMAGE_SOURCE)) throw new Error(`site: ${OG_IMAGE_SOURCE} not found; run node tools/make-og-image.mjs`);
   const cities = loadCities();
   const checks = allChecks(cities);
@@ -203,7 +209,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     fs.writeFileSync(f, renderPage(p, { noindex }));
   }
   const countryHub = pages.some((p) => p.file === COUNTRY_HUB_FILE);
-  fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex, countryHub })));
+  fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(appHtml, { noindex, countryHub })));
+  publishAppScript(appScript, outDir);
   // the shared script of the live pages (site/live-pages-js.mjs): written by every deploy, so the live pages copied in by hosting/pull.php
   // find it, and cached like any other file
   fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
@@ -222,7 +229,24 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
   // the share image every page names in og:image (written for a noindex build too: harmless, and the tags stay the same)
   fs.copyFileSync(OG_IMAGE_SOURCE, path.join(outDir, OG_IMAGE.file));
-  return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };
+  return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped, appScript: appScript && appScript.file };
+}
+
+// The production app page names its script (app.<hash>.js, written by build.mjs --external-script next to the page). findAppScript
+// checks it before the build writes anything: the file must exist and its name must match its content, so a stale or edited file is
+// never published under a name that promises other bytes. An inline app page (npm run build) names none: null.
+export function findAppScript(appHtml, fromDir) {
+  const file = appScriptOf(appHtml);
+  if (!file) return null;
+  const from = path.join(fromDir, file);
+  if (!fs.existsSync(from)) throw new Error(`site: the app page names ${file} but ${from} is missing; run node build.mjs --external-script again`);
+  if (appScriptName(fs.readFileSync(from, "utf8")) !== file) throw new Error(`site: ${from} does not match its name (its content hash differs); run node build.mjs --external-script again`);
+  return { file, from };
+}
+// Copies it next to index.html. Any other app.<hash>.js in the output folder is removed first, so exactly one is published.
+export function publishAppScript(script, outDir) {
+  for (const f of fs.readdirSync(outDir)) if (APP_SCRIPT_RE.test(f) && (!script || f !== script.file)) fs.rmSync(path.join(outDir, f), { force: true });
+  if (script) fs.copyFileSync(script.from, path.join(outDir, script.file));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

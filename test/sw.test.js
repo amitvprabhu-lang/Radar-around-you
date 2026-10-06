@@ -11,7 +11,7 @@ function boot({ network = () => new Response("net", { status: 200 }) } = {}) {
   const handlers = {}, store = new Map(), calls = { fetch: [] };
   const cacheFor = (name) => store.get(name) || store.set(name, new Map()).get(name);
   const caches = {
-    open: async (name) => { const m = cacheFor(name); return { match: async (req) => m.get(typeof req === "string" ? req : req.url)?.clone(), put: async (req, res) => { m.set(typeof req === "string" ? req : req.url, res); } }; },
+    open: async (name) => { const m = cacheFor(name); const key = (req) => (typeof req === "string" ? req : req.url); return { match: async (req) => m.get(key(req))?.clone(), put: async (req, res) => { m.set(key(req), res); }, keys: async () => [...m.keys()].map((url) => ({ url })), delete: async (req) => m.delete(key(req)) }; },
     keys: async () => [...store.keys()], delete: async (k) => store.delete(k),
   };
   const self = { addEventListener: (t, f) => { handlers[t] = f; }, skipWaiting() { calls.skipped = true; }, clients: { claim: async () => { calls.claimed = true; } }, location: { origin: ORIGIN } };
@@ -86,6 +86,46 @@ test("bundled data is served from the cache and refreshed in the background", as
   assert.equal(await second.res.text(), "old", "return visit: the cached copy answers at once");
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(await w.store.get("radar-v1").get(reqUrl("/stars.bin")).text(), "new", "and the cache has been refreshed for next time");
+});
+
+// The production site's app script, app.<10 hex digits of its sha256>.js (build.mjs --external-script), is named after its content.
+test("the app script is cache first: fetched once, then served from the cache with no request at all", async () => {
+  let n = 0;
+  const w = boot({ network: () => new Response("app v1 " + ++n, { status: 200 }) });
+  const url = reqUrl("/app.0123456789.js");
+  assert.equal(await (await w.fetchEvent(url)).res.clone().text(), "app v1 1");
+  assert.equal(await (await w.fetchEvent(url)).res.text(), "app v1 1", "the stored copy");
+  assert.deepEqual(w.calls.fetch, [url], "one download only (stale-while-revalidate would have fetched it again on every visit)");
+});
+
+test("a new app script replaces the older one in the cache; other files stay", async () => {
+  const w = boot({ network: (r) => new Response("body of " + r.url, { status: 200 }) });
+  await w.fetchEvent(reqUrl("/app.0123456789.js"));
+  await w.fetchEvent(reqUrl("/stars.bin"));
+  await w.fetchEvent(reqUrl("/sub/app.aaaaaaaaaa.js"));
+  await w.fetchEvent(reqUrl("/app.abcdef0123.js"));
+  assert.deepEqual([...w.store.get("radar-v1").keys()].sort(), [reqUrl("/app.abcdef0123.js"), reqUrl("/stars.bin")].sort());
+});
+
+test("a failed app script download is passed on (so the page shows its reload message) and nothing is stored", async () => {
+  let mode = "offline";
+  const w = boot({ network: () => { if (mode === "offline") throw new TypeError("offline"); return new Response("<html>Not found</html>", { status: 404 }); } });
+  const url = reqUrl("/app.0123456789.js");
+  await assert.rejects(() => w.fetchEvent(url).then((x) => x.res), /offline/, "a network error stays an error");
+  mode = "404";
+  assert.equal((await w.fetchEvent(url)).res.status, 404, "an old page naming a script a later deploy removed gets the 404");
+  assert.equal(w.store.get("radar-v1").size, 0);
+});
+
+test("only an exact app.<10 hex>.js name is cache first", () => {
+  const w = boot();
+  const s = (p, mode = "no-cors") => w.ctx.strategyFor(reqUrl(p), mode, "GET", ORIGIN);
+  assert.equal(s("/app.0123456789.js"), "cache-first");
+  assert.equal(s("/radar/app.0123456789.js"), "cache-first", "the site may live in a folder");
+  for (const p of ["/app.js", "/app.012345678.js", "/app.0123456789a.js", "/app.ABCDEF0123.js", "/app.0123456789.js?v=2", "/live-pages.js", "/live/app.0123456789.js"]) assert.notEqual(s(p), "cache-first", p);
+  assert.equal(s("/live/app.0123456789.js"), "network-first");
+  assert.equal(s("/"), "stale-while-revalidate");
+  assert.equal(s("/", "navigate"), "network-first");
 });
 
 test("the manifest is valid and lists icons that exist", () => {

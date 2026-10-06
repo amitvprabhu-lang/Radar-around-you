@@ -38,7 +38,7 @@ npm run build           # bundles src/ into one page: dist/radar.html (live mode
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
 npm run test:hosting    # 454 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 130 pages (129 static pages and the app as index.html, 2026-10-06), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
-npm run build:hosting   # what Hostinger runs: the app, the content site, then the build-time live snapshot (site/live-snapshot.mjs downloads the published live/ folder and live pages from the data branch; LIVE_SNAPSHOT=0 or -- --no-live-snapshot turns it off, see docs/hosting.md)
+npm run build:hosting   # what Hostinger runs: the app with its script as a separate cached file (build.mjs --external-script: dist/app.<hash>.js, copied to dist/site), the content site, then the build-time live snapshot (site/live-snapshot.mjs downloads the published live/ folder and live pages from the data branch; LIVE_SNAPSHOT=0 or -- --no-live-snapshot turns it off, see docs/hosting.md)
 npm run e2e             # 302 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
 npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first); 101 checks, all passed (2026-10-06, branch feature/fast-startup, indexable build, run once); 65 checks on branch feature/home-seo (2026-10-06, indexable build, run once: 63 passed, the 2 word-count failures were fixed in the check afterwards and not rerun); 56 before it
 npm run e2e:live        # 115 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
@@ -138,7 +138,9 @@ site/        the content site generator: layout.mjs (page shell), data.mjs and v
             sky.mjs, pages-sky.mjs, sky-family.mjs and sky-data.mjs for tonight's sky and the ISS page
 hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 454 checks; see hosting/README.md
 template.html   page shell and all CSS
-build.mjs   esbuild bundler
+build.mjs   esbuild bundler: one self-contained page by default (every build the browser suites use); with --external-script (only npm run build:hosting) the
+            bundle goes to app.<first 10 hex digits of its sha256>.js next to the page, named in the head with defer, plus a small guard that shows a reload
+            message when that script cannot be downloaded
 e2e.mjs, e2e-live.mjs, e2e-site.mjs, harness.mjs, smoke/   browser tests and debugging scripts
 tools/      scripts run by hand: make-icons.mjs (app icons), make-og-image.mjs (the share image), build-constellations.mjs
 build_data.py, fetch_*.py, build_snapshot.py   data pipeline (inputs live in raw/ and raw2/, which are git-ignored and not in the repository; the fetch scripts read your contact address from the CONTACT_EMAIL environment variable and put it in the User-Agent header, as the data providers ask)
