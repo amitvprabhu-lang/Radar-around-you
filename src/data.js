@@ -173,6 +173,20 @@ export async function loadCore(onProgress = () => {}, fetchManifest = (base, ms)
   };
 }
 
+// The start-up downloads in order: loadCore (the data files and the live manifest) at once, and startTextures (about 640 KB of
+// maps) only when the manifest has arrived or its wait is over. Otherwise, on a slow connection, the manifest could queue behind the
+// maps, miss loadCore's 2.5 s wait and the page would show the bundled snapshot. fetchFn is the manifest's fetch (for tests).
+export function loadCoreThenTextures(onProgress, startTextures, fetchFn = (u, i) => fetch(u, i)) {
+  let settle;
+  const settled = new Promise((r) => { settle = r; });
+  const fetchManifest = (base, ms) => { const p = loadManifest(fetchFn, base, ms); p.then(settle, settle); return p; };
+  const core = loadCore(onProgress, fetchManifest);
+  core.catch(() => settle());  // a failed start must not leave the textures waiting for ever
+  const textures = settled.then(() => startTextures());
+  textures.catch(() => {});  // reported through the awaited promise; this only stops an unhandled-rejection report
+  return { core, textures };
+}
+
 // Stage two: search index, details, impact maps, routes. Loaded after the first frame.
 // The satellite files come from the same group as the swarm (live or snapshot), so the indexes line up.
 export async function loadLater(live = null) {

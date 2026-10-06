@@ -166,6 +166,30 @@ const closeSheet = (p) => R(p, () => window.__radar.panels.closeSheet());
   await p.close();
 }
 
+// ---------------------------------------------------------------- 6b. slow maps never hold back the live manifest
+// The maps (about 640 KB) wait until the manifest has arrived (src/data.js loadCoreThenTextures), so on a slow connection the manifest
+// cannot queue behind them and miss its 2.5 s wait. Here every map answer takes 4 s; the page must ask for the manifest first and start live.
+{
+  const live = newLive();
+  const errors = [];
+  const { p } = await openPage(browser, process.env.PAGE || "dist/radar.html", { label: "slow maps", errors, live });
+  const asked = [];
+  p.on("request", (r) => { const u = new URL(r.url()).pathname; if (u === "/live/manifest.json" || u.startsWith("/tex/")) asked.push(u); });
+  await p.route(/\/tex\/.*\.webp$/, async (route) => { await new Promise((r) => setTimeout(r, 4000)); return route.fallback(); });
+  await p.goto("https://radar.test/", { waitUntil: "commit" });
+  await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+  await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 });
+  const firstMap = asked.findIndex((u) => u.startsWith("/tex/"));
+  check("slow maps: the live manifest is asked for before any map", asked[0] === "/live/manifest.json" && firstMap > 0, asked.slice(0, 4).join(" "));
+  const used = await R(p, () => Object.keys(window.__radar.app.D.live.used).length);
+  check("slow maps: the page starts on the live data, not the snapshot", used === 12 && /^LIVE/.test(await p.textContent("#clockText")), `${used} feeds, clock ${await p.textContent("#clockText")}`);
+  // the same notices every other page here ignores; "GPU stall due to ReadPixels" is the macOS driver's performance notice that e2e.mjs
+  // ignores too (the bundled baseline logs it in this harness as well)
+  const real = errors.filter((e) => !/fonts\.g|ERR_FAILED|status of 404|GPU stall due to ReadPixels/.test(e));
+  check("slow maps: no console errors", real.length === 0, real.join(" | "));
+  await p.context().close();
+}
+
 // ---------------------------------------------------------------- 7. a live file that fails falls back and says so
 {
   const live = newLive();

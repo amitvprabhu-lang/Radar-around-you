@@ -1,7 +1,7 @@
 // Shared start-up: loads data and textures, creates the renderer and the clock.
 import * as THREE from "three";
 import "./engine.js";
-import { loadCore, loadLater, expandSwarm, TEXTURES } from "./data.js";
+import { loadCoreThenTextures, loadLater, expandSwarm, TEXTURES } from "./data.js";
 import { loadTexture, tierFor, TIER_SETTINGS, flipForReupload } from "./engine.js";
 import { makeYield } from "./schedule.js";
 
@@ -29,13 +29,9 @@ export const FIRST_FRAME_TEXTURES = ["day", "night", "water", "relief", "clouds"
 export async function boot({ canvas, quality = "auto", onProgress = () => {}, yieldFn = makeYield() }) {
   const tier = tierFor(quality);
   const tset = TIER_SETTINGS[tier];
-  // The texture downloads start first: they run on the network while the main thread sets up WebGL, which takes seconds on a slow
-  // phone. The data files start after it, as before: loadCore gives the live manifest 2.5 s before it falls back to the bundled
-  // snapshot, and a main thread blocked by the WebGL set-up inside that window made the timer win even when the manifest had
-  // arrived (seen in e2e-live.mjs on a cold browser, 2026-10-06).
-  const texPromises = Object.entries(TEXTURES).map(([k, f]) => loadTexture(f, { wrapS: THREE.RepeatWrapping, keepImage: k === "night" }).then((t) => [k, f, t]));
-  // if WebGL fails below, these are never awaited; their own failures must not be reported as unhandled
-  texPromises.forEach((p) => p.catch(() => {}));
+  // The downloads start after the WebGL set-up, as before this branch: loadCore gives the live manifest 2.5 s before it falls back to
+  // the bundled snapshot, and a main thread blocked by the WebGL set-up inside that window made the timer win even when the manifest
+  // had arrived (seen in e2e-live.mjs on a cold browser, 2026-10-06). The textures wait for the manifest (loadCoreThenTextures).
   await yieldFn();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: tset.antialias, preserveDrawingBuffer: true, powerPreference: "high-performance" });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -45,9 +41,11 @@ export async function boot({ canvas, quality = "auto", onProgress = () => {}, yi
   canvas.addEventListener("webglcontextlost", () => flipForReupload());
   await yieldFn();
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  const core = await loadCore(onProgress);
+  const startTextures = () => Promise.all(Object.entries(TEXTURES).map(([k, f]) => loadTexture(f, { wrapS: THREE.RepeatWrapping, keepImage: k === "night", renderer }).then((t) => [k, f, t])));
+  const downloads = loadCoreThenTextures(onProgress, startTextures);
+  const core = await downloads.core;
   const tex = {};
-  await Promise.all(texPromises.map((p) => p.then(([k, f, t]) => { t.anisotropy = aniso; tex[k] = t; core.onTexture(f); })));
+  for (const [k, f, t] of await downloads.textures) { t.anisotropy = aniso; tex[k] = t; core.onTexture(f); }
   await yieldFn();
   const D = { ...core, swarm: expandSwarm(core), later: null };
   D.quakes.events.sort((a, b) => Date.parse(b.time) - Date.parse(a.time));

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { loadCore, loadLater, loadFeedData } from "../src/data.js";
+import { loadCore, loadLater, loadFeedData, loadCoreThenTextures } from "../src/data.js";
 import { loadManifest } from "../src/live.js";
 import { livePack } from "./livepack.js";
 
@@ -156,4 +156,44 @@ test("the poller's decoders return what the app expects", async () => {
   assert.ok((await loadFeedData("clouds", paths("clouds"))).cities.pune);
   assert.ok((await loadFeedData("planes", paths("planes"))).cities.london);
   await assert.rejects(loadFeedData("satellites", {}), /no loader/);
+});
+
+// The textures (about 640 KB) must never compete with the live manifest: loadCore gives it 2.5 s before falling back to the snapshot.
+test("the textures start only after the live manifest has arrived", async () => {
+  const net = network(livePackFiles());
+  globalThis.fetch = net.fetchFn;
+  const order = [];
+  let answer;
+  const gate = new Promise((r) => { answer = r; });
+  // the manifest's own fetch, held back until the test lets it go
+  const manifestFetch = async (url, init) => { order.push(`manifest asked (${init && init.cache})`); await gate; order.push("manifest arrived"); return net.fetchFn(url, init); };
+  const { core: corePromise, textures } = loadCoreThenTextures(() => {}, async () => { order.push("textures start"); return "maps"; }, manifestFetch);
+  for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+  assert.deepEqual(order, ["manifest asked (no-store)"], "the textures wait while the manifest is on its way");
+  answer();
+  assert.equal(await textures, "maps");
+  assert.deepEqual(order, ["manifest asked (no-store)", "manifest arrived", "textures start"]);
+  const c = await corePromise;
+  assert.equal(Object.keys(c.live.used).length, 12, "and the live set is used");
+});
+
+test("the textures also start when the manifest fails, times out or the core load fails", async () => {
+  // a manifest that fails at once (no live folder)
+  const net = network();
+  globalThis.fetch = net.fetchFn;
+  let started = 0;
+  const a = loadCoreThenTextures(() => {}, async () => { started++; }, net.fetchFn);
+  await a.textures; await a.core;
+  assert.equal(started, 1);
+  // a manifest fetch that throws
+  const b = loadCoreThenTextures(() => {}, async () => { started++; }, async () => { throw new TypeError("offline"); });
+  await b.textures; await b.core;
+  assert.equal(started, 2);
+  // the whole core load failing (meta.json missing) still releases the textures, and the failure reaches the awaited promise
+  const bad = network({}, { fail: ["meta.json"] });
+  globalThis.fetch = bad.fetchFn;
+  const c = loadCoreThenTextures(() => {}, async () => { started++; }, async () => new Promise(() => {}));
+  await assert.rejects(c.core, /meta\.json/);
+  await c.textures;
+  assert.equal(started, 3);
 });
