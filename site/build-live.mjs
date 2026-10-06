@@ -12,7 +12,7 @@
 // than a field ignores it.
 // generator is a sha256 over the source files that shape the pages (GENERATOR_FILES). Each group of pages is built on its own and only
 // when one of its own feeds has a new version, or the site address, the noindex mode, the IndexNow key or the generator changed: the satellite pages
-// (all or nothing, as before) when the satellites feed changes, each hazard page when its feeds change. The right-now hub is worked out
+// (all or nothing, as before) when the satellites feed changes, each family page (site/livepages.mjs) when its feeds change. The right-now hub is worked out
 // every run and written only when its text changes. A file's `changed` time moves only when its bytes change, and the live sitemap gives
 // each page its data time (the feed's own time) as lastmod.
 // A hazard page whose feed is older than its limit (site/hazard.mjs, MAX_AGE_HOURS) or missing is skipped with a printed reason; a page
@@ -26,9 +26,10 @@ import { SITE, renderPage } from "./layout.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { satelliteCountPage, sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
-import { LIVE_PAGES, LIVE_FILES, SATCOUNT_FILE, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
-import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
-import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { LIVE_PAGES, LIVE_FILES, SATCOUNT_FILE, SATELLITE_FILES, RIGHT_NOW_FILE, FAMILY_PAGES, familyPage } from "./livepages.mjs";
+import { isoZ, parseTime } from "./hazard.mjs";
+import { hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { LIVE_FAMILY, FAMILY_RENDERERS } from "./liveregistry.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 
 const NEED = ["details.bin", "satmeta.json", "swarm.bin"];
@@ -38,7 +39,7 @@ const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 // imports (the orbit model, the decoders, the scales and the asteroid helpers in src/), the coastlines and the place list are named with
 // "../". A change to any of them rebuilds every page on the next run. Everything is read from the repository (the workflow checks it out).
 export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs",
-  "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "indexnow.mjs",
+  "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "liveregistry.mjs", "indexnow.mjs",
   "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
 export const PLACES_FILE = fileURLToPath(new URL("../public/places.json", import.meta.url));
@@ -48,21 +49,8 @@ export function generatorHash(files = GENERATOR_FILES) {
   return h.digest("hex");
 }
 
-// How each hazard page reads its feeds. Every function gets read(feed, file) and returns the summary for its page function.
-const HAZARD_READERS = {
-  quakes: (rd, o) => summariseQuakes(rd.json("quakes", "quakes.json"), o),
-  aurora: (rd, o) => summariseSpace({
-    kp: rd.json("kp", "kp.json"),
-    spaceweather: rd.has("spaceweather") ? rd.json("spaceweather", "spaceweather.json") : null,
-    aurora: rd.has("aurora") ? { meta: rd.json("aurora", "aurora.json"), grid: rd.bytes("aurora", "aurora.bin") } : null,
-  }, o),
-  asteroids: (rd, o) => summariseApproaches(rd.json("closeapproaches", "closeapproaches.json"), o),
-  storms: (rd, o) => summariseStorms(rd.json("storms", "storms.json"), { ...o, events: rd.has("events") ? { list: rd.json("events", "events.json"), dataTime: rd.time("events") } : null }),
-  fires: (rd, o) => summariseFires({ summary: rd.json("fires", "fires.json"), bin: rd.bytes("fires", "fires.bin") }, o),
-};
-
 // pageFunctions and hubPage can be replaced in tests, to show that a page that fails to render is skipped on its own.
-export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = HAZARD_PAGE_FUNCTIONS, hubPage = rightNowPage } = {}) {
+export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = FAMILY_RENDERERS, hubPage = rightNowPage } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("build-live: the IndexNow key must be 8 to 128 letters, digits and dashes");
   const key = noindex ? null : indexnowKey || null;  // a noindex site is never pinged, so its index names no key
   const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, "manifest.json"), "utf8"));
@@ -134,9 +122,11 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     satSummary = null;
   }
 
-  // ---- the hazard pages, each on its own
+  // ---- the family pages (the hazard pages and the later families of site/livepages.mjs), each on its own
   const summaries = {}, missing = satSummary ? {} : { satellites: "data that failed its checks" };
-  for (const hp of HAZARD_PAGES) {
+  // the place list is read only by a page that asks for it (the fire page), and at most once
+  const ctx = { now, bounds, get places() { return getPlaces(); } };
+  for (const hp of LIVE_FAMILY) {
     const names = hp.feeds;
     if (!rd.has(names[0])) {
       missing[hp.key] = "not in the collector's data";
@@ -144,7 +134,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
       continue;
     }
     try {
-      const s = HAZARD_READERS[hp.key](rd, { now, places: hp.key === "fires" ? getPlaces() : undefined });
+      const s = hp.read(rd, ctx);
       summaries[hp.key] = s;
       for (const w of s.warnings || []) warnings.push({ file: hp.file, reason: w });
       if (keepable(hp.file, names)) { carry(hp.file); continue; }
@@ -152,25 +142,26 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     } catch (e) {
       if (e && e.code === "ENOENT" && (e.path === coastFile || e.path === placesFile)) throw e;
       if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }
-      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `hazard page ${hp.slug}`, files: [hp.file], reason: e.message, kept: carry(hp.file) }); }
+      else if (e && e.skip) { missing[hp.key] = e.message; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }
+      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `${hp.family} page ${hp.slug}`, files: [hp.file], reason: e.message, kept: carry(hp.file) }); }
     }
   }
-  // Render each hazard page on its own: a page that fails to render is skipped (its previous copy stays) and reported as a failure. The
+  // Render each family page on its own: a page that fails to render is skipped (its previous copy stays) and reported as a failure. The
   // pages that exist after this run (built or kept) are linked from each other, so a failure is followed by another pass without it.
   let available = [];
-  for (let pass = 0; pass < HAZARD_PAGES.length + 1; pass++) {
+  for (let pass = 0; pass < LIVE_FAMILY.length + 1; pass++) {
     available = LIVE_FILES.filter((f) => f === RIGHT_NOW_FILE || pages[f]);
     let broke = false;
-    for (const hp of HAZARD_PAGES) {
+    for (const hp of LIVE_FAMILY) {
       if (!summaries[hp.key] || kept.has(hp.file) || !pages[hp.file]) continue;
       try {
-        texts.set(hp.file, renderPage(pageFunctions[hp.key](summaries[hp.key], { built: available, coast: getCoast() }), { noindex }));
+        texts.set(hp.file, renderPage((pageFunctions[hp.key] || hp.render)(summaries[hp.key], { built: available, coast: getCoast() }), { noindex }));
       } catch (e) {
         texts.delete(hp.file);
         delete pages[hp.file];
         delete summaries[hp.key];
         missing[hp.key] = "a page that could not be built";
-        failed.push({ step: `hazard page ${hp.slug} (rendering)`, files: [hp.file], reason: e.message, kept: carry(hp.file) });
+        failed.push({ step: `${hp.family} page ${hp.slug} (rendering)`, files: [hp.file], reason: e.message, kept: carry(hp.file) });
         broke = true;
       }
     }
@@ -178,14 +169,14 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   }
 
   // ---- the right-now hub: worked out every run from the same summaries; a page that is not live this run gets no number and no link
-  const shown = (key, file) => (pages[file] && summaries[key] ? summaries[key] : null);
+  const shown = (key) => { const p = familyPage(key); return p && pages[p.file] && summaries[key] ? summaries[key] : null; };
   const rows = hubRows({
     satellites: pages[SATCOUNT_FILE] && satSummary ? satSummary : null,
-    quakes: shown("quakes", HAZARD_PAGES[0].file), space: shown("aurora", HAZARD_PAGES[1].file), approaches: shown("asteroids", HAZARD_PAGES[2].file),
-    storms: shown("storms", HAZARD_PAGES[3].file), fires: shown("fires", HAZARD_PAGES[4].file), missing,
+    quakes: shown("quakes"), space: shown("aurora"), approaches: shown("asteroids"), storms: shown("storms"), fires: shown("fires"), missing,
+    more: LIVE_FAMILY.filter((p) => p.hubRow).map((p) => p.hubRow(shown(p.key), { missing })),
   });
-  // a hazard page kept from an earlier run whose feed is now stale is still on the site, but the hub shows it as not updated
-  const hubAvailable = available.filter((f) => f === RIGHT_NOW_FILE || SATELLITE_FILES.includes(f) || HAZARD_PAGES.some((p) => p.file === f && summaries[p.key]));
+  // a family page kept from an earlier run whose feed is now stale is still on the site, but the hub shows it as not updated
+  const hubAvailable = available.filter((f) => f === RIGHT_NOW_FILE || SATELLITE_FILES.includes(f) || FAMILY_PAGES.some((p) => p.file === f && summaries[p.key]));
   let hub = null;
   try {
     hub = hubPage(rows, { available: hubAvailable });

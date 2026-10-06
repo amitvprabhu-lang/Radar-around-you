@@ -1,0 +1,88 @@
+{
+ "schema": 1,
+ "pipeline": 1,
+ "generatedAt": "2026-10-06T01:40:38Z",
+ "feeds": {
+  "launches": {
+   "label": "Rocket launches",
+   "source": "The Space Devs (Launch Library 2)",
+   "docUrl": "https://github.com/TheSpaceDevs/Tutorials/blob/main/faqs/faq_TSD.md",
+   "says": "The Space Devs FAQ: free access to Launch Library 2 is \"limited to 15 calls per hour\" and users are \"heavily\" encouraged to cache the output and avoid having user clients query the APIs directly. The API's api-throttle endpoint reported 15 requests per 3600 seconds on 2026-10-05. It states no refresh interval for the data; once an hour is our choice and uses a quarter of the allowance. The detailed answer (about 1 MB for 30 launches on 2026-10-05) is used because only it carries the webcast links (vid_urls); each link has a type such as \"Official Webcast\" or \"Unofficial Re-stream\" and a publisher, and 2 of the 30 launches had any link.",
+   "licence": "The Space Devs FAQ terms of use: \"You are free to use the data in any way, shape, or form\"; accuracy of all the information is not guaranteed; \"Attribution is not mandatory, but is encouraged and appreciated\". Images carry their own licences (some are non-commercial), so none are used.",
+   "credit": "Launches: The Space Devs (Launch Library 2)",
+   "refreshSec": 3600,
+   "staleAfterSec": 14400,
+   "status": "ok",
+   "checkedAt": "2026-10-06T01:30:40Z",
+   "fetchedAt": "2026-10-06T01:30:40Z",
+   "sourceTime": "2026-10-06T01:30:38Z",
+   "count": 30,
+   "version": "20261006T013040Z",
+   "files": {
+    "launches.json": "launches/20261006T013040Z/launches.json"
+   },
+   "sizes": {
+    "launches.json": 23368
+   },
+   "note": "next: Nuri | NeonSat-2 to 6 at 2026-10-07T03:23:00Z",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-06T02:29:40Z",
+   "halted": null
+  },
+  "events": {
+   "label": "Storms, floods, fires and volcanoes",
+   "source": "GDACS (Global Disaster Alert and Coordination System)",
+   "docUrl": "https://www.gdacs.org/feed_reference.aspx",
+   "says": "Feed reference page: its popular feeds are \"updated every 6 minutes\". The cadence of the API we call is not stated on the page.",
+   "licence": "Terms of use page: a disclaimer only (results are model output, \"may require further validation\", \"should not be used for decision making\" alone). A reuse licence is not stated on the page.",
+   "credit": "Hazards: GDACS",
+   "refreshSec": 900,
+   "staleAfterSec": 3600,
+   "status": "ok",
+   "checkedAt": "2026-10-06T01:40:29Z",
+   "fetchedAt": "2026-10-06T01:40:29Z",
+   "sourceTime": "2026-10-06T01:31:35Z",
+   "count": 300,
+   "version": "20261006T014029Z",
+   "files": {
+    "events.json": "events/20261006T014029Z/events.json"
+   },
+   "sizes": {
+    "events.json": 102130
+   },
+   "note": "1 red, 4 orange",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-06T01:54:29Z",
+   "halted": null
+  },
+  "storms": {
+   "label": "Tropical storms (Atlantic and Pacific)",
+   "source": "NOAA National Hurricane Center",
+   "docUrl": "https://www.nhc.noaa.gov/gis/",
+   "says": "The GIS page lists the feeds. Response headers measured 2026-10-04: cache-control max-age=300. Advisories come about every six hours. Its KML says the official forecast track in KML format is an experimental product.",
+   "licence": "NWS disclaimer page: public domain with the three conditions quoted for the space weather feed.",
+   "credit": "Storms: NOAA National Hurricane Center",
+   "refreshSec": 900,
+   "staleAfterSec": 28800,
+   "status": "ok",
+   "checkedAt": "2026-10-06T01:40:38Z",
+   "fetchedAt": "2026-10-06T01:40:38Z",
+   "sourceTime": "2026-10-05T21:00:00Z",
+   "count": 1,
+   "version": "20261006T014038Z",
+   "files": {
+    "storms.json": "storms/20261006T014038Z/storms.json"
+   },
+   "sizes": {
+    "storms.json": 7527
+   },
+   "note": "Rachel",
+   "error": null,
+   "failures": 0,
+   "nextTryAt": "2026-10-06T01:54:38Z",
+   "halted": null
+  }
+ }
+}

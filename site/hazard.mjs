@@ -20,14 +20,15 @@ export const MAX_AGE_HOURS = { quakes: 3, kp: 8, spaceweather: 6, aurora: 6, sto
 // docs/hazard-pages-sources.md and checks these match it. Dataset markup goes only on a page whose every feed is verified.
 export const TERMS_VERIFIED = { quakes: true, kp: false, spaceweather: true, aurora: false, closeapproaches: false, storms: true, fires: true, events: false };
 
-// The five hazard pages. feeds: the collector feeds a page reads (the first is required; the others add sections when present).
+// The five hazard pages, the "hazard" family of site/livepages.mjs. feeds: the collector feeds a page reads (the first is required; the
+// others add sections when present). maxAgeHours: the limit of the first feed.
 export const HAZARD_PAGES = [
   { key: "quakes", slug: "earthquakes-today", feeds: ["quakes"], name: "Earthquakes today", guide: "guides/earthquakes/index.html" },
   { key: "aurora", slug: "aurora-tonight", feeds: ["kp", "spaceweather", "aurora"], name: "Aurora tonight", guide: "guides/aurora/index.html" },
   { key: "asteroids", slug: "asteroid-close-approaches", feeds: ["closeapproaches"], name: "Asteroid close approaches", guide: "guides/asteroids/index.html" },
   { key: "storms", slug: "tropical-storms-now", feeds: ["storms", "events"], name: "Tropical storms now", guide: "guides/storms/index.html" },
   { key: "fires", slug: "wildfires-today", feeds: ["fires"], name: "Fire detections today", guide: "guides/fires/index.html" },
-].map((p) => ({ ...p, file: `${p.slug}/index.html` }));
+].map((p) => ({ ...p, family: "hazard", file: `${p.slug}/index.html`, maxAgeHours: MAX_AGE_HOURS[p.feeds[0]] }));
 export const RIGHT_NOW_FILE = "right-now/index.html";
 export const hazardPage = (key) => HAZARD_PAGES.find((p) => p.key === key);
 

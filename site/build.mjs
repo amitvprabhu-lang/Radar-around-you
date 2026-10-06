@@ -11,8 +11,9 @@ import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
 import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
-import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
-import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { isoZ, parseTime } from "./hazard.mjs";
+import { hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { LIVE_FAMILY } from "./liveregistry.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
 import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
@@ -74,26 +75,23 @@ export function loadHazards(dir = path.join(root, "public")) {
   };
 }
 
-// The deploy-time copies of the hazard pages and the right-now hub, from the bundled data. Old data is allowed here (the page then says it
-// is the copy bundled at deploy time); a feed that fails its guard is left out with a message. satellites: { active, dataTime }.
+// The deploy-time copies of the family pages (site/livepages.mjs) and the right-now hub, from the bundled data. Old data is allowed here
+// (the page then says it is the copy bundled at deploy time); a feed that fails its guard, or a page with nothing to show, is left out
+// with a message. h: loadHazards() plus `satellites` (loadSatellites()); satellites: { active, dataTime } for the hub's count row.
 export function hazardSnapshotPages(h, { now, coast, satellites, satelliteFiles = SATELLITE_FILES }) {
   const o = { now, allowStale: true };
-  const make = {
-    quakes: () => h.quakes && summariseQuakes(h.quakes, o),
-    aurora: () => h.kp && summariseSpace({ kp: h.kp, spaceweather: h.spaceweather, aurora: h.aurora }, o),
-    asteroids: () => h.closeapproaches && summariseApproaches(h.closeapproaches, o),
-    storms: () => h.storms && summariseStorms(h.storms, o),
-    fires: () => h.fires && h.places && summariseFires(h.fires, { ...o, places: h.places }),
-  };
   const summaries = {}, skipped = [];
-  for (const p of HAZARD_PAGES) {
-    try { const s = make[p.key](); if (s) summaries[p.key] = s; } catch (e) { skipped.push({ file: p.file, reason: e.message }); }
+  for (const p of LIVE_FAMILY) {
+    try { const s = p.snapshot(h, o); if (s) summaries[p.key] = s; } catch (e) { skipped.push({ file: p.file, reason: e.message }); }
   }
-  const built = [...satelliteFiles, ...HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => p.file), RIGHT_NOW_FILE];
-  const pages = HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => ({ ...HAZARD_PAGE_FUNCTIONS[p.key](summaries[p.key], { built, coast }), dataTime: summaries[p.key].dataTime }));
-  const hub = rightNowPage(hubRows({ satellites, quakes: summaries.quakes, space: summaries.aurora, approaches: summaries.asteroids, storms: summaries.storms, fires: summaries.fires }), { available: built });
+  const made = LIVE_FAMILY.filter((p) => summaries[p.key]);
+  const built = [...satelliteFiles, ...made.map((p) => p.file), RIGHT_NOW_FILE];
+  const pages = made.map((p) => ({ ...p.render(summaries[p.key], { built, coast }), dataTime: summaries[p.key].dataTime }));
+  const hub = rightNowPage(hubRows({ satellites, quakes: summaries.quakes, space: summaries.aurora, approaches: summaries.asteroids, storms: summaries.storms, fires: summaries.fires,
+    more: LIVE_FAMILY.filter((p) => p.hubRow).map((p) => p.hubRow(summaries[p.key] || null, { missing: {} })) }), { available: built });
   return { pages: [...pages, hub], skipped };
 }
+export const liveSnapshotPages = hazardSnapshotPages;
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
 // homeText adds the text section below the first screen (site/home-text.mjs): its style block goes just before the noscript block, so
@@ -184,7 +182,7 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   const country = countryPageSet(satellites, { coast, updated: now });
   for (const sk of country.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
   const taken = isoZ(parseTime(satcount.taken));
-  const live = hazardSnapshotPages(hazards, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
+  const live = hazardSnapshotPages({ ...hazards, satellites }, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
   for (const sk of live.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
   const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages, livePages: live.pages });
   const seen = new Set();

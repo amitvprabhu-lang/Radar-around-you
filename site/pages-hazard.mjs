@@ -420,10 +420,19 @@ ${sources([SRC.lance, SRC.firms, SRC.geonames])}`;
 
 // ------------------------------------------------------------------ the /right-now/ hub
 // rows come from the same summaries the pages use. available: the live files that exist in this build, so a stale or missing page is
-// never linked as live. missing: { key: reason } for each page that was not built.
-export function hubRows({ satellites = null, quakes = null, space = null, approaches = null, storms = null, fires = null, missing = {} }) {
+// never linked as live. missing: { key: reason } for each page that was not built. more: the rows of the other page families (their
+// hubRow in site/liveregistry.mjs), in the same shape, added after these; a row may also carry limit (its age limit, "rocket launches 6
+// hours"), timeNote (what its time is), source (an entry for the sources list) and notable (a sentence for "What is notable").
+export function hubRows({ satellites = null, quakes = null, space = null, approaches = null, storms = null, fires = null, missing = {}, more = [] }) {
   // value: the table's text; said: the same number as a phrase for the lead
-  const row = (key, file, label, value, said, dataTime, guide, s = null) => ({ key, file, label, value, said, dataTime, guide, stale: !!(s && s.stale), reason: value === null ? missing[key] || "not available in this build" : null, timeText: dataTime ? TIME_TEXT[key](dataTime, s) : "" });
+  const row = (key, file, label, value, said, dataTime, guide, s = null) => ({ key, file, label, value, said, dataTime, guide, stale: !!(s && s.stale), reason: value === null ? missing[key] || "not available in this build" : null, timeText: dataTime ? TIME_TEXT[key](dataTime, s) : "", notableRule: NOTABLE_RULE[key] || null, notable: value !== null && NOTABLE[key] ? NOTABLE[key](s) : null });
+  // what makes a row notable on the hub (design section 8.2), from the same summaries: a quake of magnitude 6 or more, Kp at NOAA's G1
+  // level or above (src/scales.js). Each gives a sentence, or null.
+  const NOTABLE_RULE = { quakes: "an earthquake of magnitude 6 or more in the 24 hours", aurora: `a latest Kp of ${KP_G1} (NOAA's G1 level) or more` };
+  const NOTABLE = {
+    quakes: (x) => (x && x.ge6 ? `${num(x.ge6)} ${v(x.ge6, "earthquake", "earthquakes")} of magnitude 6 or more in the 24 hours to ${when(x.dataTime)}, the largest magnitude ${num(x.largest.mag)}.` : null),
+    aurora: (x) => (x && x.kp.latest.kp >= KP_G1 ? `The latest planetary Kp is ${num(x.kp.latest.kp)}, at or above NOAA's G1 level of Kp ${KP_G1}.` : null),
+  };
   // what each row's time is, said beside it (the Kp row has the Kp period's tag and, when shown, the solar wind's own time)
   const TIME_TEXT = {
     satellites: (t) => `${dayHour(t)} (satellite data)`,
@@ -444,11 +453,14 @@ export function hubRows({ satellites = null, quakes = null, space = null, approa
       approaches ? (nx ? `a first asteroid close approach in JPL's list at ${dec(nx.distLd, 2)} lunar distances (${nx.name})` : "no asteroid close approach in JPL's list") : null, approaches ? approaches.dataTime : null, hazardPage("asteroids").guide, approaches),
     row("storms", hazardPage("storms").file, "Tropical storms now", ns, ns, storms ? storms.dataTime : null, hazardPage("storms").guide, storms),
     row("fires", hazardPage("fires").file, "Fire detections today", fires ? `${num(fires.detections)} fire detections in 24 hours` : null, fires ? `${num(fires.detections)} satellite fire detections in 24 hours` : null, fires ? fires.dataTime : null, hazardPage("fires").guide, fires),
+    ...more.filter(Boolean),
   ];
 }
 
 export function rightNowPage(rows, { available = LIVE_FILES } = {}) {
   const file = RIGHT_NOW_FILE;
+  // rows of the other page families carry their own limit, time note and source (hubRows, "more")
+  const extra = rows.filter((r) => r.limit);
   const live = rows.filter((r) => r.value !== null && available.includes(r.file));
   const times = live.map((r) => r.dataTime).sort();
   const newest = times[times.length - 1] || null;
@@ -456,31 +468,39 @@ export function rightNowPage(rows, { available = LIVE_FILES } = {}) {
   const lead = newest
     ? `As of ${esc(when(newest))}, the newest data time among the live pages, they show ${and(live.map((r, i) => (i === 0 ? `<strong>${esc(r.said)}</strong>` : esc(r.said))))}. Each row below gives the time of its own data.`
     : "None of the live pages has current data in this build.";
-  const description = `The latest number from each live page of ${SITE.name}: satellites in orbit, earthquakes, Kp, asteroid passes, storms and fire detections, with data times.`;
+  const description = extra.length ? `The latest number from each live page of ${SITE.name}: satellites, quakes, Kp, asteroids, storms, fires, launches and disasters, with data times.`
+    : `The latest number from each live page of ${SITE.name}: satellites in orbit, earthquakes, Kp, asteroid passes, storms and fire detections, with data times.`;
   const cell = (r) => (r.value !== null && available.includes(r.file) ? `<a href="${href(file, r.file)}">${esc(r.label)}</a>` : esc(r.label));
   const valueCell = (r) => (r.value !== null && available.includes(r.file) ? esc(r.value) : esc(r.reason ? `${cap(r.reason)}; page not updated` : "Page not updated"));
   const countries = available.includes(HUB_FILE) ? [`<a href="${href(file, HUB_FILE)}">all owners ranked</a>`, ...COUNTRY_PAGES.filter((p) => available.includes(p.file)).map((p) => `<a href="${href(file, p.file)}">${esc(p.name)}</a>`)] : [];
   const snapshot = live.some((r) => r.stale);
-  const body = `${snapshot ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, and some of that data is older than the limits below. The live copy replaces it after the next data collection.</p>\n` : ""}
+  const limits = [`earthquakes ${MAX_AGE_HOURS.quakes} hours`, `Kp ${MAX_AGE_HOURS.kp} hours`, `storms ${MAX_AGE_HOURS.storms} hours`, `fire detections ${MAX_AGE_HOURS.fires} hours`, `asteroid close approaches ${MAX_AGE_HOURS.closeapproaches} hours`, ...extra.map((r) => r.limit)];
+  const notable = live.map((r) => r.notable).filter(Boolean);
+  const rules = rows.map((r) => r.notableRule).filter(Boolean);
+  const notableHtml = extra.length ? `<h2 id="notable">What is notable</h2>
+${notable.length ? `<ul>${notable.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>Nothing in the live data on this page passes these checks right now.</p>`}
+<p>A row is listed here when its data shows ${esc(and(rules))}. These checks are ours and are not warnings; each page explains its numbers.</p>
+` : "";
+  const body = `${snapshot ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, and some of that data is older than the limits below. The live copy replaces it after the next data collection.</p>\n` : ""}${notableHtml}
 <h2 id="now">The live numbers</h2>
 ${table({ caption: "The latest number from each live page", head: ["Live page", "Latest number", "Data time (UTC)"], rows: rows.map((r) => [cell(r), valueCell(r), r.value !== null && available.includes(r.file) ? esc(r.timeText) : ""]) })}
 ${countries.length ? `<p>Satellites by country, from the same satellite data: ${countries.join(", ")}.</p>` : ""}
 
 <h2 id="how">How these numbers are made</h2>
 <ul>
-<li>Each number is worked out by the same code as its page, from the same feed, and the time beside it says what it is: the time given in the feed, the time of a Kp period or of the newest advisory or detection, or for asteroid close approaches (and storms when none is active) the day our collector read the list. It is never the time this page was built.</li>
-<li>Each page has a limit on how old its data may be: earthquakes ${MAX_AGE_HOURS.quakes} hours, Kp ${MAX_AGE_HOURS.kp} hours, storms ${MAX_AGE_HOURS.storms} hours, fire detections ${MAX_AGE_HOURS.fires} hours and asteroid close approaches ${MAX_AGE_HOURS.closeapproaches} hours. A page whose data is older is not updated and is not linked from here${snapshot ? ", except in a copy built at deploy time, like this one, which shows the bundled data with its own time" : ""}.</li>
+<li>Each number is worked out by the same code as its page, from the same feed, and the time beside it says what it is: the time given in the feed, the time of a Kp period or of the newest advisory or detection, or for asteroid close approaches (and storms when none is active) the day our collector read the list.${extra.map((r) => ` ${esc(r.timeNote)}`).join("")} It is never the time this page was built.</li>
+<li>Each page has a limit on how old its data may be: ${and(limits)}. A page whose data is older is not updated and is not linked from here${snapshot ? ", except in a copy built at deploy time, like this one, which shows the bundled data with its own time" : ""}.</li>
 <li>Nothing here is a forecast of ours or a warning. Each page names its source agency and links to it.</li>
 </ul>
 
 <h2 id="guides">Guides to the data</h2>
-<ul>${rows.map((r) => `<li><a href="${href(file, r.guide)}">${esc(r.label)}: how to read the data</a></li>`).join("")}</ul>
+<ul>${rows.filter((r) => r.guide).map((r) => `<li><a href="${href(file, r.guide)}">${esc(r.label)}: how to read the data</a></li>`).join("")}</ul>
 
 ${faqHtml([
     ["How fresh are these numbers?", newest ? `Each has its own data time in the table. The newest is ${esc(when(newest))}${times.length > 1 ? ` and the oldest ${esc(when(times[0]))}` : ""}.` : "None of the live pages has current data in this build."],
     ["Why does a page show no number?", "Its data was older than the page's limit, or was not available when this page was built, so the page was not updated. Its last copy may still be on the site, with its own data time."],
   ])}
-${sources([SRC.celestrak, SRC.usgsFeed, SRC.swpcData, SRC.jplCad, SRC.nhc, SRC.firms])}`;
+${sources([SRC.celestrak, SRC.usgsFeed, SRC.swpcData, SRC.jplCad, SRC.nhc, SRC.firms, ...extra.map((r) => r.source).filter(Boolean)])}`;
   return {
     file, crumbTitle: "Right now", title, description, h1: "What do the live feeds say right now?", kicker: "Live hub",
     lead, meta: newest ? `Newest data time ${timeEl(newest)}. Each row gives its own data time.` : "", cta: { label: "Open the live globe", query: "" }, body,
