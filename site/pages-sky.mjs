@@ -303,7 +303,7 @@ export function skyHubPage(summaries, findings, { built = [], cities = [], missi
   ];
   const body = `${summaries.some((s) => s.stale) ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, and some of it is older than the ${SKY_MAX_AGE_HOURS.clouds} hours these pages allow for live data. The live copy replaces it after the next data collection.</p>\n` : ""}${findingsHtml(findings)}
 ${metNote}
-${seeAlso(file, built, cities)}
+${seeAlso(file, built.filter((f) => !cities.some((c) => skyCityFile(c.id) === f && !byId.has(c.id))), cities)}
 
 <h2 id="cities">Tonight in the six cities</h2>
 ${table({ caption: "Tonight's best window, cloud, Moon and ISS passes by city (local times)", head: ["City", "Tonight", "Cloud on average", "Best window", "Moon", "ISS passes sunlit in a dark sky"], numeric: [2, 5], rows })}

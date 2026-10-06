@@ -267,7 +267,8 @@ test("the storm map frames the storms and their tracks, and falls back to the wh
 test("the hub lists every live page it can link, links each one that exists, and shows a stale page without a link or a number", () => {
   const t = mainText(smallHtml.hub);
   for (const p of HAZARD_PAGES) assert.ok(smallHtml.hub.includes(`href="../${p.slug}/"`), p.slug);
-  for (const f of LIVE_FILES.filter((x) => x !== RIGHT_NOW_FILE)) assert.ok(smallHtml.hub.includes(`href="../${urlPath(f)}"`), `${f} is linked from the hub`);
+  // the pages of the other families are linked by their own rows (hubRows "more"), which this hand-made hub leaves out
+  for (const f of LIVE_PAGES.filter((x) => x.file !== RIGHT_NOW_FILE && !x.key || HAZARD_PAGES.some((h) => h.key === x.key)).map((x) => x.file)) assert.ok(smallHtml.hub.includes(`href="../${urlPath(f)}"`), `${f} is linked from the hub`);
   assert.ok(t.includes("16,624 active satellites"));
   assert.ok(t.includes("8 earthquakes in 24 hours in USGS's magnitude 2.5 and above feed, largest magnitude 6.4"));
   const rows = hubRows({ satellites: { active: 16624, dataTime: "2026-10-05T14:00:00Z" }, quakes: S.quakes, space: S.space, missing: { asteroids: "data older than 48 hours" } });
@@ -288,9 +289,10 @@ test("the hub lists every live page it can link, links each one that exists, and
   }
 });
 
-test("the registry of live pages holds the count page, the country hub, five country pages, five hazard pages and the hub", () => {
-  assert.equal(LIVE_FILES.length, 13);
-  assert.equal(new Set(LIVE_FILES).size, 13);
+test("the registry of live pages holds the count page, the country hub, five country pages, five hazard pages, the other families and the hub", () => {
+  const others = LIVE_PAGES.filter((p) => p.key && !HAZARD_PAGES.some((h) => h.key === p.key)).length;
+  assert.equal(LIVE_FILES.length, 13 + others);
+  assert.equal(new Set(LIVE_FILES).size, 13 + others);
   assert.equal(LIVE_FILES[0], SATCOUNT_FILE);
   assert.deepEqual(LIVE_PAGES.filter((p) => p.kind === "hazard").map((p) => p.file), HAZARD_PAGES.map((p) => p.file));
   assert.equal(LIVE_FILES.at(-1), RIGHT_NOW_FILE);

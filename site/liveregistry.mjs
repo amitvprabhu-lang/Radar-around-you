@@ -14,6 +14,7 @@
 import { FAMILY_PAGES } from "./livepages.mjs";
 import { summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires } from "./hazard.mjs";
 import { HAZARD_PAGE_FUNCTIONS } from "./pages-hazard.mjs";
+import { SKY_BUILDERS, SKY_RENDER } from "./sky-family.mjs";
 
 const BUILDERS = {
   quakes: {
@@ -42,7 +43,8 @@ const BUILDERS = {
     snapshot: (h, o) => h.fires && h.places && summariseFires(h.fires, { ...o, places: h.places }),
   },
 };
-const RENDER = { ...HAZARD_PAGE_FUNCTIONS };
+Object.assign(BUILDERS, SKY_BUILDERS);
+const RENDER = { ...HAZARD_PAGE_FUNCTIONS, ...SKY_RENDER };
 
 export const LIVE_FAMILY = FAMILY_PAGES.map((p) => ({ ...p, ...BUILDERS[p.key], render: RENDER[p.key], hubRow: (BUILDERS[p.key] && BUILDERS[p.key].hubRow) || null, history: (BUILDERS[p.key] && BUILDERS[p.key].history) || null }));
 export const liveFamily = (key) => LIVE_FAMILY.find((p) => p.key === key) || null;

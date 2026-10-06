@@ -468,7 +468,10 @@ export function rightNowPage(rows, { available = LIVE_FILES } = {}) {
   const lead = newest
     ? `As of ${esc(when(newest))}, the newest data time among the live pages, they show ${and(live.map((r, i) => (i === 0 ? `<strong>${esc(r.said)}</strong>` : esc(r.said))))}. Each row below gives the time of its own data.`
     : "None of the live pages has current data in this build.";
-  const description = extra.length ? `The latest number from each live page of ${SITE.name}: satellites, quakes, Kp, asteroids, storms, fires, launches and disasters, with data times.`
+  // the other families' rows name themselves (short), so the description lists only pages that have a row
+  const shorts = extra.map((r) => r.short || r.label.toLowerCase());
+  const longDesc = `The latest number from each live page of ${SITE.name}: satellites, quakes, Kp, asteroids, storms, fires, ${and(shorts)}, with data times.`;
+  const description = extra.length ? (longDesc.length <= 160 ? longDesc : `The latest number from each live page of ${SITE.name}, from satellites and earthquakes to ${shorts.length} newer pages, each with its data time.`)
     : `The latest number from each live page of ${SITE.name}: satellites in orbit, earthquakes, Kp, asteroid passes, storms and fire detections, with data times.`;
   const cell = (r) => (r.value !== null && available.includes(r.file) ? `<a href="${href(file, r.file)}">${esc(r.label)}</a>` : esc(r.label));
   const valueCell = (r) => (r.value !== null && available.includes(r.file) ? esc(r.value) : esc(r.reason ? `${cap(r.reason)}; page not updated` : "Page not updated"));
@@ -485,6 +488,7 @@ ${notable.length ? `<ul>${notable.map((t) => `<li>${esc(t)}</li>`).join("")}</ul
 <h2 id="now">The live numbers</h2>
 ${table({ caption: "The latest number from each live page", head: ["Live page", "Latest number", "Data time (UTC)"], rows: rows.map((r) => [cell(r), valueCell(r), r.value !== null && available.includes(r.file) ? esc(r.timeText) : ""]) })}
 ${countries.length ? `<p>Satellites by country, from the same satellite data: ${countries.join(", ")}.</p>` : ""}
+${rows.filter((r) => r.links && r.links.some((l) => available.includes(l.file))).map((r) => `<p>${esc(r.linksLabel)}: ${r.links.filter((l) => available.includes(l.file)).map((l) => `<a href="${href(file, l.file)}">${esc(l.label)}</a>`).join(", ")}.</p>`).join("\n")}
 
 <h2 id="how">How these numbers are made</h2>
 <ul>

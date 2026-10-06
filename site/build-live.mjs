@@ -40,7 +40,9 @@ const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 // "../". A change to any of them rebuilds every page on the next run. Everything is read from the repository (the workflow checks it out).
 export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs",
   "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "liveregistry.mjs", "indexnow.mjs",
-  "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json"];
+  "sky.mjs", "pages-sky.mjs", "sky-family.mjs", "sky-data.mjs", "../src/plan.js", "../src/sgp4.js", "../src/tonight.js", "../src/trains.js",
+  "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json",
+  "../public/cities.json", "../public/stars.bin", "../public/constellations.json", "../public/starnames.json"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
 export const PLACES_FILE = fileURLToPath(new URL("../public/places.json", import.meta.url));
 export function generatorHash(files = GENERATOR_FILES) {
@@ -80,6 +82,9 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const same = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
   // a page is kept as it is when it was built from the same versions of its feeds, in the same mode, by the same generator, and is still there
   const keepable = (file, names) => sameShell && prev.pages[file] && same(prev.pages[file].feeds, versionsOf(names)) && prev.files[file] && exists(file);
+  // the versions a family page was built from: its feeds' versions, plus the UTC date for a page that changes with the date (the sky pages)
+  const pageVersions = (hp) => ({ ...versionsOf(hp.feeds), ...(hp.daily ? { utcDate: now.toISOString().slice(0, 10) } : {}) });
+  const keepablePage = (hp) => sameShell && prev.pages[hp.file] && same(prev.pages[hp.file].feeds, pageVersions(hp)) && prev.files[hp.file] && exists(hp.file);
 
   const texts = new Map();   // file -> html, built in this run
   const pages = {};          // file -> { feeds, dataTime } for every page that exists after this run
@@ -137,8 +142,8 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
       const s = hp.read(rd, ctx);
       summaries[hp.key] = s;
       for (const w of s.warnings || []) warnings.push({ file: hp.file, reason: w });
-      if (keepable(hp.file, names)) { carry(hp.file); continue; }
-      pages[hp.file] = { feeds: versionsOf(names), dataTime: s.dataTime };
+      if (keepablePage(hp)) { carry(hp.file); continue; }
+      pages[hp.file] = { feeds: pageVersions(hp), dataTime: s.dataTime };
     } catch (e) {
       if (e && e.code === "ENOENT" && (e.path === coastFile || e.path === placesFile)) throw e;
       if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }

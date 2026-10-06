@@ -8,11 +8,13 @@
 // Everything else (the build, the deploy-time copies, the hub, the sitemap, llms.txt) looks pages up by key from these lists.
 import { HUB_FILE, COUNTRY_PAGES } from "./satcountry.mjs";
 import { HAZARD_PAGES, RIGHT_NOW_FILE } from "./hazard.mjs";
+import { SKY_PAGES } from "./sky.mjs";
 
 export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
 
 export const FAMILY_PAGES = [
   ...HAZARD_PAGES,
+  ...SKY_PAGES,
 ];
 export const familyPage = (key) => FAMILY_PAGES.find((p) => p.key === key) || null;
 

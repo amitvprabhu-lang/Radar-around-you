@@ -66,6 +66,7 @@ export const NAV = [
   ["how-many-satellites-in-orbit/", "Satellite count"],
   ["satellites-by-country/", "By country"],
   ["right-now/", "Right now"],
+  ["tonights-sky/", "Tonight's sky"],
   ["sky/", "Sky by city"],
   ["guides/", "Guides"],
   ["methods/", "How we know"],

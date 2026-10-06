@@ -22,6 +22,18 @@ export const SKY_HUB_FILE = "tonights-sky/index.html";
 export const skyCityFile = (id) => `tonights-sky/${id}/index.html`;
 export const ISS_FILE = "iss-today/index.html";
 export const ISS_ID = 25544;
+// The sky family of site/livepages.mjs: the hub, one page per city and the ISS page. feeds: the first is required. daily: the page is
+// also rebuilt when the UTC date changes (the night moves with the date), so build-live.mjs adds the date to its rebuild key. note: the
+// fixed llms.txt line (the descriptions hold tonight's numbers).
+const CITY_NAMES = { pune: "Pune", newyork: "New York", london: "London", tromso: "Tromsø", tokyo: "Tokyo", sydney: "Sydney" };
+export const SKY_PAGES = [
+  { key: "sky-hub", slug: "tonights-sky", feeds: ["clouds", "satellites"], name: "Tonight's sky", maxAgeHours: 6, daily: true, guide: "moon-phases/index.html",
+    note: "Tonight's best viewing window, cloud, Moon and ISS passes for six cities, from MET Norway's cloud forecast and computed astronomy." },
+  ...SKY_CITY_IDS.map((id) => ({ key: `sky-${id}`, city: id, slug: `tonights-sky/${id}`, feeds: ["clouds", "satellites"], name: `Tonight's sky in ${CITY_NAMES[id]}`, maxAgeHours: 6, daily: true, guide: "planets/index.html",
+    note: `What is in the sky tonight in ${CITY_NAMES[id]}: the Moon, the planets, a sky chart, ISS passes and MET Norway's hourly cloud forecast with the best window.` })),
+  { key: "iss", slug: "iss-today", feeds: ["satellites"], name: "ISS today", maxAgeHours: 30, daily: false, guide: "guides/satellites/index.html",
+    note: "Where the International Space Station is at the satellite data time, its ground track, its orbit and its passes over six cities, computed with SGP4." },
+].map((p) => ({ ...p, family: "sky", file: `${p.slug}/index.html` }));
 // OURS (the design's values, section 3): the cloud forecast may be at most 6 hours old for a city page, the satellite data 30 hours for the
 // ISS page (CelesTrak's rules pause it for hours), and the ISS element set at most 7 days old for any pass or position to be printed.
 export const SKY_MAX_AGE_HOURS = { clouds: 6, satellites: 30 };
@@ -387,6 +399,22 @@ export function hubFindings(summaries) {
     out.push(`The Moon is ${moonPhrase(m.phaseName)}, about ${m.illumPct} percent lit, the same phase for every city; when it is up differs from city to city.`);
   }
   return out.slice(0, 6);
+}
+
+// The hub's summary: every city that can be summarised, and the reason for each that cannot. Throws a stale error when no city has a
+// current forecast, and an ordinary error when none passes its checks.
+export function summariseHub(cities, { clouds, precise = null, sky = {}, now, allowStale = false }) {
+  const summaries = [], missing = {};
+  let anyBroken = false;
+  for (const c of cities) {
+    try { summaries.push(summariseCity(c, { clouds, precise, sky, now, allowStale })); } catch (e) {
+      if (e && e.stale) missing[c.id] = "data older than the page's limit";
+      else { missing[c.id] = "data that failed its checks"; anyBroken = true; }
+    }
+  }
+  if (!summaries.length) { if (anyBroken) fail("hub", "no city's forecast passed its checks"); throw new SkyStaleError("no city has a cloud forecast less than 6 hours old"); }
+  const times = summaries.map((x) => x.dataTime).sort();
+  return { feed: "clouds", cities, summaries, missing, findings: hubFindings(summaries), dataTime: times[times.length - 1], stale: summaries.some((x) => x.stale) };
 }
 
 // ------------------------------------------------------------------ ISS today
