@@ -1,5 +1,6 @@
 // Pure maths and logic for the Radar Around You prototype.
 // No browser APIs and no library imports, so every function can be unit tested in Node.
+import { runSteps } from "./schedule.js";
 
 export const DEG = Math.PI / 180;
 export const EARTH_RADIUS_KM = 6371.0;
@@ -143,13 +144,21 @@ export function isSunlit(posKm, sunUnit) {
 // A pass is "visible" when, at some moment above minEl, the satellite is sunlit and the sky is dark
 // (Sun below -6 degrees, civil twilight or darker).
 export function findPasses(lookFn, sunAltFn, start, hours, opts = {}) {
+  return runSteps(findPassesSteps(lookFn, sunAltFn, start, hours, opts));
+}
+// The same search as a generator that pauses every PASS_STEPS_PER_PAUSE time steps, so a long search (days of an orbit) can be
+// spread over several tasks with runStepsAsync; findPasses runs it in one go. The result is the same either way.
+export const PASS_STEPS_PER_PAUSE = 240;
+export function* findPassesSteps(lookFn, sunAltFn, start, hours, opts = {}) {
   const step = (opts.stepSec || 30) * 1000;
   const minEl = opts.minEl ?? 10;
   const end = start.getTime() + hours * 3600000;
   const passes = [];
   let cur = null;
   let prevAbove = false;
+  let n = 0;
   for (let t = start.getTime(); t <= end; t += step) {
+    if (++n % PASS_STEPS_PER_PAUSE === 0) yield;
     const d = new Date(t);
     const look = lookFn(d);
     const above = look.el >= minEl;

@@ -3,6 +3,7 @@
 // test/calendar.test.js). Meteor shower dates come from the IMO table in tonight.js. Pure logic, no DOM.
 import * as Astro from "astronomy-engine";
 import { SHOWERS } from "./tonight.js";
+import { runSteps } from "./schedule.js";
 
 const DAY = 86400000;
 const PLANETS_NAKED_EYE = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn"];
@@ -85,8 +86,13 @@ export function solarEclipses(from, end, obs) {
 }
 
 export function planetEvents(from, end) {
+  return runSteps(planetEventsSteps(from, end));
+}
+// planetEvents as a generator that pauses after each planet, for spreading the work over several tasks
+export function* planetEventsSteps(from, end) {
   const out = [];
   for (const name of OPPOSITION_BODIES) {
+    yield;
     let t = Astro.SearchRelativeLongitude(name, 0, from);
     while (t.date < end) {
       const mag = Astro.Illumination(name, t).mag;
@@ -97,6 +103,7 @@ export function planetEvents(from, end) {
     }
   }
   for (const name of INFERIOR) {
+    yield;
     let e = Astro.SearchMaxElongation(name, from);
     while (e.time.date < end) {
       const evening = e.visibility === "evening";
@@ -105,18 +112,20 @@ export function planetEvents(from, end) {
       e = Astro.SearchMaxElongation(name, new Date(e.time.date.getTime() + DAY));
     }
   }
-  return out.concat(pairings(from, end));
+  return out.concat(yield* pairings(from, end));
 }
 
 // Close pairings of two naked-eye planets: a local minimum of their separation below the limit, with both well clear of the Sun.
-function pairings(from, end) {
+function* pairings(from, end) {
   const step = DAY / 4;
   const times = [];
   for (let t = from.getTime() - step; t <= end.getTime() + step; t += step) times.push(t);
-  const vec = Object.fromEntries(PLANETS_NAKED_EYE.map((b) => [b, times.map((t) => Astro.GeoVector(b, new Date(t), true))]));
+  const vec = {};
+  for (const b of PLANETS_NAKED_EYE) { vec[b] = times.map((t) => Astro.GeoVector(b, new Date(t), true)); yield; }
   const out = [];
   for (let i = 0; i < PLANETS_NAKED_EYE.length; i++) {
     for (let j = i + 1; j < PLANETS_NAKED_EYE.length; j++) {
+      yield;
       const a = PLANETS_NAKED_EYE[i], b = PLANETS_NAKED_EYE[j];
       const sep = times.map((_, k) => Astro.AngleBetween(vec[a][k], vec[b][k]));
       for (let k = 1; k < times.length - 1; k++) {
@@ -183,13 +192,21 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 export const KINDS = ["moon", "eclipse", "planet", "shower", "season"];
 
 // from: Date, days: how far ahead. Returns events sorted by time.
-export function skyCalendar({ lat, lon, from, days = 90 }) {
+export function skyCalendar(args) {
+  return runSteps(skyCalendarSteps(args));
+}
+// skyCalendar as a generator that pauses between its parts (and inside the planet searches); the events and their order are the same
+export function* skyCalendarSteps({ lat, lon, from, days = 90 }) {
   const start = new Date(from), end = new Date(start.getTime() + days * DAY);
   const obs = new Astro.Observer(lat, lon, 0);
-  const events = [
-    ...moonEvents(start, end), ...lunarEclipses(start, end, obs), ...solarEclipses(start, end, obs),
-    ...planetEvents(start, end), ...seasonEvents(start, end), ...showerEvents(start, end, lat),
-  ];
+  const events = [...moonEvents(start, end)];
+  yield;
+  events.push(...lunarEclipses(start, end, obs));
+  yield;
+  events.push(...solarEclipses(start, end, obs));
+  events.push(...(yield* planetEventsSteps(start, end)));
+  yield;
+  events.push(...seasonEvents(start, end), ...showerEvents(start, end, lat));
   events.sort((a, b) => a.time - b.time);
   return { from: start, to: end, events };
 }

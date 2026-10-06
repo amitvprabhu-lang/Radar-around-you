@@ -2,7 +2,8 @@
 // The globe swarm uses a faster simplified orbit that can be off by tens of kilometres; this module is used wherever
 // the answer is a time or a direction: passes, Starlink trains, "where do I look".
 import { json2satrec, propagate, gstime, eciToEcf } from "satellite.js";
-import { ecefLook, observerEcef, isSunlit, sunUnitVectorEci, findPasses, sunAltAz } from "./core.js";
+import { ecefLook, observerEcef, isSunlit, sunUnitVectorEci, findPassesSteps, sunAltAz } from "./core.js";
+import { runSteps } from "./schedule.js";
 
 // One compact row of precise.json to the record shape json2satrec expects.
 export function rowToOmm(cols, row) {
@@ -50,8 +51,12 @@ export function lookFrom(sat, date, lat, lon) {
 
 // Passes above minEl in the next `hours`. Each pass has rise, set, max, visible (lit and sky dark) and a track of samples.
 export function passesFor(sat, place, start, hours, opts = {}) {
+  return runSteps(passesForSteps(sat, place, start, hours, opts));
+}
+// passesFor as a generator that pauses now and then (see findPassesSteps), for spreading a long search over several tasks
+export function passesForSteps(sat, place, start, hours, opts = {}) {
   const look = (d) => lookFrom(sat, d, place.lat, place.lon) || { el: -90, az: 0, sunlit: false };
-  return findPasses(look, (d) => sunAltAz(place.lat, place.lon, d).alt, start, hours, { stepSec: 20, minEl: 10, ...opts });
+  return findPassesSteps(look, (d) => sunAltAz(place.lat, place.lon, d).alt, start, hours, { stepSec: 20, minEl: 10, ...opts });
 }
 
 export const elementAgeHours = (sat, date) => (date.getTime() - sat.epochMs) / 3600000;

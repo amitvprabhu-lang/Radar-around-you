@@ -9,18 +9,18 @@ import { createPanels } from "./panels.js";
 import * as C from "./core.js";
 import * as I from "./info.js";
 import { tonightPlan } from "./plan.js";
-import { buildTonight } from "./tonight.js";
+import { buildTonight, buildTonightAsync } from "./tonight.js";
 import { loadPrecise } from "./sgp4.js";
 import { loadFeedData, loadPlaces } from "./data.js";
 import { validCustomPlace, placeFromPosition, placeFromRecord } from "./places.js";
 import { parseHash, buildHash } from "./links.js";
 import { createWakeLock } from "./wake.js";
-import { skyCalendar, highlight } from "./calendar.js";
+import { skyCalendar, skyCalendarSteps, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
 import { soonCount } from "./launches.js";
 import { createLens, LENS_DEFAULT_FOV } from "./lens.js";
-import { makeYield, afterFirstPaint, createIdleQueue } from "./schedule.js";
+import { makeYield, afterFirstPaint, createIdleQueue, runStepsAsync } from "./schedule.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -128,11 +128,18 @@ async function main() {
   window.__lens = lens;
   // the sky calendar for the place: 90 days from the start of today, recomputed when the place or the day changes
   let calCache = { key: "", value: null };
+  const calendarArgs = () => { const day = Math.floor(nowDate().getTime() / 86400000); return { key: `${S.place.id}:${day}`, args: { lat: S.place.lat, lon: S.place.lon, from: new Date(day * 86400000), days: 90 } }; };
   function calendarModel() {
-    const day = Math.floor(nowDate().getTime() / 86400000);
-    const key = `${S.place.id}:${day}`;
-    if (calCache.key !== key) calCache = { key, value: skyCalendar({ lat: S.place.lat, lon: S.place.lon, from: new Date(day * 86400000), days: 90 }) };
+    const { key, args } = calendarArgs();
+    if (calCache.key !== key) calCache = { key, value: skyCalendar(args) };
     return calCache.value;
+  }
+  // the same calendar worked out in slices, so it can be ready before the first draw of the stats strip without one long task
+  async function warmCalendar() {
+    const { key, args } = calendarArgs();
+    if (calCache.key === key) return;
+    const value = await runStepsAsync(skyCalendarSteps(args), { yieldFn: yieldToMain });
+    if (calendarArgs().key === key) calCache = { key, value };
   }
   // live feed state, declared early because the first draw of the stats strip already asks for it (see "live feeds" below)
   let liveCtl = null, sumCache = { at: 0, value: null };
@@ -210,7 +217,7 @@ async function main() {
     sky.setPlace(S.place); orbit.setObserver(S.place);
     panels.closeSearch(); panels.closeSheet();
     S.guide = null; renderGuide();
-    renderPlaceChip(); renderStats(true); S._tonight = null; setTimeout(updateTonightBtn, 30);
+    renderPlaceChip(); renderStats(true); invalidateTonight(); setTimeout(updateTonightBtn, 30);
     if (S.view === "globe") orbit.flyTo(S.place.lat, S.place.lon, orbit.heroDist(), 2200);
     if (S.view === "under") enterUnder();
     panels.renderCard();
@@ -311,20 +318,41 @@ async function main() {
   }
 
   // ------------------------------------------------------------------ the Tonight plan
+  const tonightKeyNow = () => S.place.id + ":" + Math.floor(nowDate().getTime() / 600000);
+  const tonightArgs = () => ({ D, precise: S.precise, place: S.place, now: nowDate(), kp: I.kpAt(D.meta.kp, nowDate().getTime()) });
   function tonightModel(force = false) {
     if (!D.later || !S.precise.size) return { verdict: { level: "fair", score: 0, headline: "Working it out", sentence: "Orbit data is still loading." }, items: [], conditions: [], highlights: [], trains: [] };
-    const key = S.place.id + ":" + Math.floor(nowDate().getTime() / 600000);
+    const key = tonightKeyNow();
     if (!force && S.tonightKey === key && S._tonight) return S._tonight;
-    S._tonight = buildTonight({ D, precise: S.precise, place: S.place, now: nowDate(), kp: I.kpAt(D.meta.kp, nowDate().getTime()) });
+    S._tonight = buildTonight(tonightArgs());
     S.tonightKey = key;
+    tonightJob = null;  // a sliced build under way (below) is superseded by this one
     return S._tonight;
+  }
+  // The button's verdict is worked out in slices (buildTonightAsync: the same plan, about a second of work on a slow phone, spread
+  // over short tasks); tonightModel stays synchronous for the sheets that need the plan at once. A build under way is dropped when
+  // the place or the data change (invalidateTonight) or a new 10 minute slot starts, and a fresh one starts.
+  let tonightJob = null;
+  function invalidateTonight() { S._tonight = null; tonightJob = null; }
+  function paintTonightBtn(t) {
+    const b = $("tonightBtn");
+    b.dataset.level = t.verdict.level;
+    b.replaceChildren(icon("eye"), "Tonight: " + t.verdict.level);
   }
   function updateTonightBtn() {
     const b = $("tonightBtn");
     if (!b || !S.precise.size) return;
-    const t = tonightModel();
-    b.dataset.level = t.verdict.level;
-    b.replaceChildren(icon("eye"), "Tonight: " + t.verdict.level);
+    const key = tonightKeyNow();
+    if (S.tonightKey === key && S._tonight) { paintTonightBtn(S._tonight); return; }
+    if (tonightJob && tonightJob.key === key) return;
+    const job = { key };
+    tonightJob = job;
+    buildTonightAsync(tonightArgs(), { yieldFn: yieldToMain }).then((t) => {
+      if (tonightJob !== job) return;
+      tonightJob = null;
+      S._tonight = t; S.tonightKey = key;
+      paintTonightBtn(t);
+    }, () => { if (tonightJob === job) tonightJob = null; });
   }
 
   // ------------------------------------------------------------------ chrome: stats, chips, hud
@@ -825,7 +853,7 @@ async function main() {
   orbit.setObserver(S.place);
   orbit.setLayers(S.layers);
   sky.setLayers(S.layers);
-  await yieldToMain();
+  await warmCalendar();
   renderPlaceChip(); renderLayerChips(); renderStats(true); renderSkyHud(); updateChrome(); syncTabs();
   await yieldToMain();
   resize();
@@ -873,7 +901,7 @@ async function main() {
   const byTimeDesc = (a, b) => Date.parse(b.time) - Date.parse(a.time);
   function refreshDerived() {
     sumCache.at = 0;
-    S._tonight = null; S.statsKey = "";
+    invalidateTonight(); S.statsKey = "";
     renderStats(true);
     if (S.precise.size) updateTonightBtn();
   }

@@ -2,6 +2,7 @@
 // They spread out over days to weeks as the satellites climb to their final orbit, so only recent launches qualify.
 import { DEG, EARTH_RADIUS_KM, norm360, unpackDetails, launchDateFromDay, ageDays, sunAltAz, compassPoint } from "./core.js";
 import { eciAt, lookFrom } from "./sgp4.js";
+import { runSteps } from "./schedule.js";
 
 const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
@@ -94,12 +95,18 @@ export function findTrains(D, precise, now, opts = {}) {
 // at least 6 degrees below the horizon and at least minVisible members are above 10 degrees and in sunlight. Consecutive
 // moments make one event. A stretched string passes over in a stream, so each event reports how many are up at its busiest.
 export function trainEvents(train, precise, place, start, hours, opts = {}) {
+  return runSteps(trainEventsSteps(train, precise, place, start, hours, opts));
+}
+// trainEvents as a generator that pauses every 30 sampled minutes, for spreading the work over several tasks
+export function* trainEventsSteps(train, precise, place, start, hours, opts = {}) {
   const { minVisible = 3, minEl = 10, stepSec = 60 } = opts;
   const sats = train.memberIds.map((id) => precise.get(id)).filter(Boolean);
   const events = [];
   let cur = null;
   const end = start.getTime() + hours * 3600000;
+  let n = 0;
   for (let t = start.getTime(); t <= end; t += stepSec * 1000) {
+    if (++n % 30 === 0) yield;
     const d = new Date(t);
     let count = 0, best = null;
     if (sunAltAz(place.lat, place.lon, d).alt < -6) {

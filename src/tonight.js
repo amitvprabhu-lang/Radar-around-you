@@ -3,8 +3,9 @@
 import * as Astro from "astronomy-engine";
 import { clamp, sunAltAz, auroraFromGrid, compassPoint, bestWindow, googleCalendarUrl, raDecToAltAz, formatDuration } from "./core.js";
 import { hourSample, cloudAtHour } from "./plan.js";
-import { passesFor } from "./sgp4.js";
-import { findTrains, trainEvents } from "./trains.js";
+import { passesForSteps } from "./sgp4.js";
+import { findTrains, trainEventsSteps } from "./trains.js";
+import { runSteps, runStepsAsync } from "./schedule.js";
 
 const STATIONS = [
   { id: 25544, name: "International Space Station", short: "ISS" },
@@ -110,10 +111,13 @@ const firstCross = (track, up) => { for (let i = 1; i < track.length; i++) if ((
 
 
 // Items for the visible events of one Starlink string. Used by the Tonight plan and by the string sheet.
-export function trainItems({ train: tr, precise, place, from, hours, now, cloudThen = () => null, cloudNote = () => "", cloudFactor = () => 1, remind = null, limit = 3 }) {
+export function trainItems(args) {
+  return runSteps(trainItemsSteps(args));
+}
+export function* trainItemsSteps({ train: tr, precise, place, from, hours, now, cloudThen = () => null, cloudNote = () => "", cloudFactor = () => 1, remind = null, limit = 3 }) {
   const tz = place.tz;
   const mk = remind || ((title, start, end, details) => ({ title, start, end, details, url: googleCalendarUrl({ title, start, end, details, location: place.name }) }));
-  const events = trainEvents(tr, precise, place, from, hours).filter((e) => e.end > now).sort((a, b) => b.maxCount - a.maxCount).slice(0, limit).sort((a, b) => a.start - b.start);
+  const events = (yield* trainEventsSteps(tr, precise, place, from, hours)).filter((e) => e.end > now).sort((a, b) => b.maxCount - a.maxCount).slice(0, limit).sort((a, b) => a.start - b.start);
   return events.map((e) => ({
     id: `train-${tr.launchDay}-${e.start.getTime()}`, kind: "train", tag: "TRAIN", title: `Starlink string of ${tr.count}`, time: e.peak, start: e.start, end: e.end,
     detail: `Up to ${e.maxCount} satellites at once, seen from the ${e.riseCompass} to the ${e.setCompass}, highest ${Math.round(e.maxEl)}° in the ${e.peakCompass} around ${fmtHm(e.peak, tz)}. Launched ${fmtDay(tr.launchDate, "UTC")}${tr.shape === "stretched" ? ", already stretched into a long string" : ""}.${cloudNote(e.peak)}`,
@@ -123,7 +127,16 @@ export function trainItems({ train: tr, precise, place, from, hours, now, cloudT
   }));
 }
 
-export function buildTonight({ D, precise, place, now, kp = null }) {
+export function buildTonight(args) {
+  return runSteps(buildTonightSteps(args));
+}
+// The same plan worked out in slices: the result is identical, but the work (about a second on a slow phone, mostly satellite
+// passes) is spread over tasks that each stop after budgetMs, so the page stays responsive. opts go to runStepsAsync.
+export function buildTonightAsync(args, opts) {
+  return runStepsAsync(buildTonightSteps(args), opts);
+}
+// buildTonight as a generator: it pauses between its parts and inside the long pass searches
+export function* buildTonightSteps({ D, precise, place, now, kp = null }) {
   const tz = place.tz;
   const win = darkWindow(place, now);
   const aur = auroraFromGrid(D.aurora, place.lat, place.lon, 1100);
@@ -143,7 +156,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
   const first = new Date(Math.ceil(win.start.getTime() / 3600000) * 3600000);
   const obs = new Astro.Observer(place.lat, place.lon, 0);
   const hours = [];
-  for (let t = first.getTime(); t < win.end.getTime(); t += 3600000) hours.push(hourSample(place, new Date(t), aur.chance, obs));
+  for (let t = first.getTime(); t < win.end.getTime(); t += 3600000) { hours.push(hourSample(place, new Date(t), aur.chance, obs)); yield; }
   const { scored, best } = bestWindow(hours);
   out.hours = hours; out.scored = scored; out.best = best;
   const known = hours.filter((h) => h.cloudKnown);
@@ -152,6 +165,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
   const cloudAvg = known.length ? Math.round(known.reduce((s, h) => s + h.cloud, 0) / known.length) : null;
   out.cloud = { known: known.length > 0, avg: cloudAvg, bestWindowAvg: bestCloud, min: known.length ? Math.round(Math.min(...known.map((h) => h.cloud))) : null, max: known.length ? Math.round(Math.max(...known.map((h) => h.cloud))) : null };
   const moonTrack = bodyTrack(Astro.Body.Moon, place, win, 20);
+  yield;
   const moonFrac = hours.length ? hours[0].moonFrac : Astro.Illumination(Astro.Body.Moon, win.start).phase_fraction;
   const moonUpAtStart = moonTrack[0].alt > 0;
   const moonSet = firstCross(moonTrack, false), moonRise = firstCross(moonTrack, true);
@@ -176,7 +190,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
     const sat = precise.get(st.id);
     if (!sat) continue;
     const idx = idxById.get(st.id);
-    const passes = passesFor(sat, place, win.start, winHours, { minEl: 10 })
+    const passes = (yield* passesForSteps(sat, place, win.start, winHours, { minEl: 10 }))
       .map((p) => ({ p, v: visiblePart(p) })).filter((x) => x.v && x.v.best.el >= 15 && x.p.set > now);
     passes.sort((a, b) => b.v.best.el - a.v.best.el);
     const chosen = passes.slice(0, 3).sort((a, b) => a.v.first.time - b.v.first.time);
@@ -192,7 +206,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
       });
     }
     if (!chosen.length && st.id === 25544) {
-      const later = passesFor(sat, place, now, 24 * 10, { minEl: 10 }).map((p) => ({ p, v: visiblePart(p) })).filter((x) => x.v && x.v.best.el >= 15);
+      const later = (yield* passesForSteps(sat, place, now, 24 * 10, { minEl: 10 })).map((p) => ({ p, v: visiblePart(p) })).filter((x) => x.v && x.v.best.el >= 15);
       const nx = later[0] ? { max: { time: later[0].v.best.time, el: later[0].v.best.el, az: later[0].v.best.az }, rise: later[0].v.first.time } : null;
       out.conditions.push({
         id: "iss-next", kind: "note", title: "No visible ISS pass tonight",
@@ -205,7 +219,8 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
   // ---- Starlink strings
   const trains = findTrains(D, precise, now);
   out.trains = trains;
-  for (const tr of trains) out.items.push(...trainItems({ train: tr, precise, place, from: win.start, hours: winHours, now, cloudThen, cloudNote, cloudFactor, remind, limit: 2 }));
+  yield;
+  for (const tr of trains) out.items.push(...(yield* trainItemsSteps({ train: tr, precise, place, from: win.start, hours: winHours, now, cloudThen, cloudNote, cloudFactor, remind, limit: 2 })));
 
   // ---- aurora
   const kpList = (D.meta.kp || []).filter((k) => { const t = Date.parse(k.t + "Z"); return t >= win.start.getTime() - 3 * 3600000 && t <= win.end.getTime(); });
@@ -222,6 +237,7 @@ export function buildTonight({ D, precise, place, now, kp = null }) {
 
   // ---- planets
   for (const name of PLANETS) {
+    yield;
     const body = Astro.Body[name];
     const tr = bodyTrack(body, place, win, 20);
     const peak = tr.reduce((a, b) => (b.alt > a.alt ? b : a));
