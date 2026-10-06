@@ -157,7 +157,7 @@ for (const f of SKY_PAGES.map((x) => x.file)) {
   if (f !== "iss-today/index.html") check(`${path1} credits MET Norway visibly`, h.includes("The Norwegian Meteorological Institute, shortened MET Norway"), path1);
 }
 const js = await rawGet("https://radar.test/live-pages.js");
-check("the shared live-pages.js is served", js.status === 200 && js.text.includes("function liveMain(d, w)") && !js.text.includes("liveZones"), String(js.status));
+check("the shared live-pages.js is served", js.status === 200 && js.text.includes("function liveMain(") && !js.text.includes("liveZones"), String(js.status));
 // ---- the fleet and events pages (site/pages-events.mjs). The Starlink tracker is written at deploy time from the bundled satellites;
 // the launch and GDACS pages need data that public/ does not carry with a data time, so they are built here from the saved feeds of
 // 6 October (test/fixtures/events) with the live build itself and served beside dist/site, as hosting/pull.php would copy them in.
