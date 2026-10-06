@@ -109,8 +109,11 @@ export function overlayCities(cities, clouds, planes) {
   return changed;
 }
 
-// Whether the app should ask for the manifest again a few seconds after it starts: only when it started without one.
-export const needsEarlyPoll = (manifest) => !manifest;
+// Whether the app should ask for the manifest again a few seconds after it starts: when it started without one, or when some live
+// files failed at start (they fell back to the snapshot), so those feeds are tried again soon instead of at the next interval.
+// A manifest served from a stale cache cannot be told apart here (the service worker asks the network first for /live/ and falls
+// back to its copy only when the network fails, so the copy's feeds then usually fail too and land in fellBack).
+export const needsEarlyPoll = (manifest, fellBack = []) => !manifest || (Array.isArray(fellBack) && fellBack.length > 0);
 
 export function pollDelayMs(manifest, failures) {
   const base = Math.min(3600, Math.max(60, (manifest && manifest.pollSec) || 300)) * 1000;

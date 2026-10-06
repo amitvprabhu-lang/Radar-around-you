@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSoftwareRenderer, rendererName, decideLowPower, createDrawGate, SLOW_FRAME_MS, FRAME_SAMPLES, IDLE_DRAW_MS, TICK_MS, AWAKE_MS } from "../src/power.js";
+import { isSoftwareRenderer, rendererName, decideLowPower, createDrawGate, keepsDrawing, replayMoving, IDLE_DRAW_MS, TICK_MS, AWAKE_MS } from "../src/power.js";
 import { needsEarlyPoll } from "../src/live.js";
 
 test("software renderers are recognised by name, real graphics cards are not", () => {
@@ -13,26 +13,55 @@ test("software renderers are recognised by name, real graphics cards are not", (
   }
 });
 
-test("rendererName prefers the unmasked name, falls back to RENDERER, and never throws", () => {
-  const gl = (ext, unmasked, plain) => ({ RENDERER: 0x1f01, getExtension: (e) => (e === "WEBGL_debug_renderer_info" && ext ? { UNMASKED_RENDERER_WEBGL: 0x9246 } : null), getParameter: (p) => (p === 0x9246 ? unmasked : p === 0x1f01 ? plain : null) });
-  assert.equal(rendererName(gl(true, "SwiftShader Device", "WebKit WebGL")), "SwiftShader Device");
-  assert.equal(rendererName(gl(false, null, "WebKit WebGL")), "WebKit WebGL");
-  assert.equal(rendererName({ getExtension() { throw new Error("lost"); } }), "");
+// The software names the mode answers to, pinned: a change to the list must change this test.
+const SOFTWARE_NAMES = [
+  "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+  "Google SwiftShader", "llvmpipe (LLVM 15.0.7, 256 bits)", "softpipe", "Microsoft Basic Render Driver",
+  "ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0, D3D11)", "Some Software Rasterizer",
+];
+const GPU_NAMES = ["ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)", "Adreno (TM) 640", "Mali-G78", "Apple GPU", "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)", "NVIDIA GeForce RTX 3060/PCIe/SSE2"];
+
+test("rendererName reads RENDERER first and asks the debug extension only for the masked placeholder", () => {
+  const gl = ({ plain, ext = true, unmasked = null, asked = [] }) => ({ RENDERER: 0x1f01, asked, getExtension: (e) => { asked.push(e); return e === "WEBGL_debug_renderer_info" && ext ? { UNMASKED_RENDERER_WEBGL: 0x9246 } : null; }, getParameter: (p) => (p === 0x9246 ? unmasked : p === 0x1f01 ? plain : null) });
+  // Firefox gives the real name in RENDERER and warns about the extension: it must not be asked
+  const ff = gl({ plain: "llvmpipe (LLVM 15)", unmasked: "x" });
+  assert.equal(rendererName(ff), "llvmpipe (LLVM 15)");
+  assert.deepEqual(ff.asked, []);
+  // Chrome and Safari mask RENDERER: the extension gives the real name
+  assert.equal(rendererName(gl({ plain: "WebKit WebGL", unmasked: "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))" })), "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))");
+  // no extension, or a masked answer: the placeholder comes back, which means full speed
+  assert.equal(rendererName(gl({ plain: "WebKit WebGL", ext: false })), "WebKit WebGL");
+  assert.equal(rendererName(gl({ plain: "WebKit WebGL", unmasked: "" })), "WebKit WebGL");
+  assert.equal(rendererName({ getParameter() { throw new Error("lost"); }, getExtension() { throw new Error("lost"); } }), "");
 });
 
-test("the decision: a software name decides at once; otherwise it waits for the frames and goes by their median", () => {
-  assert.deepEqual(decideLowPower({ renderer: "Google SwiftShader" }), { on: true, reason: "software renderer (Google SwiftShader)" });
-  assert.equal(decideLowPower({ renderer: "Apple GPU", frameTimes: [16, 17] }), null, "not enough frames yet");
-  assert.equal(decideLowPower({ renderer: "Apple GPU", frameTimes: Array(FRAME_SAMPLES).fill(16.7) }).on, false);
-  assert.equal(decideLowPower({ renderer: "Apple GPU", frameTimes: Array(FRAME_SAMPLES).fill(400) }).on, true);
-  // the median, so one or two slow frames (a hitch while loading) do not switch it on
-  const mostlyFast = [16, 17, 16, 900, 1200, 16, 17, 16];
-  assert.equal(decideLowPower({ frameTimes: mostlyFast }).on, false);
-  const mostlySlow = [16, 300, 320, 900, 1200, 16, 250, 400];
-  assert.equal(decideLowPower({ frameTimes: mostlySlow }).on, true);
-  // the threshold is exclusive and only the first samples count
-  assert.equal(decideLowPower({ frameTimes: Array(FRAME_SAMPLES).fill(SLOW_FRAME_MS) }).on, false);
-  assert.equal(decideLowPower({ frameTimes: [...Array(FRAME_SAMPLES).fill(20), ...Array(50).fill(5000)] }).on, false);
+test("low power only for software renderer names; every GPU, unknown, masked or missing name means full speed", () => {
+  for (const n of SOFTWARE_NAMES) assert.deepEqual(decideLowPower({ renderer: n }), { on: true, reason: `software renderer (${n})` }, n);
+  for (const n of [...GPU_NAMES, "WebKit WebGL", "Mozilla", "", "something new"]) assert.equal(decideLowPower({ renderer: n }).on, false, n);
+  assert.equal(decideLowPower().on, false, "no name at all");
+  assert.equal(decideLowPower({}).reason, "renderer not named: full speed");
+  // frame times are not an input any more: slow frames on a GPU never switch it on
+  assert.equal(decideLowPower({ renderer: "Mali-G78", frameTimes: Array(20).fill(900) }).on, false);
+});
+
+test("the renderer-name list itself", () => {
+  for (const n of SOFTWARE_NAMES) assert.equal(isSoftwareRenderer(n), true, n);
+  for (const n of [...GPU_NAMES, "", null, undefined, 42]) assert.equal(isSoftwareRenderer(n), false, String(n));
+});
+
+test("keep drawing while something moves by itself, and not otherwise", () => {
+  assert.equal(keepsDrawing({}), false);
+  for (const k of ["timeSpedUp", "lens", "sensor", "pointerDown", "following", "cameraMoving", "skyTurning", "globeReplay", "underReplay"]) assert.equal(keepsDrawing({ [k]: true }), true, k);
+});
+
+test("a quake replay moves until it is paused or a live replay has reached its end", () => {
+  assert.equal(replayMoving({ tau: 10, maxTau: 1700, live: false, paused: false }), true);
+  assert.equal(replayMoving({ tau: 10, maxTau: 1700, live: false, paused: true }), false, "paused");
+  assert.equal(replayMoving({ tau: 1700, maxTau: 1700, live: true, paused: false }), false, "a live replay waiting at its end");
+  assert.equal(replayMoving({ tau: 300, maxTau: 1700, live: true, paused: false }), true, "a live replay under way");
+  assert.equal(replayMoving({ tau: 1700, maxTau: 1700, live: false, paused: false }), true, "a past quake's replay loops");
+  assert.equal(replayMoving(null), false);
 });
 
 test("off (full speed): every frame draws and none waits", () => {
@@ -78,10 +107,12 @@ test("the gate can be switched on later (a slow frame rate measured after start)
   assert.ok(g.nextDelay(100) > 0);
 });
 
-test("the early manifest poll happens only when the app started without a manifest", () => {
+test("the early manifest poll happens when the app started without a manifest or with feeds that fell back", () => {
   assert.equal(needsEarlyPoll(null), true);
   assert.equal(needsEarlyPoll(undefined), true);
-  assert.equal(needsEarlyPoll({ generatedAt: "2026-10-06T04:50:20Z" }), false, "an old manifest fetched seconds ago is not asked for again at once");
+  assert.equal(needsEarlyPoll({ generatedAt: "2026-10-06T04:50:20Z" }), false, "a complete manifest fetched seconds ago is not asked for again at once");
+  assert.equal(needsEarlyPoll({ generatedAt: "2026-10-06T04:50:20Z" }, []), false);
+  assert.equal(needsEarlyPoll({ generatedAt: "2026-10-06T04:50:20Z" }, ["quakes"]), true, "a feed that failed at start is retried soon");
 });
 
 test("a single draw request draws the next frame once, without waking continuous drawing", () => {

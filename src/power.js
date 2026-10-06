@@ -1,34 +1,42 @@
 // Low-power drawing for devices whose WebGL runs in software (no graphics card, or one the browser will not use).
 // There every frame costs about a second of processor time, so the app draws on demand: at once and continuously for a few seconds
 // after any input, view change, data change or camera move, and otherwise one frame every few seconds. The page then goes idle
-// between frames. The choice depends only on what the device measures: the renderer's own name, or slow frames. Pure logic here;
-// main.js wires it to the frame loop. Everything takes its inputs as arguments, so the tests drive it without a browser.
+// between frames. The choice depends only on the renderer's own name, read once when the WebGL context is made: a real graphics
+// card always runs at full speed, and so does any renderer whose name is hidden or unknown. Pure logic here; main.js wires it to
+// the frame loop. Everything takes its inputs as arguments, so the tests drive it without a browser.
 
 // Renderer names that mean software drawing: Chrome's SwiftShader, Mesa's llvmpipe and softpipe, Windows' Microsoft Basic Render
 // Driver, and any that says Software.
 const SOFTWARE = /swiftshader|llvmpipe|softpipe|software|basic render/i;
 export const isSoftwareRenderer = (name) => typeof name === "string" && SOFTWARE.test(name);
 
-// The renderer's name: the unmasked one where the browser gives it, else the plain RENDERER string. Never throws.
+// The names Chrome and Safari give in RENDERER when they hide the real one; only then is the debug extension asked.
+const MASKED = /^(webkit webgl|mozilla|)$/i;
+
+// The renderer's name. RENDERER is read first: Firefox already gives the real name there and warns that the debug extension is
+// deprecated, so the extension is asked only when RENDERER is the masked placeholder. A masked or missing name comes back as is (and
+// then means full speed). Never throws.
 export function rendererName(gl) {
+  let plain = "";
+  try { plain = String(gl.getParameter(gl.RENDERER) || ""); } catch { /* lost context: unknown */ }
+  if (!MASKED.test(plain.trim())) return plain;
   try {
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
     const unmasked = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null;
-    return String(unmasked || gl.getParameter(gl.RENDERER) || "");
-  } catch { return ""; }
+    return unmasked ? String(unmasked) : plain;
+  } catch { return plain; }
 }
 
-export const SLOW_FRAME_MS = 100;  // a median frame slower than this (under 10 frames a second) counts as slow
-export const FRAME_SAMPLES = 8;    // frames measured before deciding on speed alone
+// The decision, once: low power only for a software renderer; any other name, a masked one or none means full speed.
+export function decideLowPower({ renderer = "" } = {}) {
+  return isSoftwareRenderer(renderer) ? { on: true, reason: `software renderer (${renderer})` } : { on: false, reason: renderer ? `graphics card (${renderer})` : "renderer not named: full speed" };
+}
 
-const median = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-
-// The decision. Returns { on, reason } once it can say, or null while it still needs frames.
-export function decideLowPower({ renderer = "", frameTimes = [], slowMs = SLOW_FRAME_MS, samples = FRAME_SAMPLES } = {}) {
-  if (isSoftwareRenderer(renderer)) return { on: true, reason: `software renderer (${renderer})` };
-  if (frameTimes.length < samples) return null;
-  const m = median(frameTimes.slice(0, samples));
-  return m > slowMs ? { on: true, reason: `slow frames (median ${Math.round(m)} ms)` } : { on: false, reason: `frames fast enough (median ${Math.round(m)} ms)` };
+// Whether a quake replay is still moving: not paused, and not a live replay that has reached its end and stopped there.
+export const replayMoving = (r) => !!r && !r.paused && !(r.live && r.tau >= r.maxTau);
+// Whether something on screen moves by itself, so low-power drawing must stay continuous.
+export function keepsDrawing(s) {
+  return !!(s.timeSpedUp || s.lens || s.sensor || s.pointerDown || s.following || s.cameraMoving || s.skyTurning || s.globeReplay || s.underReplay);
 }
 
 export const IDLE_DRAW_MS = 3000;   // one frame this often when nothing happens

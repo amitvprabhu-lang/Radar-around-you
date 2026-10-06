@@ -91,14 +91,14 @@ async function suite(label, viewport, mobile) {
     // Low-power drawing (src/power.js): this harness renders with SwiftShader, so the app must have chosen it from the renderer's name,
     // go idle when nothing happens (a draw every few seconds, the text still ticking every second) and wake at once on a pointer event.
     const lp0 = await R(p, () => window.__radar.lowPower());
-    check(L("low-power drawing is on for the software renderer"), lp0.on && /software renderer/.test(lp0.reason) && /swiftshader/i.test(lp0.renderer), JSON.stringify(lp0));
+    check(L("low-power drawing is on for the software renderer, with one pixel per CSS pixel"), lp0.on && /software renderer/.test(lp0.reason) && /swiftshader/i.test(lp0.renderer) && lp0.pixelRatio === 1, JSON.stringify(lp0));
     await p.waitForFunction(() => !window.__radar.lowPower().awake, null, { timeout: 30000 }).catch(() => {});
     const idle = await R(p, async () => {
-      const r = window.__radar, d0 = r.lowPower().draws, f0 = r.S.frames, awake0 = r.lowPower().awake;
+      const r = window.__radar, d0 = r.lowPower().draws, f0 = r.S.ticks, awake0 = r.lowPower().awake;
       await new Promise((res) => setTimeout(res, 7000));
-      return { awake0, draws: r.lowPower().draws - d0, frames: r.S.frames - f0 };
+      return { awake0, draws: r.lowPower().draws - d0, ticks: r.S.ticks - f0 };
     });
-    check(L("with no input the loop goes idle: at most 3 draws in 7 s, and the clock text still ticks"), !idle.awake0 && idle.draws <= 3 && idle.frames >= 4, JSON.stringify(idle));
+    check(L("with no input the loop goes idle: at most 3 draws in 7 s, and the clock text still ticks"), !idle.awake0 && idle.draws <= 3 && idle.ticks >= 4, JSON.stringify(idle));
     const box = await p.locator("#gl").boundingBox();
     const d1 = await R(p, () => window.__radar.lowPower().draws);
     await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -645,6 +645,33 @@ async function suite(label, viewport, mobile) {
   await site.p.evaluate(() => { const s = document.querySelector("#sheet .guidelinks"); s && s.scrollIntoView(); }); await site.p.waitForTimeout(300);
   await shot(site.p, "about-guides");
   await site.p.context().close();
+}
+// ---- full-speed drawing: this harness renders with SwiftShader, so every other page here runs in low-power mode. Here the renderer's
+// name is made to read like a graphics card's (an init script answers the debug extension's question), so the app must choose full
+// speed: no low power, the tier's pixel ratio, and frames drawn one after another with no input.
+{
+  const { p } = await openPage(browser, "dist/radar-snapshot.html", { viewport: { width: 390, height: 780 }, mobile: true, label: "full speed", errors });
+  await p.addInitScript(() => {
+    for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+      if (!C) continue;
+      const get = C.prototype.getParameter;
+      C.prototype.getParameter = function (pname) { return pname === 0x9246 ? "ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)" : get.call(this, pname); };
+    }
+  });
+  await p.goto("https://radar.test/", { waitUntil: "commit" });
+  await p.waitForFunction(() => window.__radarStarted === true, null, { timeout: 120000 });
+  await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 });
+  await p.waitForTimeout(6000);  // past the 4 s of continuous drawing that also low power gives at the start
+  const fs = await p.evaluate(async () => {
+    const r = window.__radar, lp = r.lowPower(), d0 = r.S.frames, t0 = performance.now();
+    await new Promise((res) => setTimeout(res, 6000));
+    return { lp, drawn: r.S.frames - d0, secs: (performance.now() - t0) / 1000, dpr: window.devicePixelRatio };
+  });
+  check("full speed: a graphics card's name keeps low-power drawing off", !fs.lp.on && /graphics card/.test(fs.lp.reason), JSON.stringify(fs.lp));
+  check("full speed: the pixel ratio is the tier's, not the low-power 1", fs.lp.pixelRatio > 1 && fs.lp.pixelRatio <= fs.dpr, `${fs.lp.pixelRatio} at devicePixelRatio ${fs.dpr}`);
+  // low power with no input would draw at most 2 frames in 6 s; the software renderer manages about 2 or more a second at full speed
+  check("full speed: frames keep being drawn with no input", fs.drawn >= 6, `${fs.drawn} frames in ${fs.secs.toFixed(1)} s`);
+  await p.context().close();
 }
 await suite("phone", { width: 390, height: 780 }, true);
 await suite("desktop", { width: 1280, height: 800 }, false);

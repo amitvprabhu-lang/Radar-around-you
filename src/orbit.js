@@ -573,6 +573,8 @@ export function createOrbit(ctx) {
     cam.lon += dLon / DEG; cam.lat = clamp(cam.lat + dLat / DEG, -85, 85);
     if (dt > 0) { vel.lon = dLon / DEG / dt; vel.lat = dLat / DEG / dt; }
   };
+  // a camera flight or the glide after a drag is under way (the loop keeps drawing until it ends)
+  api.isMoving = () => !!blend || Math.abs(vel.lon) > 0.02 || Math.abs(vel.lat) > 0.02;
   api.dragEnd = () => { vel.lon = clamp(vel.lon, -240, 240); vel.lat = clamp(vel.lat, -160, 160); };
   api.zoom = (factor) => {
     blend = null;
