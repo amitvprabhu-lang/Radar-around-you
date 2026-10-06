@@ -53,7 +53,7 @@ export function homeLiveHtml(pages = LIVE_PAGES) {
 <dl>
 ${figures}
 </dl>
-<p class="home-strip-note">These figures load from the site's live data in your browser; the same numbers are on ${a(RIGHT_NOW_FILE, "/right-now/")} as plain HTML.</p>
+<p class="home-strip-note">These figures load from the site's live data in your browser.</p>
 <p class="home-strip-status" aria-live="polite"></p>
 </div>
 <p>Each page below is rebuilt when its own feed has new data and states the time of its own data. When a feed is too old or fails a check, the page keeps its previous copy.</p>

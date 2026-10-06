@@ -848,8 +848,8 @@ test("the strip is in the HTML with its labels, a dash for every value, where th
   const home = homePage(), sec = sectionOf(home);
   const strip = sec.match(/<div id="home-strip" class="home-strip">[\s\S]*?<\/div>\n<p>/)[0];
   for (const [k, label] of STRIP_FIGURES) assert.ok(strip.includes(`<dt>${label}</dt><dd data-fig="${k}">-</dd>`), k);
-  assert.ok(textOf(strip).replace(/\s+/g, " ").includes("These figures load from the site's live data in your browser; the same numbers are on /right-now/ as plain HTML."));
-  assert.ok(strip.includes('<a href="right-now/">/right-now/</a>'));
+  assert.ok(textOf(strip).replace(/\s+/g, " ").includes("These figures load from the site's live data in your browser."));
+  assert.ok(!strip.includes("plain HTML"), "the note no longer sends readers to /right-now/ (owner's request, 2026-10-06)");
   assert.ok(strip.includes('<p class="home-strip-status" aria-live="polite"></p>'), "the status line is empty until the script fills it");
   // the strip sits above the live pages row, inside the section
   assert.ok(sec.indexOf('id="home-strip"') < sec.indexOf('class="home-live-links"'));
