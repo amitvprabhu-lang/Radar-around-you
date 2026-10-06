@@ -537,7 +537,7 @@ export function routeProgress(plane, airports) {
 
 // ---------- Search ----------
 
-export const normalizeText = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9. ]+/g, " ").replace(/\s+/g, " ").trim();
+export const normalizeText = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9. ]+/g, " ").replace(/\s+/g, " ").trim();
 
 // Aliases so people can type what they know. Values are matched as extra search text.
 export const SATELLITE_ALIASES = {

@@ -10,7 +10,7 @@ import vm from "node:vm";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { assemble, buildApp, appScriptName, appScriptOf, appLoadGuard, APP_GUARD_SCRIPT, APP_SCRIPT_RE, APP_SLOW_MS, appScriptTag } from "../build.mjs";
+import { assemble, buildApp, appScriptName, appScriptOf, appLoadGuard, appGuardScript, APP_SCRIPT_RE, APP_SLOW_MS, SW_CACHE, appScriptTag } from "../build.mjs";
 import { wrapApp, asDocument, build as buildSite } from "../site/build.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -41,35 +41,39 @@ test("the external page names app.<first 10 hex of the bundle's sha256>.js in it
   const h = r.html;
   assert.ok(!h.includes(FAKE_JS) && !h.includes("__APP__") && !h.includes("<script>__APP__</script>"));
   assert.equal(appScriptOf(h), r.script.file);
-  const tag = `<script src="${r.script.file}" defer onload="__radarLoad.ok()" onerror="__radarLoad.fail()"></script>`;
+  const tag = `<script src="${r.script.file}" defer onload="__radarLoad.ok(0)" onerror="__radarLoad.fail(0)"></script>`;
   assert.equal(appScriptTag(r.script.file), tag);
   assert.equal(h.split(tag).length - 1, 1);
   // in the head part of the fragment: after the lead links, before the template's <style>, the loader and #app; the guard first
   const at = (s) => h.indexOf(s);
   assert.ok(at('<link rel="manifest"') < at('<script id="app-guard">') && at('<script id="app-guard">') < at(tag) && at(tag) < at("<style>") && at("<style>") < at('<div id="app"') && at('<div id="app"') < at('<div id="loader"'));
   // everything else of the template is unchanged: removing the two tags and putting the inline script back gives the inline page
-  const back = h.replace(APP_GUARD_SCRIPT + "\n" + tag + "\n", "").replace(/<\/noscript>\n$/, `</noscript>\n<script>${FAKE_JS.replace(/<\/script/gi, "<\\/script")}</script>\n`);
+  const back = h.replace(appGuardScript(r.script.file) + "\n" + tag + "\n", "").replace(/<\/noscript>\n$/, `</noscript>\n<script>${FAKE_JS.replace(/<\/script/gi, "<\\/script")}</script>\n`);
   assert.equal(back, oldRecipe(TEMPLATE, FAKE_JS));
   assert.ok(h.endsWith("</noscript>\n"), "the page still ends with the font noscript block and a newline");
   assert.throws(() => assemble("<title>x</title><div id=\"app\"></div>", FAKE_JS, { external: true }), /needs <style> and a <script>__APP__<\/script>/);
 });
 
-test("the guard script is small, safe and has nothing that could end the element early or load anything", () => {
-  assert.ok(APP_GUARD_SCRIPT.length < 2200, `${APP_GUARD_SCRIPT.length} characters`);
-  const body = APP_GUARD_SCRIPT.slice('<script id="app-guard">'.length, -"</script>".length);
+test("the guard script is small, safe and has nothing that could end the element early or write HTML", () => {
+  const G = appGuardScript("app.0123456789.js");
+  assert.ok(G.length < 3200, `${G.length} characters`);
+  const body = G.slice('<script id="app-guard">'.length, -"</script>".length);
   assert.ok(!/<\/script|<!--/i.test(body));
-  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|import\(|fetch\(|src=/.test(body), "only textContent and DOM nodes");
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|import\(|fetch\(/.test(body), "only textContent and DOM nodes");
+  assert.ok(body.includes('"app.0123456789.js", "radar-v1", 30000)'), "called with its file, the worker's cache name and 30 s");
   assert.equal(APP_SLOW_MS, 30000);
-  // it is plain JavaScript a browser runs: parse it
-  assert.doesNotThrow(() => new vm.Script(body));
+  assert.doesNotThrow(() => new vm.Script(body), "plain JavaScript a browser runs");
+  // the cache name is the service worker's
+  assert.equal(SW_CACHE, fs.readFileSync(path.join(root, "public/sw.js"), "utf8").match(/const VERSION = "([^"]+)"/)[1]);
 });
 
-// a tiny pretend DOM, enough for the guard: elements with ids, children, textContent, and a document that can be "loading"
-function fakeDom({ loader = true, readyState = "interactive" } = {}) {
-  const byId = new Map(), listeners = {}, timers = [];
+// a tiny pretend browser, enough for the guard: elements with ids, children, textContent, a head that takes scripts, a document that
+// can be "loading", window error listeners, timers and the service worker's caches
+function fakeDom({ loader = true, readyState = "interactive", caches = true } = {}) {
+  const byId = new Map(), listeners = {}, winListeners = {}, timers = [], scripts = [], deleted = [];
   const el = (tag) => {
-    const e = { tagName: tag.toUpperCase(), children: [], _text: "", id: "", href: "", onclick: null,
-      appendChild(c) { this.children.push(c); if (c.id) byId.set(c.id, c); for (const d of c.all ? c.all() : []) if (d.id) byId.set(d.id, d); return c; },
+    const e = { tagName: tag.toUpperCase(), children: [], _text: "", id: "", href: "", src: "", onclick: null,
+      appendChild(c) { this.children.push(c); if (c.id) byId.set(c.id, c); for (const d of c.all ? c.all() : []) if (d.id) byId.set(d.id, d); if (c.tagName === "SCRIPT") scripts.push(c); return c; },
       replaceChildren(...cs) { for (const c of this.children) if (c.id) byId.delete(c.id); this.children = []; this._text = ""; cs.forEach((c) => this.appendChild(c)); },
       all() { return this.children.flatMap((c) => (c.all ? [c, ...c.all()] : [])); },
       get textContent() { return this._text + this.children.map((c) => c.textContent).join(""); },
@@ -77,56 +81,98 @@ function fakeDom({ loader = true, readyState = "interactive" } = {}) {
     };
     return e;
   };
-  const doc = { readyState, createElement: el, createTextNode: (t) => ({ textContent: t }), getElementById: (id) => byId.get(id) || null,
+  const doc = { readyState, head: el("head"), createElement: el, createTextNode: (t) => ({ textContent: t }), getElementById: (id) => byId.get(id) || null,
     addEventListener: (t, f) => { (listeners[t] ||= []).push(f); } };
   if (loader) {
     const l = el("div"); l.id = "loader"; byId.set("loader", l);
     const small = el("small"); small.id = "loadText"; small.textContent = "Starting up"; l.appendChild(small);
   }
   const win = { location: { href: "https://radar.test/#sky", reloads: 0, reload() { this.reloads++; } },
+    addEventListener: (t, f) => { (winListeners[t] ||= []).push(f); },
     setTimeout: (f, ms) => { timers.push({ f, ms, live: true }); return timers.length - 1; }, clearTimeout: (i) => { if (timers[i]) timers[i].live = false; } };
-  return { doc, win, timers, listeners, run: () => timers.filter((t) => t.live).forEach((t) => { t.live = false; t.f(); }) };
+  if (caches) win.caches = { open: async (name) => ({ delete: async (url) => { deleted.push([name, url]); return true; } }) };
+  const scriptError = (filename) => (winListeners.error || []).forEach((f) => f({ filename }));
+  return { doc, win, timers, listeners, scripts, deleted, scriptError, run: () => timers.filter((t) => t.live).forEach((t) => { t.live = false; t.f(); }) };
 }
 const findTag = (e, tag) => (e.children || []).flatMap((c) => [...(c.tagName === tag ? [c] : []), ...findTag(c, tag)]);
+const FILE = "app.0123456789.js";
+const guard = (d) => appLoadGuard(d.win, d.doc, FILE, SW_CACHE, APP_SLOW_MS);
+const tick = () => new Promise((r) => setTimeout(r, 0));
 
-test("guard: a failed download replaces the loader with a message and a reload link in #nogl", () => {
+test("guard: a first failure clears the worker's copy and retries once with ?r=<time>; a working retry leaves the loader alone", async () => {
   const d = fakeDom();
-  const g = appLoadGuard(d.win, d.doc, APP_SLOW_MS);
-  assert.equal(d.timers[0].ms, APP_SLOW_MS);
-  g.fail();
+  const g = guard(d);
+  g.fail(0);
+  await tick();
+  assert.deepEqual(d.deleted, [[SW_CACHE, "https://radar.test/" + FILE]], "the cached copy is dropped");
+  assert.equal(d.scripts.length, 1);
+  assert.match(d.scripts[0].src, /^app\.0123456789\.js\?r=\d+$/);
+  assert.equal(d.doc.getElementById("nogl"), null, "no message yet");
+  g.ok(0); // the first element's own load event after a parse error comes too late to count
+  d.scripts[0].onload();
+  assert.equal(d.win.location.reloads, 0, "the page is never reloaded by the guard itself");
+  assert.equal(d.doc.getElementById("loadText").textContent, "Starting up");
+  assert.equal(d.scripts.length, 1, "no further attempt");
+});
+
+test("guard: when the retry fails too, the loader shows the message and a reload link in #nogl, and nothing loops", async () => {
+  const d = fakeDom();
+  const g = guard(d);
+  g.fail(0); d.scripts[0].onerror();
   const loader = d.doc.getElementById("loader"), box = d.doc.getElementById("nogl");
   assert.ok(box, "#nogl, the id the home page's CSS and wheel script already treat as 'the app cannot start'");
   assert.equal(loader.children.length, 1);
   assert.equal(d.doc.getElementById("loadText"), null, "the spinning status line is gone");
   assert.equal(findTag(box, "H1")[0].textContent, "The app could not load");
-  assert.equal(box.textContent, "The app could not loadIts script did not arrive. Check the connection, then reload the page.");
+  assert.equal(box.textContent, "The app could not loadIts script could not be loaded. Check the connection, then reload the page.");
   const a = findTag(box, "A")[0];
   assert.equal(a.href, "https://radar.test/#sky");
   assert.equal(a.onclick(), false);
-  assert.equal(d.win.location.reloads, 1, "the link reloads the page");
+  assert.equal(d.win.location.reloads, 1, "the link reloads the page (only when clicked)");
+  g.fail(0); g.fail(1); d.scripts[0].onerror();
+  assert.equal(d.scripts.length, 1, "exactly one retry");
+  assert.equal(loader.children.length, 1, "a later failure adds nothing");
   d.run();
-  assert.equal(d.doc.getElementById("loadText"), null, "the slow timer was cancelled");
-  g.fail();
-  assert.equal(loader.children.length, 1, "a second failure adds nothing");
+  assert.equal(d.doc.getElementById("loadText"), null, "the slow hint does not come back over the message");
 });
 
-test("guard: a stalled download changes only the status line after 30 s; a script that loads cancels it", () => {
-  const d = fakeDom();
-  appLoadGuard(d.win, d.doc, APP_SLOW_MS);
-  d.run();
-  const t = d.doc.getElementById("loadText");
-  assert.equal(t.textContent, "Still loading. If nothing changes, reload the page.");
-  assert.equal(d.doc.getElementById("nogl"), null, "the loader stays, so the app can still start if the script arrives");
+test("guard: a script that arrives but will not run (a window error from its file before its load) counts as a failure", () => {
+  const d = fakeDom({ caches: false });
+  const g = guard(d);
+  d.scriptError("https://radar.test/other.js");
+  assert.equal(d.scripts.length, 0, "errors from other files are not the app's");
+  d.scriptError("https://radar.test/" + FILE);
+  assert.equal(d.scripts.length, 1, "the retry, also without a caches API");
+  g.ok(0);
+  d.scriptError("https://radar.test/" + d.scripts[0].src);
+  assert.ok(d.doc.getElementById("nogl"), "the retry's own error shows the message");
+  // after a good load, a later error from the same file (the app running) is not a load failure
   const d2 = fakeDom();
-  const g2 = appLoadGuard(d2.win, d2.doc, APP_SLOW_MS);
-  g2.ok(); d2.run();
+  const g2 = guard(d2);
+  g2.ok(0);
+  d2.scriptError("https://radar.test/" + FILE);
+  assert.equal(d2.scripts.length, 0);
+  assert.equal(d2.doc.getElementById("nogl"), null);
+});
+
+test("guard: 30 s without a started app puts a hint in the status line; a started app or a removed loader gets none", () => {
+  const d = fakeDom();
+  guard(d).ok(0); // loaded, but the app has not said it started (slow boot, or it stopped)
+  assert.equal(d.timers[0].ms, APP_SLOW_MS);
+  d.run();
+  assert.equal(d.doc.getElementById("loadText").textContent, "Still loading. If nothing changes, reload the page.");
+  assert.equal(d.doc.getElementById("nogl"), null, "the loader stays, so the app can still finish starting");
+  const d2 = fakeDom();
+  guard(d2).ok(0); d2.win.__radarStarted = true; d2.run();
   assert.equal(d2.doc.getElementById("loadText").textContent, "Starting up");
+  const d3 = fakeDom({ loader: false });
+  guard(d3); assert.doesNotThrow(() => d3.run());
 });
 
 test("guard: a failure reported before the loader is parsed waits for DOMContentLoaded", () => {
   const d = fakeDom({ loader: false, readyState: "loading" });
-  const g = appLoadGuard(d.win, d.doc, APP_SLOW_MS);
-  g.fail();
+  const g = guard(d);
+  g.fail(0); d.scripts[0].onerror();
   assert.equal(d.listeners.DOMContentLoaded.length, 1);
   const l = d.doc.createElement("div"); l.id = "loader";
   d.doc.getElementById = ((orig) => (id) => (id === "loader" ? l : orig(id)))(d.doc.getElementById);
@@ -150,10 +196,14 @@ test("buildApp: the inline default is byte for byte the old recipe and holds the
   fs.writeFileSync(path.join(dir, "app.notes.js"), "not a build output");
   const ext = await buildApp({ entry, template, out: path.join(dir, "radar.html"), sitePages: true, external: true });
   const page = fs.readFileSync(ext.out, "utf8"), file = appScriptOf(page);
-  assert.equal(ext.js, inline.js, "the same bundle in both modes");
   assert.equal(file, ext.script.file);
   const js = fs.readFileSync(path.join(dir, file), "utf8");
-  assert.equal(js, inline.js);
+  assert.equal(js, ext.js);
+  // the external file is pure ASCII (charset "ascii"), so a wrong character set cannot change a string or a regular expression in it;
+  // the same program as the inline one, only escaped (a little longer)
+  assert.ok([...fs.readFileSync(path.join(dir, file))].every((b) => b < 0x80), "every byte is ASCII");
+  assert.ok(/[^\x00-\x7f]/.test(inline.js), "the inline page keeps UTF-8 as before");
+  assert.ok(js.length >= inline.js.length && js.length < inline.js.length * 1.03, `${js.length} against ${inline.js.length}`);
   assert.equal(file, `app.${sha10(js)}.js`, "the name comes from the file's own bytes");
   assert.deepEqual(fs.readdirSync(dir).sort(), ["app.notes.js", file, "radar.html"].sort(), "the older app.<hash>.js is removed, other files stay");
   assert.ok(!page.includes(js.slice(0, 2000)), "no inline bundle");

@@ -30,14 +30,18 @@ test("without JavaScript the same font stylesheet is loaded plainly, after the h
   assert.ok(html.indexOf("<noscript>") > html.indexOf('<div id="app"'), "in the body, not among the head elements");
 });
 
-test("the stats strip carries no list roles: its tiles are buttons and links (Lighthouse 13 flagged role=listitem on a button)", () => {
+// Source-shape checks: the four tests below read the source text. Behaviour: the stats roles are checked in a browser by e2e.mjs
+// ("the stats tiles are plain buttons and links"); the progress bar, the canvas size and the scene width only change how a value is
+// read or animated, and checking that behaviourally would mean running the WebGL app under a trace (done by hand, docs/handoff.md item
+// 15), which is not cheap enough for a unit test. They guard against the old spelling coming back.
+test("source-shape check: the stats strip carries no list roles: its tiles are buttons and links (Lighthouse 13 flagged role=listitem on a button)", () => {
   assert.ok(html.includes('<div id="stats" class="scroller"></div>'));
   const main = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
   assert.ok(main.includes('{ class: "stat glass", ...(typeof to === "string"'), "the tile is made without a role");
   assert.ok(!/role: "listitem"|role="list(item)?"/.test(main + html));
 });
 
-test("the loader's progress bar animates transform, not width, so the compositor can run it (Lighthouse: non-composited animations)", () => {
+test("source-shape check: the loader's progress bar animates transform, not width, so the compositor can run it (Lighthouse: non-composited animations)", () => {
   const rule = html.match(/#loader \.progress i \{[^}]*\}/)[0];
   assert.match(rule, /transform: scaleX\(0\); transform-origin: 0 50%;/);
   assert.match(rule, /transition: transform \.25s ease;/);
@@ -46,14 +50,14 @@ test("the loader's progress bar animates transform, not width, so the compositor
   assert.ok(main.includes("loadBar.style.transform = `scaleX(${Math.round(f * 100) / 100})`;") && !main.includes("loadBar.style.width"));
 });
 
-test("each frame takes the canvas size from a ResizeObserver, not from getBoundingClientRect (Lighthouse: forced reflow)", () => {
+test("source-shape check: each frame takes the canvas size from a ResizeObserver, not from getBoundingClientRect (Lighthouse: forced reflow)", () => {
   const main = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
   assert.ok(main.includes("const rect = canvasBox || canvas.getBoundingClientRect();"), "the frame reads the kept size, and the box only as a fallback");
   assert.match(main, /new ResizeObserver\(\(entries\) => \{ const r = entries\[entries\.length - 1\]\.contentRect; canvasBox = \{ width: r\.width, height: r\.height \}; \}\)\.observe\(canvas\);/);
   assert.ok(main.indexOf("let canvasBox = null;") < main.indexOf("function drawFrame("), "declared before the frame loop can run");
 });
 
-test("the globe, sky and Under scenes take the width from their last resize in every frame, not from clientWidth (forced reflow)", () => {
+test("source-shape check: the globe, sky and Under scenes take the width from their last resize in every frame, not from clientWidth (forced reflow)", () => {
   for (const f of ["orbit", "sky", "under"]) {
     const s = fs.readFileSync(new URL(`../src/${f}.js`, import.meta.url), "utf8");
     assert.ok(s.includes("(viewW || renderer.domElement.clientWidth) / 900"), f);
