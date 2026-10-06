@@ -20,6 +20,7 @@ import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
 import { soonCount } from "./launches.js";
 import { createLens, LENS_DEFAULT_FOV } from "./lens.js";
+import { makeYield, afterFirstPaint } from "./schedule.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -48,11 +49,15 @@ const SKY_OPTIONS = [
 const RATES = [1, 60, 600, 3600];
 
 async function main() {
+  // The loader and the page's text are painted before any heavy work starts, and the heavy work then runs in separate tasks
+  // (yieldToMain between them) so the page answers taps and scrolling while the app starts.
+  const yieldToMain = makeYield();
+  await afterFirstPaint();
   const canvas = $("gl");
   const loadBar = $("loadBar"), loadText = $("loadText");
   let app;
   try {
-    app = await boot({ canvas, quality: safeStore.get("radar2.quality", "auto"), onProgress: (f, label) => { loadBar.style.width = `${Math.round(f * 100)}%`; loadText.textContent = label; } });
+    app = await boot({ canvas, quality: safeStore.get("radar2.quality", "auto"), yieldFn: yieldToMain, onProgress: (f, label) => { loadBar.style.width = `${Math.round(f * 100)}%`; loadText.textContent = label; } });
   } catch (e) {
     $("loader").replaceChildren(h("div", { id: "nogl" }, h("h1", { text: "3D graphics could not start" }), h("p", { text: "This page needs WebGL 2, which this browser did not provide. Try a recent Chrome, Safari or Firefox." }), h("p", { class: "mono", text: String(e && e.message || e) })));
     return;
@@ -61,8 +66,11 @@ async function main() {
   await new Promise((r) => setTimeout(r, 30));
   const { D, renderer, clock } = app;
   const orbit = createOrbit(app);
+  await yieldToMain();
   const sky = createSky({ ...app, swarmGeo: orbit.swarmGeo });
+  await yieldToMain();
   const under = createUnder(app);
+  await yieldToMain();
 
   // ------------------------------------------------------------------ state
   const tzGuess = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ""; } })();
@@ -801,20 +809,26 @@ async function main() {
     toast(`New aircraft in view: ${info.call}`, { sub: `${info.typeName}${info.airline ? " · " + info.airline : ""} rose above your horizon in the ${info.compass}`, action: () => select({ kind: "plane", hex: rec.p.hex, rec }), label: "Details", ms: 6500 });
   };
 
+  await yieldToMain();
   sky.setPlace(S.place);
   orbit.setObserver(S.place);
   orbit.setLayers(S.layers);
   sky.setLayers(S.layers);
+  await yieldToMain();
   renderPlaceChip(); renderLayerChips(); renderStats(true); renderSkyHud(); updateChrome(); syncTabs();
+  await yieldToMain();
   resize();
   orbit.cam.lat = S.place.lat - 10; orbit.cam.lon = S.place.lon - 80; orbit.cam.dist = 9;
   requestAnimationFrame(frame);
 
-  startLater(app).then(() => {
+  startLater(app).then(async () => {
     loadText.textContent = "Ready";
+    await yieldToMain();
     S.precise = loadPrecise(D.later.precise);
     sky.precise = S.precise;
+    await yieldToMain();
     S.trains = findTrains(D, S.precise, nowDate());
+    await yieldToMain();
     panels.buildSearchIndex();
     S.searchReady = true;
     if (pendingCon) { const code = pendingCon; pendingCon = null; openConstellationLink(code); }

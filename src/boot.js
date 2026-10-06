@@ -3,6 +3,7 @@ import * as THREE from "three";
 import "./engine.js";
 import { loadCore, loadLater, expandSwarm, TEXTURES } from "./data.js";
 import { loadTexture, tierFor, TIER_SETTINGS } from "./engine.js";
+import { makeYield } from "./schedule.js";
 
 // The prototype data is a snapshot. If the visitor opens the page within 36 hours of the snapshot the clock is real time,
 // otherwise it counts forward from the snapshot so the picture stays consistent with the data.
@@ -21,20 +22,34 @@ export function makeClock(snapshotMs) {
   };
 }
 
-export async function boot({ canvas, quality = "auto", onProgress = () => {} }) {
+// The textures the globe draws on its first frame; they are sent to the graphics card before it (the Moon's waits for the sky view).
+export const FIRST_FRAME_TEXTURES = ["day", "night", "water", "relief", "clouds"];
+
+// yieldFn lets the browser paint and handle input between the steps, so no single step holds the page for long.
+export async function boot({ canvas, quality = "auto", onProgress = () => {}, yieldFn = makeYield() }) {
   const tier = tierFor(quality);
   const tset = TIER_SETTINGS[tier];
+  // The downloads start first: they run on the network while the main thread sets up WebGL, which takes seconds on a slow phone.
+  const corePromise = loadCore(onProgress);
+  const texPromises = Object.entries(TEXTURES).map(([k, f]) => loadTexture(f, { wrapS: THREE.RepeatWrapping }).then((t) => [k, f, t]));
+  // if WebGL fails below, these are never awaited; their own failures must not be reported as unhandled
+  corePromise.catch(() => {});
+  texPromises.forEach((p) => p.catch(() => {}));
+  await yieldFn();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: tset.antialias, preserveDrawingBuffer: true, powerPreference: "high-performance" });
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.setClearColor(0x03050a, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tset.pixelRatio));
-  const core = await loadCore(onProgress);
+  await yieldFn();
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const core = await corePromise;
   const tex = {};
-  const names = Object.entries(TEXTURES);
-  await Promise.all(names.map(([k, f]) => loadTexture(f, { anisotropy: aniso, wrapS: THREE.RepeatWrapping }).then((t) => { tex[k] = t; core.onTexture(f); })));
+  await Promise.all(texPromises.map((p) => p.then(([k, f, t]) => { t.anisotropy = aniso; tex[k] = t; core.onTexture(f); })));
+  await yieldFn();
   const D = { ...core, swarm: expandSwarm(core), later: null };
   D.quakes.events.sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+  // one texture per task: each upload (and its mipmaps) is a large copy that would otherwise all land in the first frame
+  for (const k of FIRST_FRAME_TEXTURES) { await yieldFn(); renderer.initTexture(tex[k]); }
   const clock = makeClock(Date.parse(D.meta.taken));
   return { THREE, renderer, D, tex, clock, tier, settings: { tier }, aniso };
 }
