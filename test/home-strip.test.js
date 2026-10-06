@@ -13,6 +13,7 @@ import {
 import { MAX_AGE_HOURS, summariseQuakes, summariseKp, summariseStorms, summariseFires } from "../site/hazard.mjs";
 import { num } from "../site/pages-satcount.mjs";
 import { summariseLaunches, EVENT_MAX_AGE_HOURS } from "../site/events.mjs";
+import { EVENT_HUB_ROWS } from "../site/pages-events.mjs";
 import { realLaunches, EVENTS_NOW } from "./helpers/eventsfixture.mjs";
 import { quakesDoc, kpRows, stormsDoc, fireFiles, GEN, REAL_DIR, REAL_NOW, realJson, realFile, realPlaces } from "./helpers/hazardfixture.mjs";
 
@@ -220,6 +221,11 @@ test("review: the strip's next launch and the launches page agree on the same da
   const strip = stripLaunch(doc);
   assert.equal(strip.v.launch, `${page.next.name}, ${page.next.when}`);
   assert.equal(strip.t, Date.parse(page.dataTime));
-  // and the right-now hub prints the same next launch
-  assert.ok(`Next: ${strip.v.launch}`.startsWith("Next: ") && page.next.when.length > 5);
+  // and the right-now hub's launch row (EVENT_HUB_ROWS.launches, the row build-live puts on the hub) shows the same launch name and time
+  const row = EVENT_HUB_ROWS.launches(page, { missing: {} });
+  assert.equal(row.value, `Next: ${strip.v.launch}`);
+  assert.ok(row.value.includes(page.next.name) && row.value.includes(page.next.when));
+  // a different next launch on the hub would be caught: the row and the strip are compared on the same name and time
+  const other = EVENT_HUB_ROWS.launches({ ...page, next: { ...page.next, name: "Another rocket" } }, { missing: {} });
+  assert.notEqual(other.value, `Next: ${strip.v.launch}`);
 });

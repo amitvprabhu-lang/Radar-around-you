@@ -332,7 +332,7 @@ test("review: the hub ranks only whole nights; nights already under way are give
   const f = S.hubFindings(mix);
   const rank = f.find((x) => /^Of the 2 nights measured from sunset to sunrise/.test(x));
   assert.ok(rank && /longest is in (Tokyo|Sydney)/.test(rank) && /shortest in (Tokyo|Sydney)/.test(rank) && !/Pune|London/.test(rank), rank);
-  assert.ok(f.some((x) => /^In Pune and London the nights were already under way at the forecast time, so their pages give the remaining darkness: \d+ h \d\d min until sunrise in Pune and \d+ h \d\d min until sunrise in London\.$/.test(x)), f.join(" | "));
+  assert.ok(f.some((x) => /^In Pune and London the nights were already under way at the forecast time, so their pages give the rest of the night: \d+ h \d\d min until sunrise in Pune and \d+ h \d\d min until sunrise in London\.$/.test(x)), f.join(" | "));
   // one whole night only: nothing to rank
   assert.ok(!S.hubFindings([mix[0], mix[2]]).some((x) => /measured from sunset to sunrise/.test(x)));
   assert.ok(S.hubFindings([mix[0]]).some((x) => /^In Pune the night was already under way/.test(x)));
@@ -355,8 +355,8 @@ test("review: a night whose Sun never gets 6 degrees down (Tromsø, 10 May and 5
     assert.equal(s.twilightOnly, true);
     assert.equal(s.strip.best, null);
     assert.ok(s.dark.lowestSunAlt > S.DARK_SUN_ALT && s.dark.lowestSunAlt < 0);
-    assert.equal(s.summary, "The Sun sets in Tromsø tonight but never gets 6 degrees below the horizon, so the sky stays in twilight and no hour gets a viewing score.");
-    assert.ok(s.findings.some((x) => /stays in twilight; that, not the cloud, is why there is no best window\.$/.test(x)), s.findings.join(" | "));
+    assert.equal(s.summary, "The Sun sets in Tromsø tonight but never gets more than 6 degrees below the horizon, so the sky stays in twilight and no hour gets a viewing score.");
+    assert.ok(s.findings.some((x) => /stays in twilight, and that, not the cloud, is why there is no best window\.$/.test(x)), s.findings.join(" | "));
     assert.ok(!s.findings.some((x) => /^No hour tonight reaches/.test(x)), "cloud is not given as the cause");
     assert.ok(S.hubFindings([s]).some((x) => /^In Tromsø the Sun sets but stays less than 6 degrees below the horizon/.test(x)));
     assert.ok(!S.hubFindings([s]).some((x) => /no best window tonight on the viewing score/.test(x)));
@@ -415,4 +415,33 @@ test("review: a clock change in the night is found, and the repeated hour carrie
   const syd = S.summariseCity(cityOf("sydney"), { clouds: cloudsDoc(["sydney"], { updated: "2026-10-03T06:00:00Z", from: "2026-10-03T06:00:00Z" }), sky: skyData(), now: new Date("2026-10-03T07:00:00Z") });
   assert.deepEqual([syd.clock.before, syd.clock.after, new Date(syd.clock.at).toISOString()], ["UTC+10:00", "UTC+11:00", "2026-10-03T16:00:00.000Z"]);
   assert.equal(REAL.find((x) => x.city.id === "pune").clock, null);
+});
+
+// ------------------------------------------------------------------ scoped re-review (2026-10-06)
+test("re-review: the twilight sentence is true at the 6 degree boundary (lowest -5.92 on Tromsø 13 Aug 2026, and -5.95, -6.0, -6.04)", () => {
+  assert.equal(S.twilightSentence(-5.95), "The Sun gets no lower than 6.0 degrees below the horizon tonight; the viewing score needs it more than 6 degrees below, so the sky stays in twilight, and that, not the cloud, is why there is no best window.");
+  assert.match(S.twilightSentence(-6.0), /no lower than 6\.0 degrees below the horizon tonight; the viewing score needs it more than 6 degrees below/);
+  assert.equal(S.twilightSentence(-6.04), null, "a Sun more than 6 degrees down is dark: no twilight sentence");
+  assert.match(S.twilightSentence(-2.54), /no lower than 2\.6 degrees below/, "rounded away from the horizon, so 'no lower than' stays true");
+  const s = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: "2026-08-13T12:00:00Z", from: "2026-08-13T12:00:00Z", cloud: 5 }), sky: skyData(), now: new Date("2026-08-13T13:00:00Z") });
+  assert.equal(s.twilightOnly, true);
+  assert.ok(s.dark.lowestSunAlt < -5.5 && s.dark.lowestSunAlt > -6, String(s.dark.lowestSunAlt));
+  assert.ok(s.findings.includes(S.twilightSentence(s.dark.lowestSunAlt)), s.findings.join(" | "));
+  assert.ok(!s.findings.some((x) => /no lower than 6 degrees below the horizon tonight, short of the 6/.test(x)));
+});
+
+test("re-review: a night under way at the forecast time is called dark only when the Sun is more than 6 degrees down, and twilight is never called darkness", () => {
+  const at = (id, iso) => S.summariseCity(cityOf(id), { clouds: cloudsDoc([id], { updated: iso, from: iso }), sky: skyData(), now: new Date(Date.parse(iso) + H) });
+  // London a few minutes after sunset (civil twilight) and Pune in the middle of the night
+  const dusk = at("london", "2026-10-06T17:40:00Z"), deep = at("pune", "2026-10-06T21:00:00Z");
+  assert.ok(dusk.night.startsAtData && C.sunAltAz(dusk.city.lat, dusk.city.lon, new Date(dusk.night.start)).alt > S.DARK_SUN_ALT);
+  assert.equal(S.underWayText(dusk), "The Sun had already set at the forecast time");
+  assert.equal(S.underWayText(deep), "Already dark at the forecast time");
+  const f = S.hubFindings([dusk, deep]);
+  assert.ok(!f.some((x) => /remaining darkness/.test(x)), f.join(" | "));
+  const twi = at("tromso", "2026-05-10T22:00:00Z");
+  assert.ok(twi.twilightOnly && twi.night.startsAtData);
+  const g = S.hubFindings([twi, deep]);
+  assert.ok(!g.some((x) => /already under way[^|]*Tromsø|Tromsø[^|]*already under way/.test(x)), "a twilight-only night in progress is not listed with the nights under way");
+  assert.ok(g.some((x) => /^In Tromsø the Sun sets but stays less than 6 degrees below the horizon/.test(x)));
 });

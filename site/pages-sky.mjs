@@ -9,7 +9,7 @@ import { coastPath, MAP_UNITS_PER_DEGREE } from "./svgmap.mjs";
 import { projectSky } from "../src/core.js";
 import {
   SKY_HUB_FILE, skyCityFile, ISS_FILE, SKY_MAX_AGE_HOURS, ISS_MAX_AGE_DAYS, BEST_WINDOW_THRESHOLD, PLANET_MIN_ALT, PLANET_MAX_MAG,
-  CHART_MAG_LIMIT, FIGURE_MAX, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase, localText, eventsPhrase, startWord, upSpans,
+  CHART_MAG_LIMIT, FIGURE_MAX, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase, localText, eventsPhrase, startWord, upSpans, underWayText,
 } from "./sky.mjs";
 import { PLACE_MAX_KM } from "./hazard.mjs";
 import { liveScriptParts } from "./liveseo.mjs";
@@ -182,7 +182,10 @@ const metNote = `<p class="note">Cloud forecast: MET Norway's, not ours. Data fr
 
 // The app's phase names (moonPhaseName in src/info.js) cover bands of the Moon's cycle; said once on each city page, because the US Naval
 // Observatory names a date by the phase it is in and the two can differ near a quarter.
-export const PHASE_NOTE = "Each phase name covers a band of the cycle about 22.5 degrees (1.8 days) wide, so \"first quarter\" here means 40 to 60 percent lit and another almanac may name the night differently.";
+// The lit range of each band, computed from moonPhaseName's band edges (src/info.js: first quarter is 78.75 to 101.25 degrees).
+const litAt = (deg) => Math.round(((1 - Math.cos((deg * Math.PI) / 180)) / 2) * 100);
+export const PHASE_BANDS = { quarterWidth: 22.5, otherWidth: 67.5, firstQuarterLit: [litAt(78.75), litAt(101.25)] };
+export const PHASE_NOTE = `New, first quarter, full and last quarter each cover about 22.5 degrees of the cycle; crescent and gibbous cover about 67.5 degrees each. So "first quarter" here means ${PHASE_BANDS.firstQuarterLit[0]} to ${PHASE_BANDS.firstQuarterLit[1]} percent lit, and another almanac may name the night differently.`;
 // "Mars rises at 01:32", "Venus is up at nightfall, sets at 19:19": the events phrase as the rest of a sentence about a body
 const bodyDoes = (phrase) => (/^(up|below)/.test(phrase) ? `is ${phrase}` : phrase);
 
@@ -225,7 +228,7 @@ export function cityPage(s, { built = [], cities = [] } = {}) {
   const moonWhen = `, and ${bodyDoes(eventsPhrase(m.events, m.upAtStart, L, first))}`;
   const zoneText = s.clock ? `Local times are ${esc(tz)}: ${esc(s.clock.before)} until the clocks change at ${esc(hm(s.clock.at, "UTC"))} UTC, ${esc(s.clock.after)} after; a time in the repeated or skipped hour carries its offset.` : `Local times are ${esc(tz)} (${esc(s.offset)}).`;
   const answer = n.kind === "midnightSun" ? `the Sun does not set in ${esc(c.name)} in the 24 hours after the forecast time, so there are <strong>no dark hours</strong> tonight`
-    : s.twilightOnly ? `the Sun sets in ${esc(c.name)} tonight but never gets 6° below the horizon, so the sky stays in twilight and <strong>no hour</strong> gets a viewing score`
+    : s.twilightOnly ? `the Sun sets in ${esc(c.name)} tonight but never gets more than 6° below the horizon, so the sky stays in twilight and <strong>no hour</strong> gets a viewing score`
     : b ? `the best window for looking up tonight in ${esc(c.name)} is <strong>${L(b.start)} to ${L(b.end)}</strong> local time${b.cloud !== null ? `, with ${b.cloud} percent cloud in MET Norway's forecast` : ""}`
     : `<strong>no stretch</strong> of tonight in ${esc(c.name)} reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${s.strip.cloudAvg !== null ? `, with ${s.strip.cloudAvg} percent cloud on average in MET Norway's forecast` : ""}`;
   const lead = `As of ${timeEl(s.dataTime)}, the time of MET Norway's forecast, ${answer}. The Moon is ${esc(moonPhrase(m.phaseName))}, ${m.illumPct} percent lit${moonWhen}. ${placed.length ? `${and(placed.map((p) => esc(p.name)))} ${v(placed.length, "is", "are")} well placed in the dark` : "No naked-eye planet is well placed in the dark"}${s.iss.status === "ok" ? `, and ${vis.length ? `${vis.length} ISS ${v(vis.length, "pass is", "passes are")} sunlit while the sky is dark` : "no ISS pass is sunlit while the sky is dark"}` : ""}. ${zoneText}`;
@@ -267,7 +270,7 @@ export function cityPage(s, { built = [], cities = [] } = {}) {
   const cloudText = s.strip.cloudAvg === null ? "MET Norway's forecast does not cover these hours." : s.strip.cloudMin === s.strip.cloudMax ? `The forecast gives ${s.strip.cloudAvg} percent cloud for every hour.` : `Cloud averages ${s.strip.cloudAvg} percent over these hours, from ${s.strip.cloudMin} to ${s.strip.cloudMax} percent.`;
   const figs = ch.figures.map((f) => esc(f.name)), stars = ch.named.filter((x) => x.label).map((x) => esc(x.name));
   const faq = [
-    [`When is the best time to look at the stars in ${c.name} tonight?`, b ? `${L(b.start)} to ${L(b.end)} local time by our viewing score${b.cloud !== null ? `, with ${b.cloud} percent cloud forecast` : ""}; a score, not a promise.` : `No stretch of tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${n.kind === "midnightSun" ? ", because the Sun does not set" : s.twilightOnly ? ", because the Sun never gets 6° below the horizon and the sky stays in twilight" : ""}.`],
+    [`When is the best time to look at the stars in ${c.name} tonight?`, b ? `${L(b.start)} to ${L(b.end)} local time by our viewing score${b.cloud !== null ? `, with ${b.cloud} percent cloud forecast` : ""}; a score, not a promise.` : `No stretch of tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${n.kind === "midnightSun" ? ", because the Sun does not set" : s.twilightOnly ? ", because the Sun never gets more than 6° below the horizon and the sky stays in twilight" : ""}.`],
     ["What phase is the Moon tonight?", `${esc(cap(m.phaseName))}, ${m.illumPct} percent lit at ${L(m.at)}.`],
     [`Which planets are up tonight from ${c.name}?`, placed.length ? `${and(placed.map((p) => `${esc(p.name)} (highest ${deg(p.best.alt)} at ${L(p.best.t)})`))}.` : `None is at least ${PLANET_MIN_ALT}° up in a dark sky tonight.`],
     [`When can I see the ISS from ${c.name} tonight?`, s.iss.status !== "ok" ? `This build cannot say: ${esc(s.iss.reason)}.` : vis.length ? `${and(vis.map((p) => `${L(p.lit.from)} to ${L(p.lit.to)}`))}, when it is sunlit in a dark sky by our calculation.` : `No pass tonight is sunlit in a dark sky by our calculation.`],
@@ -330,7 +333,7 @@ export function skyHubPage(summaries, findings, { built = [], cities = [], missi
     const b = s.strip.best, ref = s.night.start;
     const vis = s.iss.status === "ok" ? String(s.iss.passes.filter((p) => p.visible).length) : "Not computed";
     return [built.includes(f) ? `<a href="${href(file, f)}">${esc(c.name)}</a>` : esc(c.name),
-      s.night.kind === "midnightSun" ? "The Sun does not set" : `${s.night.startsAtData ? "Already dark at the forecast time, " : ""}${localEl(s.night.start, ref, s.tz)} to ${localEl(s.night.end, ref, s.tz)} (${durationText(s.night.end - s.night.start)}${s.night.startsAtData ? " left" : ""}${s.night.kind === "polarNight" ? ", the Sun does not rise" : ""}${s.twilightOnly ? ", twilight only" : ""})`,
+      s.night.kind === "midnightSun" ? "The Sun does not set" : `${s.night.startsAtData ? `${underWayText(s)}, ` : ""}${localEl(s.night.start, ref, s.tz)} to ${localEl(s.night.end, ref, s.tz)} (${durationText(s.night.end - s.night.start)}${s.night.startsAtData ? " left" : ""}${s.night.kind === "polarNight" ? ", the Sun does not rise" : ""}${s.twilightOnly ? ", twilight only" : ""})`,
       s.strip.cloudAvg === null ? "No forecast" : `${s.strip.cloudAvg}%`,
       b ? `${localEl(b.start, ref, s.tz)} to ${localEl(b.end, ref, s.tz)}, ${b.cloud === null ? "no cloud forecast" : `${b.cloud}% cloud`}` : "None",
       `${s.moon.illumPct}% lit${s.moon.upAtStart ? (s.night.kind === "night" && !s.night.startsAtData ? ", up at dusk" : ", up at the forecast time") : ""}`, vis];
@@ -358,7 +361,7 @@ ${cloudBars}
 <li>The Sun, Moon and planets are computed with the astronomy-engine library, whose documentation says its accuracy is always within 1 arcminute of results from NOVAS. Our tests compare this code's Sun and Moon rise and set times with the US Naval Observatory's tables for these six cities on the 2026 solstices and require agreement within ${RISE_SET_CHECK_MINUTES} ${v(RISE_SET_CHECK_MINUTES, "minute", "minutes")}, and the Moon's phase with the Observatory's phase table. The planet positions are not compared with a second source.</li>
 <li>The polar chart shows stars brighter than magnitude ${CHART_MAG_LIMIT} from the app's star catalogue and the stick figures of up to ${FIGURE_MAX} bright constellations, placed from the catalogue's fixed positions without a correction for the slow drift of the sky (precession); the Moon and planets are placed for the moment shown.</li>
 <li>ISS passes come from the newest element set for the ISS in CelesTrak's data with the SGP4 model, the same code as the live app. A pass is listed when the ISS is at least 10° up; it is sunlit in a dark sky when sunlight falls on it while the Sun is more than 6° below the observer's horizon. We have not measured how far pass times drift as the element set ages, so treat them as approximate. Passes are not shown when the element set is more than ${ISS_MAX_AGE_DAYS} days old.</li>
-<li>Times on the city pages are each city's local time and are not converted to yours: the findings, the sky chart and its heading are worked out for that local night.</li>
+<li>Times on the city pages stay in each city's own time zone, because the findings, the sky chart and its heading are worked out for that local night; only the forecast time, given in UTC, may also be shown in your own time zone.</li>
 <li>Findings say "about the same" when a number is within ${Math.round(ABOUT_SAME * 100)} percent of what it is compared with.</li>
 <li>Everything is computed, not observed, and nothing here promises that anything will be seen: weather, haze, lights and your horizon decide that.</li>
 </ul>

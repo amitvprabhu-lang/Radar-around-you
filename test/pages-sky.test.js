@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cityPage, skyHubPage, issPage, polarChartSvg, moonStripSvg, cloudStripSvg, issMapSvg, splitAtAntimeridian, webPageLd, MET_CREDIT, SKY_SRC, chartSources, cloudWords, PHASE_NOTE } from "../site/pages-sky.mjs";
+import { cityPage, skyHubPage, issPage, polarChartSvg, moonStripSvg, cloudStripSvg, issMapSvg, splitAtAntimeridian, webPageLd, MET_CREDIT, SKY_SRC, chartSources, cloudWords, PHASE_NOTE, PHASE_BANDS } from "../site/pages-sky.mjs";
 import { liveScriptSource } from "../site/live-pages-js.mjs";
 import * as S from "../site/sky.mjs";
 import { renderPage, SITE, urlPath } from "../site/layout.mjs";
@@ -276,7 +276,7 @@ test("review: the weather in words follows the hourly forecast", () => {
 test("review: twilight-only nights, clock changes and the repeated hour read correctly on the page", () => {
   const twi = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: "2026-05-10T12:00:00Z", from: "2026-05-10T12:00:00Z", cloud: 5 }), sky: skyData(), now: new Date("2026-05-10T13:00:00Z") });
   const th = renderPage(cityPage(twi, { built, cities }));
-  assert.ok(textOf(th.match(/<p class="lead">[\s\S]*?<\/p>/)[0]).includes("the Sun sets in Tromsø tonight but never gets 6° below the horizon, so the sky stays in twilight and no hour gets a viewing score"));
+  assert.ok(textOf(th.match(/<p class="lead">[\s\S]*?<\/p>/)[0]).includes("the Sun sets in Tromsø tonight but never gets more than 6° below the horizon, so the sky stays in twilight and no hour gets a viewing score"));
   assert.ok(!/no stretch of tonight[^.]*cloud/i.test(textOf(th.match(/<p class="lead">[\s\S]*?<\/p>/)[0])));
   const lon = S.summariseCity(cityOf("london"), { clouds: cloudsDoc(["london"], { updated: "2026-10-24T18:00:00Z", from: "2026-10-24T18:00:00Z" }), sky: skyData(), now: new Date("2026-10-24T19:00:00Z") });
   const lh = renderPage(cityPage(lon, { built, cities }));
@@ -291,7 +291,7 @@ test("review: the sky pages' times stay in the city's zone: the shared script ha
   assert.ok(!/liveZones|zoneTimeText/.test(src));
   assert.ok(src.includes('main time[datetime]:not([data-tz])'), "the reader's-time note skips the city's local times");
   for (const [f, h] of HTML) if (f !== S.ISS_FILE) assert.ok(/<time datetime="[^"]+Z" data-tz="[^"]+">/.test(h), f);
-  assert.ok(textOf(mainOf(HTML.get(S.SKY_HUB_FILE))).includes("Times on the city pages are each city's local time and are not converted to yours"));
+  assert.ok(textOf(mainOf(HTML.get(S.SKY_HUB_FILE))).includes("Times on the city pages stay in each city's own time zone, because the findings, the sky chart and its heading are worked out for that local night; only the forecast time, given in UTC, may also be shown in your own time zone."));
 });
 
 // The text outside the tables and figures, where most of the typed wording is: shared 8-word runs between city pages, after numbers become
@@ -310,3 +310,11 @@ test("review: the city pages' text outside tables and figures differs city by ci
   assert.ok(worst.j < NON_TABLE_LIMIT, `${worst.pair}: ${(worst.j * 100).toFixed(1)} percent`);
 });
 const NON_TABLE_LIMIT = 0.70;  // measured 67.8 percent (Pune / Tokyo) on 2026-10-06, was 88.7 before the review round
+
+test("re-review: the phase note says what the code does: four bands of about 22.5 degrees, crescent and gibbous about 67.5, first quarter's lit range computed", () => {
+  assert.equal(PHASE_NOTE, "New, first quarter, full and last quarter each cover about 22.5 degrees of the cycle; crescent and gibbous cover about 67.5 degrees each. So \"first quarter\" here means 40 to 60 percent lit, and another almanac may name the night differently.");
+  // the lit range of the first quarter band of moonPhaseName (src/info.js: 78.75 to 101.25 degrees), computed
+  const lit = (deg) => Math.round(((1 - Math.cos((deg * Math.PI) / 180)) / 2) * 100);
+  assert.deepEqual([lit(78.75), lit(101.25)], [40, 60]);
+  assert.equal(PHASE_BANDS.firstQuarterLit.join(" to "), "40 to 60");
+});

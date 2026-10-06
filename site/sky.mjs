@@ -377,11 +377,21 @@ export function summariseCity(city, { clouds, precise = null, sky = {}, now, all
 
 const placeTime = (s, ms) => localText(ms, s.night.start, s.tz);
 // what the start of the window is called in sentences: "nightfall" when the night starts at sunset, otherwise "the start"
+// The finding for a night whose Sun never gets more than 6 degrees below the horizon (the app's darkness rule: dark means below -6). The
+// depth is printed to one decimal rounded away from the horizon, so "no lower than" is true even at -5.95 (printed 6.0). null when the
+// Sun does get more than 6 degrees down.
+export function twilightSentence(lowestSunAlt) {
+  if (!(lowestSunAlt >= DARK_SUN_ALT)) return null;
+  const depth = Math.ceil(-lowestSunAlt * 10 - 1e-9) / 10;
+  return `The Sun gets no lower than ${depth.toFixed(1)} degrees below the horizon tonight; the viewing score needs it more than ${-DARK_SUN_ALT} degrees below, so the sky stays in twilight, and that, not the cloud, is why there is no best window.`;
+}
+// How a night already under way at the forecast time is described: dark only when the Sun was more than 6 degrees down then.
+export const underWayText = (s) => (sunAltAz(s.city.lat, s.city.lon, new Date(s.night.start)).alt < DARK_SUN_ALT ? "Already dark at the forecast time" : "The Sun had already set at the forecast time");
 export const startWord = (s) => (s.night.kind === "night" && !s.night.startsAtData ? "nightfall" : "the start");
 export function summarySentence(s) {
   const n = s.night, name = s.city.name;
   if (n.kind === "midnightSun") return `The Sun does not set in ${name} in the 24 hours after the forecast time, so the sky does not get dark tonight.`;
-  if (s.twilightOnly) return `The Sun sets in ${name} tonight but never gets 6 degrees below the horizon, so the sky stays in twilight and no hour gets a viewing score.`;
+  if (s.twilightOnly) return `The Sun sets in ${name} tonight but never gets more than 6 degrees below the horizon, so the sky stays in twilight and no hour gets a viewing score.`;
   if (!s.strip.best) return `No stretch of tonight in ${name} reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${s.strip.cloudAvg !== null ? `; cloud averages ${s.strip.cloudAvg} percent over the night` : ""}.`;
   const b = s.strip.best;
   return `The best window tonight in ${name} is ${placeTime(s, b.start)} to ${placeTime(s, b.end)}${b.cloud !== null ? `, with ${b.cloud} percent cloud` : ""}.`;
@@ -397,7 +407,7 @@ export function cityFindings(s) {
     if (s.strip.cloudAvg !== null) out.push(`Cloud averages ${s.strip.cloudAvg} percent over the 12 hours around local midnight in MET Norway's forecast.`);
   } else if (n.kind === "polarNight") out.push(`The Sun does not rise here in the 24 hours from ${t(n.start)}, so this page covers those 24 hours as one long night.`);
   else out.push(`The night lasts ${durationText(n.end - n.start)}, from ${n.startsAtData ? `${t(n.start)} (the Sun was already down at the forecast time)` : `sunset at ${t(n.start)}`} to sunrise at ${t(n.end)}.`);
-  if (s.twilightOnly) out.push(`The Sun gets no lower than ${Math.abs(Math.round(s.dark.lowestSunAlt))} degrees below the horizon tonight, short of the 6 degrees the viewing score needs, so the sky stays in twilight; that, not the cloud, is why there is no best window.`);
+  if (s.twilightOnly) out.push(twilightSentence(s.dark.lowestSunAlt));
   const b = s.strip.best;
   const moonSet = m.events.find((e) => e.kind === "set");
   if (b) {
@@ -457,8 +467,8 @@ export function hubFindings(summaries, { at = null } = {}) {
     const sorted = [...full].sort((a, b) => len(b) - len(a) || a.city.name.localeCompare(b.city.name));
     out.push(`Of the ${full.length} nights measured from sunset to sunrise, the longest is in ${sorted[0].city.name} (${durationText(len(sorted[0]))}) and the shortest in ${sorted[sorted.length - 1].city.name} (${durationText(len(sorted[sorted.length - 1]))}).`);
   }
-  const under = summaries.filter((s) => s.night.kind === "night" && s.night.startsAtData);
-  if (under.length) out.push(`${under.length === 1 ? `In ${under[0].city.name} the night was` : `In ${and(under.map((s) => s.city.name))} the nights were`} already under way at the forecast time, so ${under.length === 1 ? "its page gives" : "their pages give"} the remaining darkness: ${and(under.map((s) => `${durationText(len(s))} until sunrise${under.length > 1 ? ` in ${s.city.name}` : ""}`))}.`);
+  const under = summaries.filter((s) => s.night.kind === "night" && s.night.startsAtData && !s.twilightOnly);
+  if (under.length) out.push(`${under.length === 1 ? `In ${under[0].city.name} the night was` : `In ${and(under.map((s) => s.city.name))} the nights were`} already under way at the forecast time, so ${under.length === 1 ? "its page gives" : "their pages give"} the rest of the night: ${and(under.map((s) => `${durationText(len(s))} until sunrise${under.length > 1 ? ` in ${s.city.name}` : ""}`))}.`);
   for (const s of summaries.filter((x) => x.night.kind !== "night" || x.twilightOnly)) {
     out.push(s.night.kind === "midnightSun" ? `In ${s.city.name} the Sun does not set tonight, so there is no dark sky there.`
       : s.night.kind === "polarNight" ? `In ${s.city.name} the Sun does not rise in the 24 hours from the start of the night (polar night).`
