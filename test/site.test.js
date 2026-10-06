@@ -25,6 +25,8 @@ import { STRIP_SCRIPT, STRIP_FIGURES } from "../site/home-strip.mjs";
 import { OG_IMAGE, esc } from "../site/layout.mjs";
 import { readIndexNowKey } from "../site/indexnow.mjs";
 import { liveScriptSource } from "../site/live-pages-js.mjs";
+import { WIDGETS, widgetFile } from "../site/embed-widgets.mjs";
+import { GALLERY_FILE } from "../site/embed.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -42,7 +44,9 @@ const result = build({ outDir, appFile, publicDir: null, noindex: false });
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
-const pageFiles = walk(outDir).filter((f) => f.endsWith(".html")).map((f) => path.relative(outDir, f)).sort();
+// the widget documents under embed/ are not pages (noindex, in no sitemap, no page shell); test/embed.test.js checks them
+const WIDGET_FILES = WIDGETS.map((w) => widgetFile(w.id));
+const pageFiles = walk(outDir).filter((f) => f.endsWith(".html")).map((f) => path.relative(outDir, f)).filter((f) => !WIDGET_FILES.includes(f)).sort();
 const read = (f) => fs.readFileSync(path.join(outDir, f), "utf8");
 const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ");
 
@@ -50,8 +54,9 @@ test("the site has the expected pages and no duplicates", () => {
   // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about,
   // the satellites by country hub and its 5 country pages, from the bundled hazard data the earthquake page and the right-now hub, and
   // from the bundled satellite data the Starlink tracker (the launch and GDACS data are not bundled with a data time), and from the bundled
-  // cloud forecast and precise.json the eight sky pages (site/sky.mjs, SKY_PAGES)
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1 + SKY_PAGES.length);
+  // cloud forecast and precise.json the eight sky pages (site/sky.mjs, SKY_PAGES), and the widget gallery (site/embed.mjs)
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1 + SKY_PAGES.length + 1);
+  assert.ok(pageFiles.includes(GALLERY_FILE));
   assert.deepEqual(result.liveSkipped, []);
   assert.deepEqual(result.skipped, [], "every country page passes the guard on the bundled snapshot");
   assert.equal(pageFiles.length, result.pages);
@@ -95,6 +100,8 @@ test("every internal link and anchor resolves", () => {
       let target = p === "" ? f : path.posix.normalize(path.posix.join(path.posix.dirname(f), p));
       if (target === "." || target === "./" || target === "") target = "index.html";
       if (target.endsWith("/")) target += "index.html";
+      // the gallery links the live page of each widget, whether or not this build wrote it (live pages arrive with the pull job)
+      if (f === GALLERY_FILE && LIVE_FILES.includes(target)) continue;
       assert.ok(pageFiles.includes(target), `${f}: link ${link} -> ${target} does not exist`);
       if (frag && target !== "index.html") assert.ok(ids(read(target)).has(frag), `${f}: anchor #${frag} missing in ${target}`);
     }
@@ -243,7 +250,7 @@ test("with noindex on, no page can be indexed, robots.txt disallows everything a
   const r2 = build({ outDir: out2, appFile, publicDir: null, noindex: true });
   assert.equal(r2.noindex, true);
   assert.equal(r2.pages, result.pages, "the same pages are still built, only the instructions to crawlers change");
-  const files = walk(out2).filter((f) => f.endsWith(".html")).map((f) => path.relative(out2, f));
+  const files = walk(out2).filter((f) => f.endsWith(".html")).map((f) => path.relative(out2, f)).filter((f) => !WIDGET_FILES.includes(f));
   assert.equal(files.length, r2.pages);
   for (const f of files) {
     const h = fs.readFileSync(path.join(out2, f), "utf8");

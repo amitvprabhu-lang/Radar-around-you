@@ -16,7 +16,8 @@
     "build:hosting": "node build.mjs --site-pages --external-script && npm run site && node site/live-snapshot.mjs",
     "test:hosting": "php hosting/tests/run.php",
     "build:sitepages": "LIVE_BASE= node build.mjs --site-pages src/main.js template.html dist/radar-sitepages.html",
-    "e2e:site": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-site.mjs"
+    "e2e:site": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-site.mjs",
+    "e2e:embed": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-embed.mjs"
   },
   "type": "module",
   "dependencies": {
