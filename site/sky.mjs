@@ -354,7 +354,7 @@ export function cityFindings(s) {
   } else if (n.kind !== "midnightSun") {
     out.push(`No hour tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on the viewing score${s.strip.cloudAvg !== null ? `: cloud averages ${s.strip.cloudAvg} percent` : ""}${m.illumPct >= 50 && (m.upAtStart || moonRise) ? `, and the Moon is ${m.illumPct} percent lit` : ""}.`);
   }
-  const moonLine = m.upAtStart ? (moonSet ? `is up at the start and sets at ${t(moonSet.t)}` : "is up through the whole window") : moonRise ? `rises at ${t(moonRise.t)}` : "stays below the horizon";
+  const moonLine = m.upAtStart ? (moonSet ? `is up at the start and sets at ${t(moonSet.t)}` : "is up all night") : moonRise ? `rises at ${t(moonRise.t)}` : "stays below the horizon";
   out.push(`The Moon is ${moonPhrase(m.phaseName)}, ${m.illumPct} percent lit, and ${moonLine}.`);
   const placed = s.planets.filter((p) => p.wellPlaced).sort((a, b2) => a.mag - b2.mag);
   if (placed.length) {
