@@ -9,8 +9,11 @@
 //      radar_sync_pages (the same path whitelist, each file checked against its sha256 in the index, the same size limit), plus
 //      sitemap-live.xml when the index lists it. Skipped for a noindex site, which gets no live sitemap (as site/build-live.mjs does).
 // Each part is all or nothing: every file is checked in memory first, then written through a temporary name and renamed, and a part with
-// any failed file writes nothing. A download that fails never fails the build: the step prints one line and exits 0, and the site is
-// exactly what the site build made. Controls: LIVE_SNAPSHOT=0 or --no-live-snapshot turn it off; LIVE_SNAPSHOT_BASE replaces the base.
+// any failed file writes nothing; the parts are independent (the live folder is written even when the pages fail). A download that fails
+// never fails the build: the step prints one line and exits 0, and a part that failed leaves the output as the site build made it.
+// Every request, its redirects (at most 3, https only, as radar_http) and its body share one time limit, and every request is aborted
+// when it ends, so no open connection can hold the process. Controls: LIVE_SNAPSHOT=0 or --no-live-snapshot turn it off;
+// LIVE_SNAPSHOT_BASE replaces the base.
 //   node site/live-snapshot.mjs [--out dist/site] [--no-live-snapshot]
 import fs from "node:fs";
 import path from "node:path";
@@ -39,45 +42,61 @@ export const safeLivePath = (p) => typeof p === "string" && LIVE_PATH_RE.test(p)
 // a page must be allowed by the server's whitelist and be in the live page registry (or be the live sitemap)
 export const safePagePath = (p) => typeof p === "string" && PAGE_PATH_RE.test(p) && noDots(p) && (p === LIVE_SITEMAP || LIVE_FILES.includes(p));
 
-// https only, as radar_http; plain http only on this machine (127.0.0.1, localhost, [::1]), for local tests. Returns the base with one
-// trailing slash, or null.
+// https only, as radar_http; plain http only on this machine (127.0.0.1 or localhost), for local tests.
+const isLoopback = (u) => u.hostname === "127.0.0.1" || u.hostname === "localhost";
+// Returns the base with one trailing slash, or null.
 export function checkBase(base) {
   let u;
   try { u = new URL(String(base).trim()); } catch { return null; }
-  const loopback = ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname);
-  if (!(u.protocol === "https:" || (u.protocol === "http:" && loopback)) || u.username || u.password || u.search || u.hash) return null;
+  if (!(u.protocol === "https:" || (u.protocol === "http:" && isLoopback(u))) || u.username || u.password || u.search || u.hash) return null;
   return u.href.replace(/\/*$/, "/");
 }
 
-// The controls, from the environment and the command line. Only 0 (or false, off, no) turns the step off and only 1 (or nothing, true,
-// on, yes) leaves it on; any other value turns it off with a message, so a typo cannot make a test build download.
+// The controls, from the environment and the command line. LIVE_SNAPSHOT=0 turns the step off; 1 or nothing leaves it on; any other
+// value turns it off with a message, so a typo cannot make a test build download. LIVE_SNAPSHOT_TIMEOUT_MS and LIVE_SNAPSHOT_BUDGET_MS
+// (whole milliseconds) can only shorten the time limits, for tests; a value that is not shorter than the default is ignored.
 export function snapshotSettings({ env = process.env, argv = process.argv.slice(2) } = {}) {
   if (argv.includes("--no-live-snapshot")) return { enabled: false, reason: "turned off by --no-live-snapshot" };
   const raw = env.LIVE_SNAPSHOT == null ? "" : String(env.LIVE_SNAPSHOT);
-  const v = raw.trim().toLowerCase();
-  if (["0", "false", "off", "no"].includes(v)) return { enabled: false, reason: `turned off by LIVE_SNAPSHOT=${raw.trim()}` };
-  if (!["", "1", "true", "on", "yes"].includes(v)) return { enabled: false, reason: `LIVE_SNAPSHOT is ${JSON.stringify(raw)}; only 0 or 1 are understood, so the download is off` };
+  const v = raw.trim();
+  if (v === "0") return { enabled: false, reason: "turned off by LIVE_SNAPSHOT=0" };
+  if (v !== "" && v !== "1") return { enabled: false, reason: `LIVE_SNAPSHOT is ${JSON.stringify(raw)}; only 0 or 1 are understood, so the download is off` };
   const base = env.LIVE_SNAPSHOT_BASE == null ? "" : String(env.LIVE_SNAPSHOT_BASE).trim();
-  return { enabled: true, base: base || DEFAULT_BASE };
+  const shorter = (name, max) => { const t = String(env[name] ?? "").trim(); return /^[1-9][0-9]*$/.test(t) && Number(t) < max ? Number(t) : null; };
+  const timeoutMs = shorter("LIVE_SNAPSHOT_TIMEOUT_MS", REQUEST_TIMEOUT_MS), budgetMs = shorter("LIVE_SNAPSHOT_BUDGET_MS", BUDGET_MS);
+  return { enabled: true, base: base || DEFAULT_BASE, ...(timeoutMs ? { timeoutMs } : {}), ...(budgetMs ? { budgetMs } : {}) };
 }
 
 const msText = (ms) => (ms >= 1000 ? `${Math.round(ms / 100) / 10} s` : `${Math.max(0, Math.round(ms))} ms`);
 class TooLarge extends Error {}
+// a failure that a second try cannot fix (a refused redirect, too many redirects)
+class Final extends Error {}
+export const MAX_REDIRECTS = 3;   // as CURLOPT_MAXREDIRS in radar_http
+const REDIRECT = new Set([301, 302, 303, 307, 308]);
+
+// Gives up a response body that will not be read, so its connection is not left open.
+function discard(res) {
+  try { const p = res && res.body && typeof res.body.cancel === "function" ? res.body.cancel() : null; if (p && typeof p.catch === "function") p.catch(() => {}); } catch { /* already closed */ }
+}
 
 // Reads a response body, refusing anything over max bytes (by its declared length first, then while reading).
 async function readLimited(res, max) {
   const declared = Number(res.headers && typeof res.headers.get === "function" ? res.headers.get("content-length") : NaN);
-  if (Number.isFinite(declared) && declared > max) throw new TooLarge(`too large (${declared} bytes, the limit is ${max})`);
+  if (Number.isFinite(declared) && declared > max) { discard(res); throw new TooLarge(`too large (${declared} bytes, the limit is ${max})`); }
   if (res.body && typeof res.body.getReader === "function") {
     const reader = res.body.getReader();
     const chunks = [];
-    let n = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      n += value.length;
-      if (n > max) { try { await reader.cancel(); } catch { /* already closed */ } throw new TooLarge(`too large (over ${max} bytes, the limit)`); }
-      chunks.push(Buffer.from(value));
+    let n = 0, done = false;
+    try {
+      for (;;) {
+        const r = await reader.read();
+        if (r.done) { done = true; break; }
+        n += r.value.length;
+        if (n > max) throw new TooLarge(`too large (over ${max} bytes, the limit)`);
+        chunks.push(Buffer.from(r.value));
+      }
+    } finally {
+      if (!done) reader.cancel().catch(() => {});   // not awaited: a stalled body must not hold the step up
     }
     return Buffer.concat(chunks, n);
   }
@@ -86,24 +105,55 @@ async function readLimited(res, max) {
   return buf;
 }
 
-// One GET with a time limit that covers the answer and its body. Never throws: { status, body } or { error, tooLarge }.
-async function getOnce(fetchImpl, url, ms, max) {
+// Where a redirect may lead: https anywhere (radar_http sets CURLOPT_REDIR_PROTOCOLS to https), or plain http on this machine when the
+// base itself is on this machine (local tests only). Returns the absolute target or throws Final.
+function redirectTarget(res, from, loopbackBase) {
+  const loc = res.headers && typeof res.headers.get === "function" ? res.headers.get("location") : null;
+  if (!loc) throw new Final("a redirect without a location");
+  let u;
+  try { u = new URL(loc, from); } catch { throw new Final(`a redirect to an address that does not parse (${JSON.stringify(loc)})`); }
+  const ok = u.protocol === "https:" || (loopbackBase && u.protocol === "http:" && isLoopback(u));
+  if (!ok || u.username || u.password) throw new Final(`redirect to ${u.href} refused (https only)`);
+  return u.href;
+}
+
+// One GET with a time limit that covers the redirects, the answer and its body. Redirects are followed here, not by fetch, as radar_http
+// follows them: at most 3, to https only. Never throws: { status, body } or { error, tooLarge, final }. However it ends, the request is
+// aborted and any body that was not read is given up, so no connection stays open after this returns.
+async function getOnce(fetchImpl, url, ms, max, loopbackBase) {
   const ac = new AbortController();
   let timer;
-  const timeout = new Promise((resolve) => { timer = setTimeout(() => { ac.abort(); resolve({ error: `no answer within ${msText(ms)}` }); }, ms); });
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve({ error: `no answer within ${msText(ms)}` }), ms); });
   const attempt = (async () => {
+    let res = null;
     try {
-      const res = await fetchImpl(url, { signal: ac.signal, redirect: "follow", headers: { "user-agent": USER_AGENT } });
+      let at = url;
+      for (let hops = 0; ; hops++) {
+        res = await fetchImpl(at, { signal: ac.signal, redirect: "manual", headers: { "user-agent": USER_AGENT } });
+        const status = Number(res.status);
+        if (!REDIRECT.has(status)) break;
+        if (hops >= MAX_REDIRECTS) throw new Final(`more than ${MAX_REDIRECTS} redirects`);
+        const next = redirectTarget(res, at, loopbackBase);
+        discard(res);
+        res = null;
+        at = next;
+      }
       const status = Number(res.status);
-      if (status !== 200) return { status };
+      if (status !== 200) { discard(res); return { status }; }
       return { status, body: await readLimited(res, max) };
     } catch (e) {
+      discard(res);
       // Node's fetch says only "fetch failed" and keeps the reason (such as ECONNREFUSED or ENOTFOUND) in its cause
       const cause = e && e.cause ? ` (${e.cause.code || e.cause.message || e.cause})` : "";
-      return { error: `${(e && e.message) || String(e)}${cause}`, tooLarge: e instanceof TooLarge };
+      return { error: `${(e && e.message) || String(e)}${cause}`, tooLarge: e instanceof TooLarge, final: e instanceof Final };
     }
   })();
-  try { return await Promise.race([attempt, timeout]); } finally { clearTimeout(timer); }
+  try {
+    return await Promise.race([attempt, timeout]);
+  } finally {
+    clearTimeout(timer);
+    ac.abort();   // ends the request and its connection whatever happened (a no-op once the body was read)
+  }
 }
 
 // A GET with at most one retry, after a network error, a timeout or a server error (5xx); never past the overall budget.
@@ -112,8 +162,8 @@ async function get(ctx, url, max) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const left = ctx.deadline - ctx.clock();
     if (left <= 0) return { error: `the ${msText(ctx.budgetMs)} budget for the whole step ran out` };
-    r = await getOnce(ctx.fetchImpl, url, Math.min(ctx.timeoutMs, left), max);
-    const retry = (r.error && !r.tooLarge) || (r.status >= 500 && r.status <= 599);
+    r = await getOnce(ctx.fetchImpl, url, Math.min(ctx.timeoutMs, left), max, ctx.loopbackBase);
+    const retry = (r.error && !r.tooLarge && !r.final) || (r.status >= 500 && r.status <= 599);
     if (!retry) break;
   }
   return r;
@@ -278,7 +328,7 @@ export async function fetchLiveSnapshot({ base = DEFAULT_BASE, outDir, fetchImpl
     if (typeof fetchImpl !== "function") return finish("this Node.js has no fetch");
     if (!outDir || !fs.existsSync(outDir) || !fs.statSync(outDir).isDirectory()) return finish(`the site folder ${outDir} does not exist; run the site build first`);
     const ctx = {
-      base: checked, outDir, fetchImpl, timeoutMs, budgetMs, clock, deadline: clock() + budgetMs, siteUrl, noindex,
+      base: checked, loopbackBase: isLoopback(new URL(checked)), outDir, fetchImpl, timeoutMs, budgetMs, clock, deadline: clock() + budgetMs, siteUrl, noindex,
       limits: { maxFileBytes: MAX_FILE_BYTES, maxRunBytes: MAX_RUN_BYTES, maxPageBytes: MAX_PAGE_BYTES, ...limits },
     };
     const live = await livePart(ctx);
@@ -318,7 +368,7 @@ export async function runLiveSnapshot({ env = process.env, argv = process.argv.s
     log(summaryLine(report));
     return report;
   }
-  return fetchLiveSnapshot({ base: s.base, outDir, ...(fetchImpl ? { fetchImpl } : {}), log, ...(now ? { now } : {}), siteUrl, noindex });
+  return fetchLiveSnapshot({ base: s.base, outDir, ...(fetchImpl ? { fetchImpl } : {}), log, ...(now ? { now } : {}), ...(s.timeoutMs ? { timeoutMs: s.timeoutMs } : {}), ...(s.budgetMs ? { budgetMs: s.budgetMs } : {}), siteUrl, noindex });
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -332,5 +382,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   } catch (e) {
     console.log(`live snapshot: skipped (unexpected error: ${(e && e.message) || e})`);
   }
-  process.exitCode = 0;
+  // Exit now, once the line is written out (stdout to a pipe is asynchronous on macOS): something still pending, such as a name lookup
+  // that outlived its request, must not hold the deploy up.
+  process.stdout.write("", () => process.exit(0));
 }

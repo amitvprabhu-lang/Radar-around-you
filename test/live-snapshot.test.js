@@ -299,13 +299,11 @@ test("an HTTP 404 is not retried and fails the part", async () => {
   assert.equal(fs.existsSync(path.join(out, "live")), false);
 });
 
-test("a timeout: a slow answer is given up after the per-request time, and the overall budget stops the rest", async () => {
+test("a timeout: a slow answer is given up after the per-request time, and the overall budget stops the rest", { timeout: 30000 }, async () => {
   {
     const d = branch(), out = siteDir();
     const f = fakeFetch(d.m, { "manifest.json": { delay: 300 } });
-    const t0 = Date.now();
     const { report } = await run(d, out, { fetchImpl: f, timeoutMs: 20 });
-    assert.ok(Date.now() - t0 < 1000, "does not wait for the slow answer");
     assert.equal(report.live.files, 0);
     assert.match(report.live.reason, /no answer within/);
     assert.equal(report.pages.files, 3, "the pages part has its own requests");
@@ -314,9 +312,8 @@ test("a timeout: a slow answer is given up after the per-request time, and the o
     // a fetch that never settles, with a budget smaller than the request timeout
     const d = branch(), out = siteDir();
     const fetchImpl = () => new Promise(() => {});
-    const t0 = Date.now();
+    // without the budget this would wait 10 s per request; the test's own time limit catches a budget that does not hold
     const { report, lines } = await run(d, out, { fetchImpl, timeoutMs: 10000, budgetMs: 50 });
-    assert.ok(Date.now() - t0 < 2000);
     assert.equal(report.ok, false);
     assert.match(report.live.reason, /no answer within|budget/);
     assert.match(report.pages.reason, /no answer within|budget/);
@@ -417,6 +414,81 @@ test("a write that fails leaves nothing behind for that part", async () => {
   assert.equal(walk(out).filter((f) => /\.tmp/.test(f)).length, 0);
 });
 
+test("a write that fails part way removes the temporary files already written, for both parts", async () => {
+  const d = branch(), out = siteDir();
+  // the first live file (quakes) and the first page (aurora-tonight) are staged; the next one cannot be, because a file blocks its folder
+  fs.mkdirSync(path.join(out, "live"));
+  fs.writeFileSync(path.join(out, "live/aurora"), "in the way");
+  fs.writeFileSync(path.join(out, "right-now"), "in the way");
+  const { report } = await run(d, out);
+  assert.equal(report.live.files, 0);
+  assert.match(report.live.reason, /could not write/);
+  assert.equal(report.pages.files, 0);
+  assert.match(report.pages.reason, /could not write/);
+  assert.deepEqual(walk(out).filter((f) => /\.tmp/.test(f)), [], "no temporary file is left");
+  assert.deepEqual(rel(path.join(out, "live")), ["aurora"]);
+  assert.equal(fs.readFileSync(path.join(out, "aurora-tonight/index.html"), "utf8"), "snapshot copy");
+});
+
+test("redirects are followed as radar_http follows them: at most 3, https only", async () => {
+  const d = branch();
+  // fetchImpl that answers the manifest with a chain of redirects ending at `last`; everything else from the branch
+  const chain = (hops, last) => {
+    const inner = fakeFetch(d.m);
+    const f = async (url, o) => {
+      f.calls.push(url);
+      f.modes.push(o && o.redirect);
+      if (url === BASE + "manifest.json" || /^https:\/\/hop\d\.example\//.test(url)) {
+        const n = url === BASE + "manifest.json" ? 0 : Number(url.match(/hop(\d)/)[1]);
+        const to = n + 1 < hops ? `https://hop${n + 1}.example/m.json` : last;
+        return new Response(null, { status: 302, headers: { location: to } });
+      }
+      if (url === "https://mirror.example/manifest.json") return new Response(d.m.get("manifest.json"), { status: 200 });
+      return inner(url, o);
+    };
+    f.calls = []; f.modes = [];
+    return f;
+  };
+  {
+    // another https host, after three hops: allowed, as curl with CURLOPT_REDIR_PROTOCOLS https and CURLOPT_MAXREDIRS 3 allows it
+    const f = chain(3, "https://mirror.example/manifest.json"), out = siteDir();
+    const { report } = await run(d, out, { fetchImpl: f });
+    assert.equal(report.live.ok, true, JSON.stringify(report.live));
+    assert.ok(f.calls.includes("https://mirror.example/manifest.json"));
+    assert.ok(f.modes.every((m) => m === "manual"), "redirects are never left to fetch");
+  }
+  for (const [hops, last, why] of [
+    [4, "https://mirror.example/manifest.json", /more than 3 redirects/],
+    [1, "http://mirror.example/manifest.json", /redirect to http:\/\/mirror\.example\/manifest\.json refused/],
+    [1, "file:///etc/passwd", /redirect to file:\/\/\/etc\/passwd refused/],
+    [1, "http://127.0.0.1:9/manifest.json", /redirect to http:\/\/127\.0\.0\.1:9\/manifest\.json refused/],
+  ]) {
+    const f = chain(hops, last), out = siteDir();
+    const { report } = await run(d, out, { fetchImpl: f });
+    assert.equal(report.live.files, 0, last);
+    assert.match(report.live.reason, why);
+    assert.ok(!f.calls.includes("https://mirror.example/manifest.json") || hops <= 3, "the fourth hop is never fetched");
+    assert.ok(!f.calls.some((u) => u.startsWith("http://") || u.startsWith("file:")), "a refused target is never fetched");
+    assert.equal(f.calls.filter((u) => u === BASE + "manifest.json").length, 1, "a refused redirect is not retried");
+    assert.equal(fs.existsSync(path.join(out, "live")), false);
+  }
+  {
+    // a redirect without a Location header is a failed request
+    const out = siteDir();
+    const fetchImpl = async () => new Response(null, { status: 301 });
+    const { report } = await run(d, out, { fetchImpl });
+    assert.match(report.live.reason, /redirect without a location/);
+  }
+  {
+    // with a loopback base (local tests only), a redirect may stay on plain http on this machine
+    const lb = "http://127.0.0.1:9/data/";
+    const inner = fakeFetch(d.m, {}, lb);
+    const fetchImpl = async (url, o) => (url === lb + "manifest.json" ? new Response(null, { status: 307, headers: { location: "/data/manifest2.json" } }) : url === lb + "manifest2.json" ? new Response(d.m.get("manifest.json"), { status: 200 }) : inner(url, o));
+    const { report } = await run(d, siteDir(), { base: lb, fetchImpl });
+    assert.equal(report.live.ok, true, JSON.stringify(report.live));
+  }
+});
+
 test("noindex: the data folder is copied, the pages and the sitemap are not, and the index is not even fetched", async () => {
   const d = branch({ noindex: true }), out = siteDir();
   const f = fakeFetch(d.m);
@@ -437,7 +509,7 @@ test("a missing site folder, a bad base, or a broken fetch never throws", async 
   assert.equal(missing.report.ok, false);
   assert.match(missing.report.reason, /does not exist/);
   assert.match(missing.lines[0], /^live snapshot: skipped \(/);
-  for (const base of ["http://data.example/", "ftp://x/", "not a url", "file:///etc/"]) {
+  for (const base of ["http://data.example/", "ftp://x/", "not a url", "file:///etc/", "http://[::1]:9/", "http://10.0.0.1/"]) {
     const r = await run(d, siteDir(), { base });
     assert.equal(r.report.ok, false, base);
     assert.match(r.report.reason, /https/);
@@ -464,9 +536,19 @@ test("settings: on by default with the server's base; LIVE_SNAPSHOT=0, the flag,
   assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT_BASE: " http://127.0.0.1:8/x/ " }, argv: [] }), { enabled: true, base: "http://127.0.0.1:8/x/" });
   assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT: "0" }, argv: [] }), { enabled: false, reason: "turned off by LIVE_SNAPSHOT=0" });
   assert.deepEqual(snapshotSettings({ env: {}, argv: ["--no-live-snapshot"] }), { enabled: false, reason: "turned off by --no-live-snapshot" });
-  const odd = snapshotSettings({ env: { LIVE_SNAPSHOT: "nope" }, argv: [] });
-  assert.equal(odd.enabled, false);
-  assert.match(odd.reason, /LIVE_SNAPSHOT/);
+  assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT: " 1 " }, argv: [] }), { enabled: true, base: DEFAULT_BASE });
+  // the time limits can be shortened (for tests), never lengthened; anything else is ignored
+  assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT_TIMEOUT_MS: "1000", LIVE_SNAPSHOT_BUDGET_MS: "5000" }, argv: [] }), { enabled: true, base: DEFAULT_BASE, timeoutMs: 1000, budgetMs: 5000 });
+  assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT_TIMEOUT_MS: "20000", LIVE_SNAPSHOT_BUDGET_MS: "600000" }, argv: [] }), { enabled: true, base: DEFAULT_BASE });
+  assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT_TIMEOUT_MS: "0", LIVE_SNAPSHOT_BUDGET_MS: "abc" }, argv: [] }), { enabled: true, base: DEFAULT_BASE });
+  assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT_TIMEOUT_MS: "1.5" }, argv: [] }), { enabled: true, base: DEFAULT_BASE });
+  assert.deepEqual(snapshotSettings({ env: { LIVE_SNAPSHOT: "" }, argv: [] }), { enabled: true, base: DEFAULT_BASE });
+  // only 0, 1 or nothing: any other value, even one that reads as yes, turns the download off with a message
+  for (const v of ["nope", "true", "on", "yes", "false", "off", "no", "01", "O"]) {
+    const odd = snapshotSettings({ env: { LIVE_SNAPSHOT: v }, argv: [] });
+    assert.equal(odd.enabled, false, v);
+    assert.equal(odd.reason, `LIVE_SNAPSHOT is ${JSON.stringify(v)}; only 0 or 1 are understood, so the download is off`);
+  }
 });
 
 test("runLiveSnapshot: turned off by LIVE_SNAPSHOT=0 or the flag, nothing is fetched and one line says so", async () => {

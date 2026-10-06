@@ -11,6 +11,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { build } from "../site/build.mjs";
+import { fetchLiveSnapshot } from "../site/live-snapshot.mjs";
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -79,20 +80,96 @@ test("the command line writes live/manifest.json and the live pages from a local
 test("an unreachable base, LIVE_SNAPSHOT=0 and the flag: exit code 0, one line, the site exactly as the build made it", async () => {
   const outDir = siteBuild("off");
   const before = treeHash(outDir);
-  // a port that was free a moment ago: nothing listens there, so the connection is refused at once
-  const probe = await serve(tmp);
-  const dead = `http://127.0.0.1:${probe.address().port}/data/`;
-  await new Promise((r) => probe.close(r));
+  // a server on a port of its own that drops every connection at once, so nothing can answer
+  const probe = await bad("drop");
+  const dead = probe.base;
   const cases = [
     [{ LIVE_SNAPSHOT_BASE: dead }, [], /^live snapshot: skipped \(live data: manifest\.json: .*; pages: pages\/index\.json: .*\)$/m],
     [{ LIVE_SNAPSHOT: "0", LIVE_SNAPSHOT_BASE: dead }, [], /^live snapshot: skipped \(turned off by LIVE_SNAPSHOT=0\)$/m],
     [{ LIVE_SNAPSHOT_BASE: dead }, ["--no-live-snapshot"], /^live snapshot: skipped \(turned off by --no-live-snapshot\)$/m],
   ];
-  for (const [env, args, line] of cases) {
-    const r = await cli(outDir, env, args);   // rejects on a non-zero exit code
-    assert.match(r.stdout, line);
-    assert.equal(r.stdout.trim().split("\n").length, 1);
-    assert.equal(treeHash(outDir), before);
+  try {
+    for (const [env, args, line] of cases) {
+      const r = await cli(outDir, env, args);   // rejects on a non-zero exit code
+      assert.match(r.stdout, line);
+      assert.equal(r.stdout.trim().split("\n").length, 1);
+      assert.equal(treeHash(outDir), before);
+    }
+  } finally {
+    await probe.close();
+  }
+});
+
+// Servers that misbehave, on a port of their own (listen on port 0), each closed at the end of its test:
+//   stall503: answers 503 and then sends a body that never ends;  drip: answers 200 declaring 30 MB and sends one byte a second;
+//   silent: accepts the connection and never answers;  drop: closes every connection at once.
+function bad(kind) {
+  const sockets = new Set(), timers = new Set();
+  const server = http.createServer((req, res) => {
+    if (kind === "stall503") { res.writeHead(503, { "content-type": "text/plain" }); res.write("busy"); }
+    else if (kind === "drip") {
+      res.writeHead(200, { "content-length": String(30 * 1024 * 1024) });
+      const t = setInterval(() => res.write("x"), 1000);
+      timers.add(t);
+      res.on("close", () => { clearInterval(t); timers.delete(t); });
+    }
+    // silent: nothing at all
+  });
+  server.on("connection", (s) => {
+    if (kind === "drop") { s.destroy(); return; }
+    sockets.add(s);
+    s.on("close", () => sockets.delete(s));
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({
+    base: `http://127.0.0.1:${server.address().port}/data/`,
+    open: () => sockets.size,
+    close: () => new Promise((r) => { for (const t of timers) clearInterval(t); for (const s of sockets) s.destroy(); server.close(() => r()); }),
+  })));
+}
+
+// Runs the command line and measures how long the process takes to exit; execFile's own timeout is only a last resort, so a hang fails
+// the test instead of holding it up.
+async function timedCli(outDir, env) {
+  const t0 = Date.now();
+  const r = await run(process.execPath, [script, "--out", outDir], { env: { ...process.env, SITE_URL, SITE_NOINDEX: "0", LIVE_SNAPSHOT: "", ...env }, encoding: "utf8", timeout: 120000 });
+  return { ...r, ms: Date.now() - t0 };
+}
+
+for (const [kind, env, what] of [
+  ["stall503", {}, "a 503 whose body never ends"],
+  ["drip", {}, "a 200 that declares 30 MB and sends one byte a second"],
+  // with the default limits this case takes up to 40 s (10 s per request, one retry, two parts); shorter limits keep the test quick
+  ["silent", { LIVE_SNAPSHOT_TIMEOUT_MS: "1000", LIVE_SNAPSHOT_BUDGET_MS: "5000" }, "a server that never answers"],
+]) {
+  test(`the command line exits promptly with code 0 when the base is ${what}`, { timeout: 150000 }, async () => {
+    const srv = await bad(kind);
+    const outDir = siteBuild(`bad-${kind}`);
+    const before = treeHash(outDir);
+    try {
+      const r = await timedCli(outDir, { LIVE_SNAPSHOT_BASE: srv.base, ...env });   // rejects on a non-zero exit code or the last-resort kill
+      assert.match(r.stdout, /^live snapshot: skipped \(live data: manifest\.json: .*; pages: pages\/index\.json: .*\)$/m);
+      assert.ok(r.ms < 30000, `the process took ${r.ms} ms to exit; the server was still holding its connections open`);
+      assert.equal(treeHash(outDir), before);
+    } finally {
+      await srv.close();
+    }
+  });
+}
+
+test("the connections of a failed request are closed, not left to the server (real fetch, in this process)", { timeout: 60000 }, async () => {
+  for (const kind of ["stall503", "drip"]) {
+    const srv = await bad(kind);
+    try {
+      const out = fs.mkdtempSync(path.join(tmp, "sock-"));
+      const report = await fetchLiveSnapshot({ base: srv.base, outDir: out, siteUrl: SITE_URL, noindex: false, log: () => {} });
+      assert.equal(report.ok, false);
+      // the server sees every connection closed shortly after the step returns, while it would keep them open itself
+      const t0 = Date.now();
+      while (srv.open() > 0 && Date.now() - t0 < 10000) await new Promise((r) => setTimeout(r, 50));
+      assert.equal(srv.open(), 0, `${kind}: ${srv.open()} connection(s) still open`);
+    } finally {
+      await srv.close();
+    }
   }
 });
 
