@@ -32,14 +32,14 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 452 unit tests for the app and the content site, no browser needed
+npm test                # 474 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
 npm run test:hosting    # 425 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 121 pages (120 static pages and the app as index.html), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
 npm run e2e             # 291 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
-npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first); 56 in the last recorded run (2026-10-06, indexable and noindex builds, all branches merged)
+npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first); 65 checks on branch feature/home-seo (2026-10-06, indexable build, run once: 63 passed, the 2 word-count failures were fixed in the check afterwards and not rerun); 56 before it
 npm run e2e:live        # 112 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
@@ -99,7 +99,8 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 - The 88 constellations and the 331 stars that have IAU names, from the same IAU files the app uses. Borders between constellations are found by walking the IAU boundaries.
 - Six guides (aurora, hurricanes, earthquakes, fires, asteroids, satellites) and a "How we know" page. Each factual sentence comes from `docs/hazard-sources.md` or `docs/feature-sources.md`, which record where it was read and what could not be confirmed. The G1 to G5 and Saffir-Simpson tables are printed from `src/scales.js`.
 - An About page (`/about/`) that says what the app is, what each view does, where the data comes from and what it does not do; every statement on it is traced in `docs/about-sources.md`.
-- On the home page itself, below the first screen, a text section of short answers (the ISS, satellites above you, tonight's sky, quakes and hazards, the satellite count, sources) that scrolls up over the app; the app and its first screen are unchanged. Made by `site/home-text.mjs`, added only by the content-site build, every statement traced in `docs/home-sources.md`.
+- On the home page itself, below the first screen, a text section that scrolls up over the app: the page's h1, a strip of six live figures (earthquakes in 24 hours and the largest, Kp now, active tropical storms, fire detections, the next launch) that the browser fills from the site's own `live/` folder (the HTML carries the labels and a dash for each value), a row of links to every live page in `site/livepages.mjs`, and short answers (the ISS, satellites above you, tonight's sky, quakes and hazards, the satellite count, sources). The app and its first screen are unchanged. Made by `site/home-text.mjs` and `site/home-strip.mjs`, added only by the content-site build, every statement and figure definition traced in `docs/home-sources.md`.
+- One share image for every page (`og-image.png`, 1200 by 630, named in `og:image` and a large Twitter card), drawn by `tools/make-og-image.mjs` (run by hand) and committed at `site/assets/og-image.png`; the build copies it.
 - A page on how many satellites are in orbit (`/how-many-satellites-in-orbit/`), built from a data folder after each collection (see `docs/satcount-sources.md`).
 - Satellites by country (`/satellites-by-country/`): every owner in the catalogue ranked by active satellites, and pages for five owners (the United States, China, the United Kingdom, the CIS (former USSR) as the catalogue names it, and Japan) with their orbits, purposes, launch years and a static map of where their satellites were at the data time. Built with the count page; see `docs/satcountry-sources.md`.
 - Five live hazard pages and a hub, rebuilt from the collector's feeds (design `docs/superpowers/specs/2026-10-06-live-hazard-pages-design.md`, sources `docs/hazard-pages-sources.md`): `/earthquakes-today/` (USGS, the last 24 hours by magnitude and hour, the largest, a map), `/aurora-tonight/` (NOAA's Kp, solar wind and aurora grid), `/asteroid-close-approaches/` (NASA JPL's list), `/tropical-storms-now/` (NHC's active storms and forecast tracks) and `/wildfires-today/` (NASA FIRMS fire detections, densest cells with the nearest place within 300 km, a map), plus `/right-now/`, one number per live page with its data time. Each page prints the feed's own data time, is published only when its feed is younger than the page's limit, and a stale or broken feed skips only its own page. The site build writes a copy only where the data is bundled in `public/` (today the earthquake page and the hub); the other pages arrive with the next pull.
@@ -110,7 +111,7 @@ An indexable build also writes llms.txt (a short summary and links in the llmstx
 
 The build stops if the Moon phases, seasons, solar eclipses or solstice sunrise and sunset times stop agreeing with the US Naval Observatory tables saved in `test/fixtures/usno`, and a page only quotes a comparison result that ran in that build. Set `SITE_URL` to the real address before building; until then canonical links and the sitemap use `https://amitvprabhu-lang.github.io/Radar-around-you`, which is a guess at where GitHub Pages would serve this repository. `test/site.test.js` checks unique titles and descriptions, every internal link and anchor, the sitemap, the house style and the constellation facts.
 
-Not done or not verifiable here: how Google treats these pages (this needs weeks and Search Console), whether the `WebApplication` structured data passes Google's Rich Results Test, a social preview image (none exists), and the licence of the IAU boundary text files.
+Not done or not verifiable here: how Google treats these pages (this needs weeks and Search Console), whether the `WebApplication` structured data passes Google's Rich Results Test, how social sites show the share image (not tried on any of them), and the licence of the IAU boundary text files.
 
 ## Layout
 
@@ -126,12 +127,13 @@ test/       unit tests, checked against satellite.js, astronomy-engine and the r
             (test/fixtures/gp-sample.json holds five real CelesTrak element sets, so the tests need no downloads)
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
 site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs;
-            home-text.mjs (the home page text section), satcount.mjs, satcountry.mjs, svgmap.mjs, hazard.mjs (hazard feed summaries),
+            home-text.mjs (the home page text section), home-strip.mjs (its live figures), assets/og-image.png (the share image), satcount.mjs, satcountry.mjs, svgmap.mjs, hazard.mjs (hazard feed summaries),
             pages-hazard.mjs, livepages.mjs (the list of every live page), indexnow.mjs (the IndexNow key) and build-live.mjs for the live pages
 hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 425 checks; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
-e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts
+e2e.mjs, e2e-live.mjs, e2e-site.mjs, harness.mjs, smoke/   browser tests and debugging scripts
+tools/      scripts run by hand: make-icons.mjs (app icons), make-og-image.mjs (the share image), build-constellations.mjs
 build_data.py, fetch_*.py, build_snapshot.py   data pipeline (inputs live in raw/ and raw2/, which are git-ignored and not in the repository; the fetch scripts read your contact address from the CONTACT_EMAIL environment variable and put it in the User-Agent header, as the data providers ask)
 docs/       research reports, the technical plan, screenshots from the latest end-to-end run
 v1/         the first prototype, kept for reference
