@@ -32,7 +32,7 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 509 unit tests for the app and the content site, no browser needed
+npm test                # 565 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
