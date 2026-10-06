@@ -11,6 +11,14 @@ export function wTime(s) {
   if (typeof s !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d(:[\d.]+)?(Z|[+-]\d\d:\d\d)?$/.test(s)) return NaN;
   return Date.parse(/(Z|[+-]\d\d:\d\d)$/.test(s) ? s : s + "Z");
 }
+// a real, finite number from lo to hi (null, strings and NaN fail, unlike a bare comparison, where null counts as 0)
+export function wFin(v, lo, hi) { return typeof v === "number" && isFinite(v) && v >= lo && v <= hi; }
+// The wait before the next look at the manifest, in ms: the manifest's pollSec (never under 300 s, never over an hour), doubled after
+// each failure in a row up to 16 times, at most 30 minutes (pollDelayMs in src/live.js, with a higher floor for other people's pages).
+export function wPollDelay(pollSec, failures) {
+  var base = Math.min(3600, Math.max(300, wFin(pollSec, 1, 1e6) ? pollSec : 300)) * 1000;
+  return Math.min(18e5, base * Math.pow(2, Math.min(failures || 0, 4)));
+}
 // numbers as the live pages print them (en-GB grouping), rounded to d decimals when d is given
 export function wNum(n, d) {
   var x = d == null ? n : Math.round(n * Math.pow(10, d)) / Math.pow(10, d);
@@ -98,7 +106,7 @@ export function quakeModel(doc, now, C) {
   if (g > now + 36e5) throw new Error("quakes: data time in the future");
   for (var i = 0; i < doc.events.length; i++) {
     var e = doc.events[i], t = wTime(e && e.time);
-    if (!(t > 0) || typeof e.mag !== "number" || !(e.mag >= -2 && e.mag <= 10) || !(e.lat >= -90 && e.lat <= 90) || !(e.lon >= -180 && e.lon <= 180)) throw new Error("quakes: event " + i + " fails its checks");
+    if (!(t > 0) || !wFin(e.mag, -2, 10) || !wFin(e.lat, -90, 90) || !wFin(e.lon, -180, 180)) throw new Error("quakes: event " + i + " fails its checks");
     if (t > g - 864e5 && t <= g) ev.push({ t: t, mag: e.mag, lat: e.lat, lon: e.lon, place: String(e.place || "").trim().slice(0, 120) });
   }
   ev.sort(function (a, b) { return b.t - a.t || b.mag - a.mag; });
@@ -133,7 +141,7 @@ export function kpModel(rows, now, C) {
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i], t = wTime(r && r.t);
     if (!(t > 0)) throw new Error("kp: row " + i + " has no time");
-    if (r.kp != null && !(typeof r.kp === "number" && r.kp >= 0 && r.kp <= 9)) throw new Error("kp: row " + i + " is out of range");
+    if (r.kp != null && !wFin(r.kp, 0, 9)) throw new Error("kp: row " + i + " is out of range");
     if (r.kp != null && t <= now) list.push({ t: t, kp: r.kp });
   }
   if (!list.length) throw new Error("kp: no value up to now");
@@ -158,17 +166,17 @@ export function wCat(kt) { return kt >= 137 ? 5 : kt >= 113 ? 4 : kt >= 96 ? 3 :
 // the newest advisory time is reported too.
 export function stormModel(doc, now, C) {
   var g = wTime(doc && doc.generated), out = [], adv = null;
-  var ll = function (p) { return p && p.lat >= -90 && p.lat <= 90 && p.lon >= -180 && p.lon <= 180; };
+  var ll = function (p) { return !!p && wFin(p.lat, -90, 90) && wFin(p.lon, -180, 180); };
   if (!(g > 0) || !Array.isArray(doc.storms)) throw new Error("storms: no usable list");
   if (g > now + 36e5) throw new Error("storms: data time in the future");
   for (var i = 0; i < doc.storms.length; i++) {
     var s = doc.storms[i];
-    if (!s || typeof s.name !== "string" || !s.name.trim() || !(s.windKt >= 0 && s.windKt <= 250) || !ll(s)) throw new Error("storms: storm " + i + " fails its checks");
+    if (!s || typeof s.name !== "string" || !s.name.trim() || !wFin(s.windKt, 0, 250) || !ll(s)) throw new Error("storms: storm " + i + " fails its checks");
     var track = Array.isArray(s.track) ? s.track : [];
-    for (var j = 0; j < track.length; j++) if (!ll(track[j]) || typeof track[j].hours !== "number") throw new Error("storms: a forecast point fails its checks");
+    for (var j = 0; j < track.length; j++) if (!ll(track[j]) || !wFin(track[j].hours, -48, 240)) throw new Error("storms: a forecast point fails its checks");
     var a = Math.max(wTime(s.issued) || 0, wTime(s.updated) || 0);
     if (a > 0 && (!adv || a > adv)) adv = a;
-    out.push({ name: s.name.trim().slice(0, 40), cls: String(s.classText || "").slice(0, 40), basin: String(s.basin || "").slice(0, 40), kt: s.windKt, kmh: typeof s.windKmh === "number" ? s.windKmh : Math.round(s.windKt * 1.852), cat: wCat(s.windKt), lat: s.lat, lon: s.lon,
+    out.push({ name: s.name.trim().slice(0, 40), cls: String(s.classText || "").slice(0, 40), basin: String(s.basin || "").slice(0, 40), kt: s.windKt, kmh: wFin(s.windKmh, 0, 500) ? s.windKmh : Math.round(s.windKt * 1.852), cat: wCat(s.windKt), lat: s.lat, lon: s.lon,
       track: track.slice().sort(function (p, q) { return p.hours - q.hours; }).map(function (p) { return { lat: p.lat, lon: p.lon, hours: p.hours }; }) });
   }
   out.sort(function (p, q) { return q.kt - p.kt || (p.name < q.name ? -1 : p.name > q.name ? 1 : 0); });
@@ -332,30 +340,37 @@ export function skyCloud(doc, id, night, now, C) {
   }
   return { t: u, stale: now - u > C.cloudHours * 36e5, hours: hours };
 }
-// The words of the sky widget. city: { name, tz }; fmt(ms): the city's local time "21:47"; loaded: whether the live data loaded (cloud
-// null with loaded true means the feed had no usable forecast for the city).
-export function skyText(city, night, cloud, fmt, loaded) {
-  var PL = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn"], up = [], i, j;
+// The words of the sky widget. city: { name, tz }; fmt(ms): the city's local time "21:47"; cloud: skyCloud's result or null, and
+// state: why it is null ("failed": the live data could not be loaded, "missing": the live data has no cloud forecast, "unusable": the
+// forecast has nothing usable for the city). Planets are named as the sky pages name them (planetsTonight in site/sky.mjs): well placed
+// means at least 15 degrees up while the Sun is more than 6 degrees down; a night that never gets that dark names none.
+export function skyText(city, night, cloud, fmt, state) {
+  var PL = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn"], up = [], dark = false, i, j;
   var moon = skyEvents(night, "Moon"), mid = night.samples[Math.floor(night.samples.length / 2)].p.Moon;
-  for (i = 0; i < PL.length; i++) for (j = 0; j < night.samples.length; j++) {
+  if (night.kind !== "midnightSun") for (j = 0; j < night.samples.length; j++) if (night.samples[j].p.Sun.alt < -6) dark = true;
+  for (i = 0; dark && i < PL.length; i++) for (j = 0; j < night.samples.length; j++) {
     var p = night.samples[j].p;
-    if (p[PL[i]].alt > 0 && (night.kind === "midnightSun" || p.Sun.alt < -6)) { up.push(PL[i]); break; }
+    // with standard refraction added (Bennett's formula, about 0.06 degrees at 15 degrees), as the sky pages measure altitude
+    var h = p[PL[i]].alt, hr = h + 1.02 / Math.tan((h + 10.3 / (h + 5.11)) * Math.PI / 180) / 60;
+    if (p.Sun.alt < -6 && hr >= 15) { up.push(PL[i]); break; }
   }
   var ev = moon.events.length ? moon.events.map(function (e) { return (e.kind === "rise" ? "rises " : "sets ") + fmt(e.t); }).join(", ") : moon.upAtStart ? "up all night" : "below the horizon all night";
   var span = night.kind === "midnightSun" ? "The Sun does not set tonight in " + city.name + "; the next 12 hours from " + fmt(night.start) :
     (night.underWay ? "Tonight in " + city.name + ", now to " : "Tonight in " + city.name + ", " + fmt(night.start) + " to ") + (night.kind === "polarNight" ? fmt(night.end) + " (the Sun does not rise)" : fmt(night.end));
   var list = up.length < 2 ? up.join("") : up.slice(0, -1).join(", ") + " and " + up[up.length - 1];
   var moonText = "Moon " + Math.round(mid.lit * 100) + "% lit (" + (mid.waxing ? "waxing" : "waning") + "), " + ev + ".";
-  var plan = up.length ? list + " above the horizon in the dark." : "No planet from Mercury to Saturn above the horizon in the dark.";
-  var cl = "";
-  if (cloud && cloud.stale) cl = " MET Norway's cloud forecast of " + wUtc(cloud.t) + " is out of date, so no cloud is shown.";
-  else if (cloud && cloud.hours.length) {
+  var plan = !dark ? (night.kind === "midnightSun" ? "The Sun does not set, so no planet is in a dark sky." : "The Sun stays less than 6 degrees down, so no planet is in a dark sky.") :
+    up.length ? list + (up.length === 1 ? " is" : " are") + " well placed in the dark (at least 15 degrees up)." : "No planet from Mercury to Saturn is well placed in the dark (at least 15 degrees up).";
+  var cl;
+  if (!cloud) cl = state === "missing" ? " The live data has no cloud forecast right now." : state === "unusable" ? " MET Norway's cloud forecast has nothing usable for " + city.name + "." : " The cloud forecast could not be loaded.";
+  else if (cloud.stale) cl = " MET Norway's cloud forecast of " + wUtc(cloud.t) + " is out of date, so no cloud is shown.";
+  else if (!cloud.hours.length) cl = " MET Norway's forecast of " + wUtc(cloud.t) + " does not cover these hours.";
+  else {
     var lo = 100, hi = 0;
     for (i = 0; i < cloud.hours.length; i++) { lo = Math.min(lo, cloud.hours[i].cloud); hi = Math.max(hi, cloud.hours[i].cloud); }
     cl = " Cloud " + (Math.round(lo) === Math.round(hi) ? Math.round(lo) + "%" : Math.round(lo) + " to " + Math.round(hi) + "%") + " in MET Norway's forecast of " + wUtc(cloud.t) + ".";
   }
-  if (!cloud) cl = loaded ? " MET Norway's cloud forecast has nothing usable for " + city.name + "." : " The cloud forecast could not be loaded.";
   var sum = span + " local time: " + moonText + " " + plan + cl;
-  var short = "Moon " + Math.round(mid.lit * 100) + "% lit, " + ev + (up.length ? ". Planets up: " + up.join(", ") : "");
-  return { short: short, sum: sum, alt:"Sky chart of tonight over " + city.name + ", north at the top and east on the left, with the paths of the Moon and planets. " + sum };
+  var short = "Moon " + Math.round(mid.lit * 100) + "% lit, " + ev + (up.length ? ". Well placed: " + up.join(", ") : "");
+  return { short: short, sum: sum, alt: "Sky chart of tonight over " + city.name + ", north at the top and east on the left, with the paths of the Moon and planets. " + sum };
 }

@@ -22,7 +22,9 @@ export function shiftTimes(value, delta) {
 }
 export const FIXTURE_TIMES = { quakes: "2026-10-04T13:49:21Z", kp: "2026-10-05T15:00:00Z", storms: "2026-10-04T19:55:59Z", fires: "2026-10-04T17:15:00Z", clouds: "2026-10-06T01:17:49Z" };
 export function embedPack(now = Date.now(), { ageMin = 20, version = "v1" } = {}) {
-  const d = (feed) => now - ageMin * 6e4 - Date.parse(FIXTURE_TIMES[feed]);
+  // NOAA tags Kp periods on a three-hour grid, so the Kp file moves by whole periods (its newest period then starts up to three hours
+  // before the others' time)
+  const d = (feed) => { const x = now - ageMin * 6e4 - Date.parse(FIXTURE_TIMES[feed]); return feed === "kp" ? Math.floor(x / 108e5) * 108e5 : x; };
   const docs = {
     "quakes/quakes.json": shiftTimes(json("hazards/quakes.json"), d("quakes")),
     "kp/kp.json": shiftTimes(json("hazards/live-20261005/kp/20261005T183040Z/kp.json"), d("kp")),

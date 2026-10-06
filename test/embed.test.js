@@ -9,11 +9,11 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import * as Astro from "astronomy-engine";
-import { wTime, wNum, wUtc, wAgo, wOptions, wSnippet, wLoad, quakeModel, quakeText, wG, kpModel, kpText, wCat, stormModel, stormText, fireModel, fireText, skyPos, skyNight, skyEvents, skyCloud, skyText } from "../site/embed-models.mjs";
+import { wTime, wFin, wPollDelay, wNum, wUtc, wAgo, wOptions, wSnippet, wLoad, quakeModel, quakeText, wG, kpModel, kpText, wCat, stormModel, stormText, fireModel, fireText, skyPos, skyNight, skyEvents, skyCloud, skyText } from "../site/embed-models.mjs";
 import { WIDGETS, WIDGET_IDS, widgetFile, widgetHtml, coastRuns, coastEncode, wCoastRuns, COAST_EPS } from "../site/embed-widgets.mjs";
 import { galleryPage, galleryScript, embedSpec, defaultSnippet, GALLERY_FILE, EMBED_SIZES } from "../site/embed.mjs";
 import { summariseQuakes, summariseKp, summariseStorms, summariseFires, MAX_AGE_HOURS } from "../site/hazard.mjs";
-import { nightWindow, riseSetBetween, SKY_CITY_IDS, SKY_MAX_AGE_HOURS } from "../site/sky.mjs";
+import { nightWindow, riseSetBetween, planetsTonight, SKY_CITY_IDS, SKY_MAX_AGE_HOURS } from "../site/sky.mjs";
 import { skyStatic } from "../site/sky-data.mjs";
 import { gLevelForKp, categoryForKnots } from "../src/scales.js";
 import { SITE, renderPage, urlPath, robotsMeta } from "../site/layout.mjs";
@@ -233,19 +233,49 @@ test("the sky words: the window, the Moon, the planets in the dark and the cloud
   const n = skyNight(c.lat, c.lon, now, 10), cl = skyCloud(clouds, "pune", n, now, C);
   assert.ok(cl.hours.length > 6 && cl.hours.every((h) => h.t > n.start - 36e5 && h.t < n.end), "the forecast hours of the night");
   const fmt = (t) => new Intl.DateTimeFormat("en-GB", { timeZone: c.tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(t));
-  const tx = skyText(c, n, cl, fmt, true);
+  const tx = skyText(c, n, cl, fmt, "ok");
   assert.match(tx.sum, /^Tonight in Pune, \d\d:\d\d to \d\d:\d\d local time: Moon \d+% lit \((waxing|waning)\), /);
   const lo = Math.round(Math.min(...cl.hours.map((h) => h.cloud))), hi = Math.round(Math.max(...cl.hours.map((h) => h.cloud)));
   assert.ok(tx.sum.includes(`Cloud ${lo === hi ? `${lo}%` : `${lo} to ${hi}%`} in MET Norway's forecast of 6 Oct 01:17 UTC.`), tx.sum);
   assert.equal(skyCloud(clouds, "pune", n, T("clouds") + 6.1 * 36e5, C).stale, true);
-  assert.match(skyText(c, n, { ...cl, stale: true }, fmt, true).sum, /cloud forecast of 6 Oct 01:17 UTC is out of date, so no cloud is shown\.$/);
-  assert.match(skyText(c, n, null, fmt, false).sum, /The cloud forecast could not be loaded\.$/);
+  assert.match(skyText(c, n, { ...cl, stale: true }, fmt, "ok").sum, /cloud forecast of 6 Oct 01:17 UTC is out of date, so no cloud is shown\.$/);
+  assert.match(skyText(c, n, null, fmt, "failed").sum, /The cloud forecast could not be loaded\.$/);
+  assert.match(skyText(c, n, null, fmt, "missing").sum, /The live data has no cloud forecast right now\.$/);
+  assert.match(skyText(c, n, null, fmt, "unusable").sum, /MET Norway's cloud forecast has nothing usable for Pune\.$/);
+  assert.match(skyText(c, n, { ...cl, hours: [] }, fmt, "ok").sum, /forecast of 6 Oct 01:17 UTC does not cover these hours\.$/);
   assert.equal(skyCloud(clouds, "atlantis", n, now, C), null);
   assert.equal(skyCloud({ cities: { pune: { ...clouds.cities.pune, hours: [{ t: "x", cloud: 5 }] } } }, "pune", n, now, C), null);
   // Tromsø near midsummer: the Sun does not set, and nothing is called dark
   const t = cities.tromso, mid = skyNight(t.lat, t.lon, Date.parse("2026-06-21T12:00:00Z"), 10);
   assert.equal(mid.kind, "midnightSun");
-  assert.match(skyText(t, mid, null, fmt, true).sum, /^The Sun does not set tonight in Tromsø/);
+  const tf = (x) => new Intl.DateTimeFormat("en-GB", { timeZone: t.tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(x));
+  const ms = skyText(t, mid, null, tf, "failed");
+  assert.match(ms.sum, /^The Sun does not set tonight in Tromsø; the next 12 hours from \d\d:\d\d local time: Moon \d+% lit \((waxing|waning)\), [^.]+\. The Sun does not set, so no planet is in a dark sky\. The cloud forecast could not be loaded\.$/, ms.sum);
+  assert.ok(!/well placed|above the horizon/.test(ms.sum) && !/Well placed/.test(ms.short));
+});
+
+// the planets the widget names as well placed (its short line lists exactly those)
+const placedIn = (tx) => ((tx.short.split("Well placed: ")[1]) || "").split(", ").filter(Boolean);
+test("the sky widget names the same well-placed planets as the sky pages (planetsTonight), 6 cities over 2026 and 2027", () => {
+  let nights = 0, named = 0, borderline = 0;
+  for (let k = 0; k < 48; k++) for (const id of SKY_CITY_IDS) {
+    const c = cities[id], ref = Date.UTC(2026, 0, 3) + k * 15.3 * 864e5 - (c.lon / 15) * 36e5, w = nightWindow({ ...c, id }, ref);
+    const n = skyNight(c.lat, c.lon, ref, 10);
+    if (n.kind !== w.kind || Math.abs(n.start - w.start) > 2 * 6e4) continue;
+    const theirs = planetsTonight({ ...c, id }, w).filter((p) => p.wellPlaced).map((p) => p.name);
+    const tx = skyText(c, n, null, (x) => String(x), "failed"), sum = tx.sum, ours = placedIn(tx);
+    // the two sample the night ten minutes apart from starts up to a minute or two apart, so a planet within a degree of 15 degrees can
+    // fall either side; any other disagreement fails
+    const pl = planetsTonight({ ...c, id }, w);
+    for (const p of pl) if (ours.includes(p.name) !== p.wellPlaced) { assert.ok(p.best && Math.abs(p.best.alt - 15) < 1, `${id} ${new Date(ref).toISOString().slice(0, 10)} ${p.name} at ${p.best && p.best.alt}: ${sum}`); borderline++; }
+    nights++; named += ours.length;
+  }
+  assert.ok(nights >= 200 && named > 0 && borderline <= nights * 0.05, `${nights} nights, ${named} planets named, ${borderline} within a degree of the line`);
+  // Sydney on the night of the fixture forecast, the case the review raised
+  const sy = cities.sydney, ref = T("clouds"), wn = nightWindow({ ...sy, id: "sydney" }, ref), sn = skyNight(sy.lat, sy.lon, ref, 10);
+  const stx = skyText(sy, sn, null, String, "failed");
+  assert.deepEqual(placedIn(stx), planetsTonight({ ...sy, id: "sydney" }, wn).filter((p) => p.wellPlaced).map((p) => p.name), stx.sum);
+  assert.ok(placedIn(stx).length === 0 ? /No planet from Mercury to Saturn is well placed/.test(stx.sum) : / well placed in the dark \(at least 15 degrees up\)\./.test(stx.sum), stx.sum);
 });
 
 // ------------------------------------------------------------------ the coastline and the widget files
@@ -278,7 +308,6 @@ test("each widget page is noindex, forbids outside requests in its content secur
     assert.ok(h.includes('<meta name="robots" content="noindex">'), id);
     assert.ok(!h.includes('rel="canonical"'), `${id}: no canonical`);
     assert.match(h, /<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self';[^"]*">/);
-    assert.ok(!/frame-ancestors|X-Frame-Options/i.test(h), `${id}: nothing blocks framing`);
     assert.ok(!/localStorage|sessionStorage|indexedDB|document\.cookie|navigator\.sendBeacon|XMLHttpRequest|eval\(/.test(h), id);
     // every web address in the page is the site's own credit link, or the text of NASA's acknowledgement
     const urls = [...h.matchAll(/https?:\/\/[^\s"'<)]+/g)].map((m) => m[0]);
@@ -298,21 +327,14 @@ test("each widget page shows its source credit and one link back to the matching
     assert.equal(links[0][2], "Radar Around You");
     assert.match(links[0][0], /target="_blank" rel="noopener"/);
     assert.ok(!EM_DASH.test(h) && !EMOJI.test(h), `${w.id}: house style`);
-    assert.ok(h.includes('role="img" aria-label=') && h.includes('aria-live="polite"'), `${w.id}: text alternative and summary`);
+    assert.ok(h.includes('role="img" aria-label=') && h.includes('<p class="sum" id="sum">'), `${w.id}: text alternative and summary`);
+    assert.ok(!/aria-live|role="status"|role="alert"/.test(h), `${w.id}: no live region (the age text changes every minute)`);
     assert.ok(h.includes("prefers-reduced-motion"), `${w.id}: reduced motion`);
   }
   assert.ok(DOCS.wildfires.includes("We acknowledge the use of data and/or imagery from NASA&#39;s Land, Atmosphere Near real-time Capability") || DOCS.wildfires.includes("We acknowledge the use of data and/or imagery from NASA's Land, Atmosphere Near real-time Capability"), "NASA's acknowledgement, in full");
   assert.ok(DOCS["tonights-sky"].includes("MET Norway") && DOCS["tonights-sky"].includes("CC BY 4.0"));
 });
 
-test("the widget scripts hold every function they call (run in a sandbox, each defines wRun and its widget's drawing)", () => {
-  for (const w of WIDGETS) {
-    const src = scriptOf(DOCS[w.id]).replace(/^\(function\(\)\{\n/, "").replace(/\nwRun\(\{base:[\s\S]*$/, "");
-    const ctx = vm.createContext({ location: { search: "?city=london" }, Intl, Date, Math, JSON });
-    vm.runInContext(src, ctx);
-    for (const name of ["wTime", "wUtc", "wAgo", "wOptions", "wLoad", "wRun", ...w.fns.map((f) => f.name)]) assert.equal(typeof ctx[name], "function", `${w.id}: ${name}`);
-  }
-});
 
 // ------------------------------------------------------------------ the gallery
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "embed-"));
@@ -363,4 +385,79 @@ test("the gallery's text is readable without JavaScript: every widget's default 
   assert.match(gallery, /keyword-rich, hidden or low-quality links in widgets/);
   assert.doesNotThrow(() => new vm.Script(galleryScript(embedSpec())));
   assert.ok(!/innerHTML|insertAdjacentHTML|document\.write/.test(galleryScript(embedSpec())), "the generator never writes HTML from values");
+});
+
+// A drawing context that accepts every call and counts them, and a document that hands out canvases with such a context.
+function fakeCanvasWorld() {
+  const calls = {};
+  const ctx = new Proxy({}, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === "measureText") return (s) => ({ width: String(s).length * 6 });
+      if (k === "getTransform") return () => ({ a: 1 });
+      if (k === "createLinearGradient" || k === "createRadialGradient") return () => ({ addColorStop() {} });
+      return (...a) => { calls[k] = (calls[k] || 0) + 1; for (const v of a) if (typeof v === "number" && !Number.isFinite(v) && k !== "ellipse") calls.nonFinite = (calls.nonFinite || 0) + 1; };
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+  const document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
+  return { ctx, calls, document };
+}
+test("each widget's own script, run in a sandbox on the fixture data, gives the same words as the tested functions and draws without errors", () => {
+  const now = Date.now(), pack = embedPack(now);
+  const r = { manifest: pack.manifest, docs: pack.docs, missing: [], version: "v1", same: false };
+  const C0 = { maxHours: 0, pollSec: 300 };
+  for (const w of WIDGETS) {
+    const src = scriptOf(DOCS[w.id]).replace(/^\(function\(\)\{\n/, "").replace(/\n\}\)\(\);$/, "").replace(/wRun\(\{base:/, "__cfg=({base:");
+    const world = fakeCanvasWorld();
+    const sb = vm.createContext({ location: { search: "?city=london" }, Intl, Date, Math, JSON, Promise, DataView, Float32Array, Uint16Array, Uint8Array, ArrayBuffer, Number, String, Object, Array, isFinite, document: world.document });
+    vm.runInContext(src, sb);
+    const cfg = sb.__cfg, opt = sb.wOptions("?city=london", cfg.cities || null);
+    const docs = Object.fromEntries(Object.entries(pack.docs).map(([k, v]) => [k, Buffer.isBuffer(v) ? ab(v) : v]));
+    const m = cfg.model({ ...r, docs }, now, cfg.C, opt);
+    const tx = cfg.text(m, now, cfg.C, opt);
+    // the same words from the functions imported in node
+    const C = { ...C0, maxHours: w.maxHours };
+    const want = {
+      earthquakes: () => quakeText(quakeModel(pack.docs["quakes/quakes.json"], now, C), now),
+      aurora: () => kpText(kpModel(pack.docs["kp/kp.json"], now, C)),
+      "tropical-storms": () => stormText(stormModel(pack.docs["storms/storms.json"], now, C)),
+      wildfires: () => fireText(fireModel(pack.docs["fires/fires.json"], ab(pack.docs["fires/fires.bin"]), now, C)),
+      "tonights-sky": () => { const c = cities.london, n = skyNight(c.lat, c.lon, now, 10); return skyText(c, n, skyCloud(pack.docs["clouds/clouds.json"], "london", n, now, { cloudHours: w.cloudHours }), sb.C.fmt, "ok"); },
+    }[w.id]();
+    assert.equal(tx.sum, want.sum, w.id);
+    assert.equal(tx.alt, want.alt, w.id);
+    for (const still of [false, true]) cfg.draw(world.ctx, 400, 220, m, { t: 3.7, still, col: new Proxy({}, { get: () => "#888888" }), cache: {}, coast: cfg.coast || "", now, fmt: sb.C.fmt || String });
+    assert.ok((world.calls.fill || 0) + (world.calls.fillRect || 0) + (world.calls.drawImage || 0) > 3, `${w.id}: it drew ${JSON.stringify(world.calls)}`);
+    assert.ok(!world.calls.nonFinite, `${w.id}: no NaN or infinite coordinate was drawn`);
+  }
+});
+
+test("nothing the build writes blocks framing: no X-Frame-Options or frame-ancestors in any file of the output, and no server config file", () => {
+  const all = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? all(path.join(d, e.name)) : [path.join(d, e.name)]));
+  const files = all(out);
+  assert.ok(!files.some((f) => /(^|\/)(\.htaccess|_headers|web\.config)$/.test(f)), "the build writes no server configuration");
+  for (const f of files.filter((x) => /\.(html|txt|xml|js|json)$/.test(x))) assert.ok(!/X-Frame-Options|frame-ancestors/i.test(fs.readFileSync(f, "utf8")), path.relative(out, f));
+  for (const id of WIDGET_IDS) assert.ok(files.includes(path.join(out, widgetFile(id))), id);
+});
+
+test("strict number checks: null, strings and NaN are refused where a bare comparison would let null through as 0", () => {
+  assert.equal(wFin(0, 0, 1), true); assert.equal(wFin(null, -90, 90), false); assert.equal(wFin("5", 0, 9), false); assert.equal(wFin(NaN, 0, 1), false); assert.equal(wFin(Infinity, 0, Infinity), false);
+  const now = T("quakes") + 6e5, q = fxj("hazards/quakes.json"), C = { maxHours: 3 };
+  for (const k of ["lat", "lon", "mag"]) assert.throws(() => quakeModel({ ...q, events: [{ ...q.events[0], [k]: null }] }, now, C), /fails its checks/, k);
+  const s = fxj("hazards/storms.json"), sn = T("storms") + 6e5;
+  for (const k of ["lat", "lon", "windKt"]) assert.throws(() => stormModel({ ...s, storms: [{ ...s.storms[0], [k]: null }] }, sn, C), /fails its checks/, k);
+  assert.throws(() => stormModel({ ...s, storms: [{ ...s.storms[0], track: [{ ...s.storms[0].track[0], lat: null }] }] }, sn, C), /forecast point/);
+  assert.throws(() => stormModel({ ...s, storms: [{ ...s.storms[0], track: [{ ...s.storms[0].track[0], hours: null }] }] }, sn, C), /forecast point/);
+  assert.throws(() => kpModel([{ t: "2026-10-05T15:00:00", kp: "3" }], T("kp") + 6e5, C), /out of range/);
+  assert.equal(stormModel({ ...s, storms: [{ ...s.storms[0], windKmh: null }] }, sn, C).storms[0].kmh, Math.round(s.storms[0].windKt * 1.852));
+});
+
+test("polling waits the manifest's pollSec but never under 300 s, and backs off after failures up to 30 minutes", () => {
+  assert.equal(wPollDelay(300, 0), 300e3);
+  assert.equal(wPollDelay(60, 0), 300e3, "never faster than 300 s");
+  assert.equal(wPollDelay(null, 0), 300e3);
+  assert.equal(wPollDelay(600, 0), 600e3);
+  assert.equal(wPollDelay(99999, 0), 1800e3, "at most 30 minutes");
+  assert.deepEqual([1, 2, 3, 4, 5, 9].map((n) => wPollDelay(300, n)), [600e3, 1200e3, 1800e3, 1800e3, 1800e3, 1800e3]);
 });

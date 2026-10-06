@@ -23,12 +23,19 @@ const stalePack = embedPack(Date.now(), { ageMin: 30 * 60 });
 // a storm list with nothing active (state.mode "calm")
 const calmPack = embedPack(Date.now());
 calmPack.files.set("live/storms/v1/storms.json", { ...calmPack.files.get("live/storms/v1/storms.json"), storms: [] });
+// a newest quake with a very long place name (state.mode "long"); USGS places are cut at 120 characters by the widget
+const longPack = embedPack(Date.now());
+{ const q = longPack.files.get("live/quakes/v1/quakes.json"), e = [...q.events].sort((a, b) => b.time.localeCompare(a.time)); e[0].place = "112 km NNE of Somewhere With A Remarkably Long Place Name, Province of an Even Longer Region Name, Some Country"; }
+// every request into the live folder, and the most that were open at once
+const hits = [];
+let open1 = 0, maxOpen = 0;
 const serveA = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   let rel = decodeURIComponent(u.pathname.slice(1));
   if (rel.startsWith("live/")) {
+    hits.push(rel); open1++; maxOpen = Math.max(maxOpen, open1); res.on("close", () => { open1--; });
     if (state.mode === "blocked") { res.writeHead(503, { "content-type": "text/plain" }); return res.end("unavailable"); }
-    const files = (state.mode === "stale" ? stalePack : state.mode === "calm" ? calmPack : state.pack).files;
+    const files = (state.mode === "stale" ? stalePack : state.mode === "calm" ? calmPack : state.mode === "long" ? longPack : state.pack).files;
     if (!files.has(rel)) { res.writeHead(404); return res.end(); }
     const v = files.get(rel);
     res.writeHead(200, { "content-type": MIME[path.extname(rel)] || "application/octet-stream", "cache-control": "no-store" });
@@ -127,7 +134,7 @@ for (const w of WIDGETS) {
     const s = await open(`${A}/embed/${w.id}/${q}`, [400, 300]);
     await settled(s.p); await s.p.waitForTimeout(300); const si = await info(s.p); await s.ctx.close();
     if (w.id === "tonights-sky") check(`${w.id}: with an old cloud forecast the chart still shows and the cloud is marked out of date`, si.state === "ok" && /out of date/.test(si.sum), JSON.stringify(si));
-    else check(`${w.id}: with data older than its limit it says out of date, with the data time`, si.state === "stale" && /^Out of date: the newest data is from .+ UTC, more than \d+ hours ago/.test(si.stale), JSON.stringify(si));
+    else check(`${w.id}: with data older than its limit it says out of date, with the data time`, si.state === "stale" && /^Out of date: data of \d+ \w+ \d\d:\d\d UTC, \d+ hours ago\./.test(si.stale), JSON.stringify(si));
     state.mode = "blocked";
     const f = await open(`${A}/embed/${w.id}/${q}`, [400, 300]);
     await settled(f.p); await f.p.waitForTimeout(300); const fi = await info(f.p); await f.ctx.close();
@@ -181,23 +188,84 @@ for (const w of WIDGETS) {
   await h.ctx.close();
 }
 
+// small frames: at 280 by 200 and 240 by 180 (a phone narrower than the snippet's size, with max-width:100%) the credit link lies wholly
+// inside the frame in every state: loading data, out of date, failed, and a very long place name
+for (const size of [[280, 200], [240, 180]]) for (const [mode, ids] of [["ok", WIDGETS.map((w) => w.id)], ["stale", ["earthquakes", "aurora", "tropical-storms", "wildfires"]], ["blocked", WIDGETS.map((w) => w.id)], ["long", ["earthquakes"]]]) {
+  state.mode = mode;
+  for (const id of ids) {
+    const { p, ctx } = await open(`${A}/embed/${id}/`, size);
+    await settled(p); await p.waitForTimeout(300);
+    const i = await info(p);
+    const zone = await p.evaluate(() => (document.getElementById("when").textContent.match(/UTC|\d\d:\d\d/) || [""])[0] && document.getElementById("when").getBoundingClientRect().right <= innerWidth + 0.5);
+    check(`${id} at ${size.join("x")}, ${mode}: the credit link lies inside the frame and nothing scrolls`, i.credit.visible && !i.overflow, JSON.stringify({ credit: i.credit, overflow: i.overflow, state: i.state }));
+    if (mode !== "blocked") check(`${id} at ${size.join("x")}, ${mode}: the data time in the header is shown whole`, zone, String(zone));
+    await ctx.close();
+  }
+}
+state.mode = "ok";
+
+// polling: one look at the manifest per period, none while the page is hidden and one when it shows again, longer waits after failures,
+// never two requests at once, and an unchanged feed version not downloaded again (Playwright's fake clock moves the timers)
+{
+  const ctx = await browser.newContext({ viewport: { width: 400, height: 300 }, serviceWorkers: "block" });
+  const p = await ctx.newPage();
+  await p.clock.install();
+  hits.length = 0; maxOpen = 0;
+  await p.goto(`${A}/embed/earthquakes/`, { waitUntil: "load" });
+  await settled(p);
+  const man = () => hits.filter((h) => h === "live/manifest.json").length, feed = () => hits.filter((h) => h.startsWith("live/quakes/")).length;
+  const step = async (ms) => { await p.clock.fastForward(ms); await p.waitForTimeout(600); };
+  const m0 = man();
+  await step(290e3); const mEarly = man();
+  await step(20e3); const m1 = man();
+  check("polling: no look before 300 s, one after it", m0 === 1 && mEarly === 1 && m1 === 2, JSON.stringify({ m0, mEarly, m1 }));
+  check("polling: the unchanged feed file is not downloaded again", feed() === 1, String(feed()));
+  await p.evaluate(() => { Object.defineProperty(document, "hidden", { get: () => true, configurable: true }); Object.defineProperty(document, "visibilityState", { get: () => "hidden", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
+  await step(310e3); await step(310e3); await step(310e3);
+  const m2 = man();
+  check("polling: nothing is fetched while the page is hidden", m2 === m1, JSON.stringify({ m1, m2 }));
+  await p.evaluate(() => { Object.defineProperty(document, "hidden", { get: () => false, configurable: true }); Object.defineProperty(document, "visibilityState", { get: () => "visible", configurable: true }); document.dispatchEvent(new Event("visibilitychange")); });
+  await p.waitForTimeout(800);
+  const m3 = man();
+  check("polling: one look when the page shows again", m3 === m2 + 1, JSON.stringify({ m2, m3 }));
+  state.mode = "blocked";
+  await step(310e3); const f1 = man();
+  await step(310e3); const f2 = man();
+  await step(300e3); const f3 = man();
+  check("polling: after a failure the next look waits twice as long (600 s)", f1 === m3 + 1 && f2 === f1 && f3 === f1 + 1, JSON.stringify({ m3, f1, f2, f3 }));
+  const st = await p.evaluate(() => document.getElementById("w").getAttribute("data-state"));
+  check("polling: a failed look keeps the data already shown", st === "ok", st);
+  check("polling: never more than one request into the live folder at a time", maxOpen === 1, String(maxOpen));
+  state.mode = "ok";
+  await ctx.close();
+}
+
 // screenshots for a person to look at (SHOTS=<folder>)
 if (process.env.SHOTS) {
   fs.mkdirSync(process.env.SHOTS, { recursive: true });
-  for (const w of WIDGETS) for (const scheme of ["light", "dark"]) for (const size of [[300, 220], [800, 450], [280, 200], [600, 400]]) {
+  for (const w of WIDGETS) for (const scheme of ["light", "dark"]) for (const size of [[240, 180], [280, 200], [600, 400], [800, 450]]) {
     const { p, ctx } = await open(`${A}/embed/${w.id}/${w.city ? "?city=london" : ""}`, size, { scheme, motion: "reduce" });
     await settled(p); await p.waitForTimeout(500);
     await p.screenshot({ path: path.join(process.env.SHOTS, `${w.id}-${scheme}-${size.join("x")}.png`) });
     await ctx.close();
   }
-  for (const [mode, id] of [["calm", "tropical-storms"], ["stale", "earthquakes"], ["blocked", "aurora"]]) {
+  for (const [mode, id, size, q] of [["calm", "tropical-storms", [400, 300], ""], ["stale", "earthquakes", [280, 200], ""], ["stale", "earthquakes", [240, 180], ""], ["long", "earthquakes", [240, 180], ""], ["blocked", "aurora", [280, 200], ""], ["blocked", "tonights-sky", [280, 200], "?city=tromso"], ["ok", "tonights-sky", [600, 400], "?city=tromso"], ["ok", "tonights-sky", [280, 200], "?city=tromso"]]) {
     state.mode = mode;
-    const s = await open(`${A}/embed/${id}/`, [400, 300], { scheme: "light", motion: "reduce" });
+    const s = await open(`${A}/embed/${id}/${q}`, size, { scheme: "light", motion: "reduce" });
     await settled(s.p); await s.p.waitForTimeout(500);
-    await s.p.screenshot({ path: path.join(process.env.SHOTS, `${id}-${mode}-light-400x300.png`) });
+    await s.p.screenshot({ path: path.join(process.env.SHOTS, `${id}${q ? "-tromso" : ""}-${mode}-light-${size.join("x")}.png`) });
     await s.ctx.close();
   }
   state.mode = "ok";
+  // Tromsø at midsummer, with the page's clock set to 21 June 2026 (the pretend cloud forecast is then in the future and not used)
+  for (const size of [[600, 400], [280, 200]]) {
+    const c = await browser.newContext({ viewport: { width: size[0], height: size[1] }, colorScheme: "dark", reducedMotion: "reduce", serviceWorkers: "block" });
+    const pg = await c.newPage();
+    await pg.clock.install({ time: new Date("2026-06-21T21:30:00Z") });
+    await pg.goto(`${A}/embed/tonights-sky/?city=tromso`); await settled(pg); await pg.waitForTimeout(500);
+    await pg.screenshot({ path: path.join(process.env.SHOTS, `tonights-sky-tromso-midsummer-dark-${size.join("x")}.png`) });
+    await c.close();
+  }
   const { p, ctx } = await open(`${A}/embed/`, [1100, 1400], { scheme: "dark" });
   await p.waitForTimeout(1500);
   await p.screenshot({ path: path.join(process.env.SHOTS, "gallery.png"), fullPage: false });
