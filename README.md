@@ -32,7 +32,7 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 452 unit tests for the app and the content site, no browser needed
+npm test                # 509 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
@@ -103,6 +103,7 @@ Serve `dist/radar.html`, `public/` and `live/` from one folder root and open the
 - A page on how many satellites are in orbit (`/how-many-satellites-in-orbit/`), built from a data folder after each collection (see `docs/satcount-sources.md`).
 - Satellites by country (`/satellites-by-country/`): every owner in the catalogue ranked by active satellites, and pages for five owners (the United States, China, the United Kingdom, the CIS (former USSR) as the catalogue names it, and Japan) with their orbits, purposes, launch years and a static map of where their satellites were at the data time. Built with the count page; see `docs/satcountry-sources.md`.
 - Five live hazard pages and a hub, rebuilt from the collector's feeds (design `docs/superpowers/specs/2026-10-06-live-hazard-pages-design.md`, sources `docs/hazard-pages-sources.md`): `/earthquakes-today/` (USGS, the last 24 hours by magnitude and hour, the largest, a map), `/aurora-tonight/` (NOAA's Kp, solar wind and aurora grid), `/asteroid-close-approaches/` (NASA JPL's list), `/tropical-storms-now/` (NHC's active storms and forecast tracks) and `/wildfires-today/` (NASA FIRMS fire detections, densest cells with the nearest place within 300 km, a map), plus `/right-now/`, one number per live page with its data time. Each page prints the feed's own data time, is published only when its feed is younger than the page's limit, and a stale or broken feed skips only its own page. The site build writes a copy only where the data is bundled in `public/` (today the earthquake page and the hub); the other pages arrive with the next pull.
+- Three fleet and events live pages built the same way (design `docs/superpowers/specs/2026-10-06-more-live-pages-design.md`, sources `docs/events-pages-sources.md`): `/starlink-tracker/` (active Starlink satellites from CelesTrak's data: altitude bands, inclinations, launches per month, a map), `/natural-disasters-now/` (GDACS's floods, cyclones, wildfires, droughts and volcanoes with their alert levels, earthquakes and NHC's storms left out, a map with a shape per type) and `/rocket-launches/` (The Space Devs' Launch Library 2: the next launches with how exact each time is, counts by provider and country, the pads). Each has a "What this means" section of computed findings, and the shared script `live-pages.js` adds local times, sortable tables, tooltips, a countdown and a live refresh on top of HTML that already holds every number. The site build writes the Starlink page from `public/`; the other two arrive with the next pull.
 
 An indexable build also writes llms.txt (a short summary and links in the llmstxt.org layout); a noindex build writes it no more than it writes a sitemap.
 
@@ -127,8 +128,10 @@ test/       unit tests, checked against satellite.js, astronomy-engine and the r
 public/     packed data and textures that the page fetches (about 2.6 MB raw)
 site/        the content site generator: layout.mjs (page shell), data.mjs and verify.mjs (numbers and USNO checks), pages-*.mjs, build.mjs;
             home-text.mjs (the home page text section), satcount.mjs, satcountry.mjs, svgmap.mjs, hazard.mjs (hazard feed summaries),
-            pages-hazard.mjs, livepages.mjs (the list of every live page), indexnow.mjs (the IndexNow key) and build-live.mjs for the live pages
-hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 425 checks; see hosting/README.md
+            pages-hazard.mjs, livepages.mjs (the list of every live page), liveregistry.mjs (how each page is made, by key), events.mjs and
+            pages-events.mjs (Starlink, disasters, launches), liveseo.mjs, insight.mjs (findings and history.json), live-pages-js.mjs (the
+            live pages' shared script), indexnow.mjs (the IndexNow key) and build-live.mjs for the live pages
+hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 454 checks; see hosting/README.md
 template.html   page shell and all CSS
 build.mjs   esbuild bundler
 e2e.mjs, e2e-live.mjs, harness.mjs, smoke/   browser tests and debugging scripts

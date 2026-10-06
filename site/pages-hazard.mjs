@@ -479,7 +479,7 @@ export function rightNowPage(rows, { available = LIVE_FILES } = {}) {
   const rules = rows.map((r) => r.notableRule).filter(Boolean);
   const notableHtml = extra.length ? `<h2 id="notable">What is notable</h2>
 ${notable.length ? `<ul>${notable.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p>Nothing in the live data on this page passes these checks right now.</p>`}
-<p>A row is listed here when its data shows ${esc(and(rules))}. These checks are ours and are not warnings; each page explains its numbers.</p>
+<p>A row is listed here when its data shows ${esc(rules.length < 2 ? rules.join("") : `${rules.slice(0, -1).join(", ")} or ${rules[rules.length - 1]}`)}. These checks are ours and are not warnings; each page explains its numbers.</p>
 ` : "";
   const body = `${snapshot ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, and some of that data is older than the limits below. The live copy replaces it after the next data collection.</p>\n` : ""}${notableHtml}
 <h2 id="now">The live numbers</h2>
