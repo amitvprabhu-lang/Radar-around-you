@@ -9,7 +9,7 @@ import { coastPath, MAP_UNITS_PER_DEGREE } from "./svgmap.mjs";
 import { projectSky } from "../src/core.js";
 import {
   SKY_HUB_FILE, skyCityFile, ISS_FILE, SKY_MAX_AGE_HOURS, ISS_MAX_AGE_DAYS, BEST_WINDOW_THRESHOLD, PLANET_MIN_ALT, PLANET_MAX_MAG,
-  CHART_MAG_LIMIT, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase,
+  CHART_MAG_LIMIT, FIGURE_MAX, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase,
 } from "./sky.mjs";
 import { PLACE_MAX_KM } from "./hazard.mjs";
 
@@ -311,10 +311,10 @@ ${cloudBars}
 
 <h2 id="how">How these pages are made</h2>
 <ul>
-<li>The night starts at the first sunset after MET Norway's forecast time for the city, or at the forecast time when the Sun has already set, and ends at the next sunrise. Sunrise and sunset are when the top of the Sun's disc meets the horizon, with the usual allowance for the air bending its light. Where the Sun does not set or rise within 24 hours, the page says so.</li>
+<li>The night starts at the first sunset after MET Norway's forecast time for the city, or at the forecast time when the Sun has already set, and ends at the next sunrise. Sunrise and sunset are astronomy-engine's rise and set times (see the checks below). Where the Sun does not set or rise within 24 hours, the page says so.</li>
 <li>Each hour of the night gets a viewing score from 0 to 100, the live app's own: zero while the Sun is less than 6° below the horizon (${DARK_SUN_ALT}°), more as the sky darkens to 18° below, less for a bright Moon that is up, and scaled by the share of sky MET Norway forecasts to be clear. The best window is the run of consecutive hours scoring ${BEST_WINDOW_THRESHOLD} or more with the highest total.</li>
-<li>The Sun, Moon and planets are computed with the astronomy-engine library, whose documentation says its results are always within 1 arcminute of the US Naval Observatory's NOVAS software. Our tests compare this code's Sun and Moon rise and set times with the US Naval Observatory's tables for these six cities on the 2026 solstices and require agreement within ${RISE_SET_CHECK_MINUTES} minutes, and the Moon's phase with the Observatory's phase table. The planet positions are not compared with a second source.</li>
-<li>The polar chart shows stars brighter than magnitude ${CHART_MAG_LIMIT} from the app's star catalogue and some of the stick figures of the brightest constellations, placed for their year 2000 positions; the Moon and planets are placed for the moment shown.</li>
+<li>The Sun, Moon and planets are computed with the astronomy-engine library, whose documentation says its accuracy is always within 1 arcminute of results from NOVAS. Our tests compare this code's Sun and Moon rise and set times with the US Naval Observatory's tables for these six cities on the 2026 solstices and require agreement within ${RISE_SET_CHECK_MINUTES} minutes, and the Moon's phase with the Observatory's phase table. The planet positions are not compared with a second source.</li>
+<li>The polar chart shows stars brighter than magnitude ${CHART_MAG_LIMIT} from the app's star catalogue and the stick figures of up to ${FIGURE_MAX} bright constellations, placed from the catalogue's fixed positions without a correction for the slow drift of the sky (precession); the Moon and planets are placed for the moment shown.</li>
 <li>ISS passes come from the newest element set for the ISS in CelesTrak's data with the SGP4 model, the same code as the live app. A pass is listed when the ISS is at least 10° up; it is sunlit in a dark sky when sunlight falls on it while the Sun is more than 6° below the observer's horizon. We have not measured how far pass times drift as the element set ages, so treat them as approximate. Passes are not shown when the element set is more than ${ISS_MAX_AGE_DAYS} days old.</li>
 <li>Findings say "about the same" when a number is within ${Math.round(ABOUT_SAME * 100)} percent of what it is compared with.</li>
 <li>Everything is computed, not observed, and nothing here promises that anything will be seen: weather, haze, lights and your horizon decide that.</li>
