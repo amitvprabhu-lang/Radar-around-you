@@ -67,6 +67,12 @@ jobs:
         env:
           CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
 
+      - name: Install the packages the page builder imports
+        id: packages
+        if: steps.setup.outputs.ready == 'true'
+        continue-on-error: true
+        run: npm ci --omit=dev --ignore-scripts
+
       - name: Build the live pages
         id: pages
         if: steps.setup.outputs.ready == 'true'
@@ -89,7 +95,7 @@ jobs:
           git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
 
       - name: Tell a person if the collector or the page build needs attention
-        if: steps.collect.outcome == 'failure' || steps.pages.outcome == 'failure'
+        if: steps.collect.outcome == 'failure' || steps.packages.outcome == 'failure' || steps.pages.outcome == 'failure'
         run: |
           echo "The collector or the live page build failed. Read the Collect and Build the live pages steps above."
           exit 1

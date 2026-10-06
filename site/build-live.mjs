@@ -235,7 +235,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     if (!process.env.SITE_URL || !process.env.SITE_URL.trim()) throw new Error("build-live: SITE_URL is required (set the repository variable SITE_URL), so the page gets the right canonical address");
     if (!arg("--data") || !arg("--out")) throw new Error("build-live: usage: node site/build-live.mjs --data <collector folder> --out <pages folder>");
-    const r = buildLive({ dataDir: arg("--data"), outDir: arg("--out") });
+    // BUILD_LIVE_NOW (an ISO time) fixes the clock, so tests that run the command line do not depend on how old their sample feeds have become.
+    const pinned = process.env.BUILD_LIVE_NOW ? new Date(process.env.BUILD_LIVE_NOW) : null;
+    if (pinned && Number.isNaN(pinned.getTime())) throw new Error("build-live: BUILD_LIVE_NOW is not a valid ISO time");
+    const r = buildLive({ dataDir: arg("--data"), outDir: arg("--out"), ...(pinned ? { now: pinned } : {}) });
     const after = (kept, many) => (kept ? `(the previous ${many ? "copies stay" : "copy stays"})` : `(there is no previous copy in the output folder, so ${many ? "these pages are" : "this page is"} not written)`);
     for (const s of [...r.skipped, ...r.stale]) console.log(`build-live: skipped ${s.file}: ${s.reason} ${after(s.kept, false)}`);
     for (const w of r.warnings) console.log(`build-live: warning for ${w.file}: ${w.reason} (the page is built without that part)`);

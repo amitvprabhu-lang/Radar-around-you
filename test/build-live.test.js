@@ -242,7 +242,7 @@ test("the command line prints a message for a skipped page and still succeeds", 
   const fx = { meta, details: fs.readFileSync(root + "details.bin"), swarm: fs.readFileSync(root + "swarm.bin") };
   const script = fileURLToPath(new URL("../site/build-live.mjs", import.meta.url));
   const out = mk();
-  const r = spawnSync(process.execPath, [script, "--data", dataDir("VCLI", fx), "--out", out], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" }, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [script, "--data", dataDir("VCLI", fx), "--out", out], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0", BUILD_LIVE_NOW: REAL_TIME.toISOString() }, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /skipped satellites-by-country\/japan\/index\.html: Japan is not in the feed/);
   assert.match(r.stdout, /wrote \d+ page\(s\): how-many-satellites-in-orbit\/index\.html[^\n]*\(satellites version VCLI/);
@@ -369,11 +369,11 @@ test("a feed that fails its guard skips its page and is reported as a failure; t
   // the command line exits with an error for a failure, after writing the rest
   const script = fileURLToPath(new URL("../site/build-live.mjs", import.meta.url));
   const out2 = mk();
-  const cli = spawnSync(process.execPath, [script, "--data", dir, "--out", out2], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" }, encoding: "utf8" });
+  const cli = spawnSync(process.execPath, [script, "--data", dir, "--out", out2], { env: { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0", BUILD_LIVE_NOW: REAL_TIME.toISOString() }, encoding: "utf8" });
   assert.notEqual(cli.status, 0);
   assert.match(cli.stderr, /FAILED step "hazard page tropical-storms-now" \(tropical-storms-now\/index\.html\): hazard: storms: Rachel has wind 975 kt, outside 0 to 250 \(there is no previous copy in the output folder, so this page is not written\)/);
   // with a previous copy in the folder the message says it stays
-  const out3 = mk(), cliEnv = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" };
+  const out3 = mk(), cliEnv = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0", BUILD_LIVE_NOW: REAL_TIME.toISOString() };
   spawnSync(process.execPath, [script, "--data", fullDataDir(), "--out", out3], { env: cliEnv, encoding: "utf8" });
   assert.ok(fs.existsSync(path.join(out3, "tropical-storms-now/index.html")), "a first run wrote the storm page");
   const again = spawnSync(process.execPath, [script, "--data", dir, "--out", out3], { env: cliEnv, encoding: "utf8" });
@@ -443,7 +443,7 @@ test("the generator hash covers the IndexNow module", () => {
 
 test("an error in the satellite data still fails the command (exit 1) with a message naming the step, after the other pages are written", () => {
   const script = fileURLToPath(new URL("../site/build-live.mjs", import.meta.url));
-  const env = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" };
+  const env = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0", BUILD_LIVE_NOW: REAL_TIME.toISOString() };
   // the satellite files named in the manifest are not there: the satellite step fails, the hazard pages are still built
   const broken = fullDataDir((m) => { m.feeds.satellites = { ...m.feeds.satellites, files: { ...m.feeds.satellites.files, "details.bin": "satellites/missing/details.bin" } }; });
   const out = mk();
@@ -524,4 +524,17 @@ test("a broken solar wind file leaves a Kp-only aurora page with a warning, not 
   assert.match(r.warnings[0].reason, /hazard: spaceweather: point \d+ has speed 99999/);
   const h = fs.readFileSync(path.join(out, "aurora-tonight/index.html"), "utf8");
   assert.ok(h.includes("Not shown: the solar wind data is not usable: it failed our checks."));
+});
+
+test("BUILD_LIVE_NOW pins the clock of the command line, and a bad value is refused", () => {
+  const script = fileURLToPath(new URL("../site/build-live.mjs", import.meta.url));
+  const env = { ...process.env, SITE_URL: "https://example.org", SITE_NOINDEX: "0" };
+  const bad = spawnSync(process.execPath, [script, "--data", fullDataDir(), "--out", mk()], { env: { ...env, BUILD_LIVE_NOW: "not a time" }, encoding: "utf8" });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /BUILD_LIVE_NOW is not a valid ISO time/);
+  const out = mk();
+  const ok = spawnSync(process.execPath, [script, "--data", fullDataDir(), "--out", out], { env: { ...env, BUILD_LIVE_NOW: REAL_TIME.toISOString() }, encoding: "utf8" });
+  // the fixture has only a few satellites, which the plausibility guard refuses (exit 1); the hazard pages are the point here
+  assert.match(ok.stdout, /wrote 6 page\(s\): earthquakes-today\/index\.html/, ok.stdout + ok.stderr);
+  assert.ok(fs.existsSync(path.join(out, "earthquakes-today/index.html")), "feeds from the fixture time are fresh at the pinned time");
 });
