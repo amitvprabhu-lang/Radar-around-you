@@ -1,4 +1,5 @@
 // Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the live pages) and robots.txt,
+// live-pages.js (the live pages' shared script, site/live-pages-js.mjs),
 // the IndexNow key file <key>.txt (only when the site is indexable and site/indexnow.key exists), and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
@@ -197,6 +198,9 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   }
   const countryHub = pages.some((p) => p.file === COUNTRY_HUB_FILE);
   fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex, countryHub })));
+  // the shared script of the live pages (site/live-pages-js.mjs): written by every deploy, so the live pages copied in by hosting/pull.php
+  // find it, and cached like any other file
+  fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
     // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out

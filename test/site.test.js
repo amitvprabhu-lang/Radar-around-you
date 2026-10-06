@@ -22,6 +22,7 @@ import { indexConstellations, visibilityFrom } from "../src/constellations.js";
 import { GUIDE_LINKS } from "../src/guidelinks.js";
 import { homeTextHtml, homeBodyHtml, HOME_STYLE, HOME_PRE_APP, HOME_TEXT_CSS, HOME_SCRIPT, HOME_QUESTIONS, HOME_ID, COUNTRY_HUB_FILE } from "../site/home-text.mjs";
 import { readIndexNowKey } from "../site/indexnow.mjs";
+import { liveScriptSource } from "../site/live-pages-js.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -731,6 +732,21 @@ test("with every hazard feed bundled, the deploy-time copy writes all five hazar
   const xml = fs.readFileSync(path.join(dir, "sitemap.xml"), "utf8");
   assert.ok(!/earthquakes-today|aurora-tonight|asteroid-close|tropical-storms|wildfires-today|right-now/.test(xml), "the main sitemap leaves out every live page");
   assert.equal([...fs.readFileSync(path.join(dir, "sitemap-live.xml"), "utf8").matchAll(/<loc>/g)].length, 14 + SKY_PAGES.length, "the 13 satellite and hazard pages, the Starlink tracker and the sky pages");
+});
+
+test("the build writes the live pages' shared script, and the Starlink tracker from the bundled satellites; the launch and GDACS pages wait for the next pull", () => {
+  const js = fs.readFileSync(path.join(outDir, "live-pages.js"), "utf8");
+  assert.equal(js, liveScriptSource());
+  assert.ok(Buffer.byteLength(js) < 20 * 1024);
+  assert.ok(pageFiles.includes("starlink-tracker/index.html"));
+  for (const f of ["rocket-launches/index.html", "natural-disasters-now/index.html"]) assert.ok(!pageFiles.includes(f), `${f}: its data is not bundled with a data time`);
+  const st = read("starlink-tracker/index.html");
+  assert.ok(st.includes('<script src="../live-pages.js" defer></script>') && st.includes('data-live-v="1"'));
+  assert.ok(read(RIGHT_NOW_FILE).includes('href="../starlink-tracker/"') && !read(RIGHT_NOW_FILE).includes('href="../rocket-launches/"'));
+  const llms = fs.readFileSync(path.join(outDir, "llms.txt"), "utf8");
+  for (const [slug, name] of [["starlink-tracker", "Starlink tracker"], ["natural-disasters-now", "Natural disasters now"], ["rocket-launches", "Rocket launches"]]) assert.ok(llms.includes(`- [${name}](${SITE.url}/${slug}/): `), `${slug} is always listed`);
+  assert.ok(!/starlink-tracker|rocket-launches|natural-disasters-now/.test(fs.readFileSync(path.join(outDir, "sitemap.xml"), "utf8")), "live pages are only in the live sitemap");
+  assert.ok(fs.readFileSync(path.join(outDir, "sitemap-live.xml"), "utf8").includes(`<loc>${SITE.url}/starlink-tracker/</loc><lastmod>${readJson("public/meta.json").taken}</lastmod>`));
 });
 
 test("an indexable build writes the IndexNow key file at the site root, holding the key and nothing else", () => {
