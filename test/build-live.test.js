@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { buildLive, GENERATOR_FILES, generatorHash } from "../site/build-live.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { HUB_FILE, COUNTRY_FILES } from "../site/pages-country.mjs";
-import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE, FAMILY_PAGES } from "../site/livepages.mjs";
+import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE, EVENT_FILES, FAMILY_PAGES } from "../site/livepages.mjs";
 import { HAZARD_PAGES } from "../site/hazard.mjs";
 import { HAZARD_PAGE_FUNCTIONS } from "../site/pages-hazard.mjs";
 import { COUNTRY_PAGES } from "../site/satcountry.mjs";
@@ -296,7 +296,9 @@ test("with every feed present all thirteen live pages are written, each with its
   const out = mk();
   const r = buildLive({ dataDir: fullDataDir(), outDir: out, now: REAL_TIME, noindex: false, bounds });
   assert.deepEqual(r.failed, []);
-  assert.deepEqual(noSky(r.stale), []);
+  // the fleet and events pages have no feed in this folder (the hazard feeds of 5 October) and the small satellite fixture is under the
+  // Starlink page's minimum; they are built in test/pages-events.test.js
+  assert.deepEqual(noSky(r.stale).map((s) => s.file), EVENT_FILES);
   const index = readIndex(out);
   assert.equal(index.siteUrl, SITE.url);
   assert.equal(index.indexnowKey, readIndexNowKey(), "the IndexNow key sits beside the hazard fields");
@@ -347,7 +349,7 @@ test("a stale feed skips only its page with the reason; the previous copy and it
   // 7.75 hours before) is still within its 8 hours, and the other pages are current too
   const dir = fullDataDir((m, d) => newVersion(m, d, "quakes", "quakes.json", "20261005T224012Z"));
   const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T22:45:00Z"), noindex: false, bounds });
-  assert.deepEqual(noSky(r.stale).map((s) => s.file), ["earthquakes-today/index.html"]);
+  assert.deepEqual(noSky(r.stale).map((s) => s.file).filter((f) => !EVENT_FILES.includes(f)), ["earthquakes-today/index.html"]);
   // an hour later the Kp data is past its 8 hours as well
   const r2 = buildLive({ dataDir: fullDataDir((m, d) => newVersion(m, d, "kp", "kp.json", "20261005T234012Z")), outDir: mk(), now: new Date("2026-10-05T23:45:00Z"), noindex: false, bounds });
   assert.ok(r2.stale.some((s) => s.file === "aurora-tonight/index.html" && /kp data from 2026-10-05T15:00:00Z is more than 8 hours old/.test(s.reason)), JSON.stringify(r2.stale));
@@ -392,7 +394,7 @@ test("a feed missing from the manifest leaves its page out with a reason, and a 
   const out = mk();
   const dir = fullDataDir((m) => { delete m.feeds.fires; });
   const r = buildLive({ dataDir: dir, outDir: out, now: REAL_TIME, noindex: true, bounds });
-  assert.deepEqual(noSky(r.stale), [{ file: "wildfires-today/index.html", reason: "the manifest has no fires feed", kept: false }]);
+  assert.deepEqual(noSky(r.stale).filter((x) => !EVENT_FILES.includes(x.file)), [{ file: "wildfires-today/index.html", reason: "the manifest has no fires feed", kept: false }]);
   assert.ok(!fs.existsSync(path.join(out, "sitemap-live.xml")));
   assert.ok(!("sitemap-live.xml" in readIndex(out).files));
   for (const f of Object.keys(readIndex(out).files)) assert.ok(fs.readFileSync(path.join(out, f), "utf8").includes('<meta name="robots" content="noindex,nofollow">'), f);

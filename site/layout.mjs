@@ -170,7 +170,9 @@ export function sources(list) {
   return `<h2 id="sources">Sources</h2><ul class="sources">${list.map((s) => `<li><a href="${esc(s.url)}" rel="noopener">${esc(s.title)}</a>${s.note ? `. ${esc(s.note)}` : ""}</li>`).join("")}</ul>`;
 }
 
-// page: { file, title, description, h1, kicker, lead, body, type, updated, crumbs, jsonld, cta }
+// page: { file, title, description, h1, kicker, lead, body, type, updated, crumbs, jsonld, cta, bodyAttrs, scriptSrc }
+// bodyAttrs: attributes for <body> as { name: value } (the live pages' data-live-* contract, site/live-pages-js.mjs); scriptSrc: a
+// script loaded with defer after the page's own. A page without them is rendered exactly as before.
 export function renderPage(page, { noindex = SITE.noindex } = {}) {
   const here = page.file;
   const canonical = `${SITE.url}/${urlPath(here)}`;
@@ -204,7 +206,7 @@ ${robotsMeta(noindex)}
 ${ld.map((o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`).join("\n")}
 <style>${CSS}</style>
 </head>
-<body>
+<body${page.bodyAttrs ? Object.entries(page.bodyAttrs).map(([k, v]) => ` ${k}="${esc(v)}"`).join("") : ""}>
 <a class="skip" href="#main">Skip to the content</a>
 <header class="top"><div class="bar"><a class="brand" href="${href(here, "index.html")}"><i></i>${esc(SITE.name)}</a><nav aria-label="Main"><ul>${navHtml}</ul></nav></div></header>
 <main id="main"><article class="${page.wide ? "wide" : ""}">
@@ -218,7 +220,7 @@ ${page.body}
 </article></main>
 <footer><div class="bar"><p>${esc(SITE.name)} is a free tool for looking up: what is overhead, what is in tonight's sky and what the ground has just done. Satellite and quake data come from CelesTrak and the USGS. Positions of the Moon, Sun and planets are computed with the astronomy-engine library. Every number on these pages links to how it was found on <a href="${href(here, "methods/index.html")}">How we know</a>.</p><p><a href="${esc(SITE.repo)}" rel="noopener">Source code and data notes on GitHub</a>. Code under the MIT licence; data keeps its sources' terms.</p></div></footer>
 <script>${SCRIPT}</script>
-</body>
+${page.scriptSrc ? `<script src="${esc(page.scriptSrc)}" defer></script>\n` : ""}</body>
 </html>
 `;
 }
