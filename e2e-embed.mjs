@@ -20,12 +20,15 @@ const check = (name, ok, detail = "") => { results.push(ok); console.log(ok ? "o
 // server A: the site and the live folder. state.mode: "ok", "stale" (every feed 30 hours old) or "blocked" (the live folder answers 503)
 const state = { mode: "ok", pack: embedPack(Date.now()) };
 const stalePack = embedPack(Date.now(), { ageMin: 30 * 60 });
+// a storm list with nothing active (state.mode "calm")
+const calmPack = embedPack(Date.now());
+calmPack.files.set("live/storms/v1/storms.json", { ...calmPack.files.get("live/storms/v1/storms.json"), storms: [] });
 const serveA = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   let rel = decodeURIComponent(u.pathname.slice(1));
   if (rel.startsWith("live/")) {
     if (state.mode === "blocked") { res.writeHead(503, { "content-type": "text/plain" }); return res.end("unavailable"); }
-    const files = (state.mode === "stale" ? stalePack : state.pack).files;
+    const files = (state.mode === "stale" ? stalePack : state.mode === "calm" ? calmPack : state.pack).files;
     if (!files.has(rel)) { res.writeHead(404); return res.end(); }
     const v = files.get(rel);
     res.writeHead(200, { "content-type": MIME[path.extname(rel)] || "application/octet-stream", "cache-control": "no-store" });
@@ -134,6 +137,17 @@ for (const w of WIDGETS) {
   }
 }
 
+// the storm widget with nothing active says so, in words and on the map
+{
+  state.mode = "calm";
+  const { p, ctx } = await open(`${A}/embed/tropical-storms/`, [400, 300]);
+  await settled(p); await p.waitForTimeout(300);
+  const i = await info(p);
+  check("tropical-storms with no active storm: says so and still draws the map", i.state === "ok" && /^No active storms in NHC's list/.test(i.sum) && i.painted > 50, JSON.stringify(i));
+  await ctx.close();
+  state.mode = "ok";
+}
+
 // the gallery: indexable page with the snippets as plain text, and the generator makes a snippet that frames and renders on another origin
 {
   const { p, ctx, errors } = await open(`${A}/embed/`, [1100, 900]);
@@ -176,6 +190,14 @@ if (process.env.SHOTS) {
     await p.screenshot({ path: path.join(process.env.SHOTS, `${w.id}-${scheme}-${size.join("x")}.png`) });
     await ctx.close();
   }
+  for (const [mode, id] of [["calm", "tropical-storms"], ["stale", "earthquakes"], ["blocked", "aurora"]]) {
+    state.mode = mode;
+    const s = await open(`${A}/embed/${id}/`, [400, 300], { scheme: "light", motion: "reduce" });
+    await settled(s.p); await s.p.waitForTimeout(500);
+    await s.p.screenshot({ path: path.join(process.env.SHOTS, `${id}-${mode}-light-400x300.png`) });
+    await s.ctx.close();
+  }
+  state.mode = "ok";
   const { p, ctx } = await open(`${A}/embed/`, [1100, 1400], { scheme: "dark" });
   await p.waitForTimeout(1500);
   await p.screenshot({ path: path.join(process.env.SHOTS, "gallery.png"), fullPage: false });

@@ -282,7 +282,8 @@ export function skyPos(ms, lat, lon) {
 // Tonight for a place, from now: the night starts at the next sunset (or now, when the Sun is already down) and ends at the next
 // sunrise; sunset and sunrise are the Sun's centre at -0.833 degrees (the upper limb on the horizon with standard refraction, the
 // convention of the sky pages). The Sun never setting in the next 24 hours gives kind "midnightSun" (the 12 hours from now are shown, and
-// nothing is called dark), never rising gives "polarNight" (24 hours from the start). Each body's altitude and azimuth are sampled every
+// nothing is called dark), never rising gives "polarNight" (24 hours from the start). Less than an hour before sunrise the next night is
+// shown instead. Each body's altitude and azimuth are sampled every
 // `step` minutes over the window. Times are found to about a minute by linear interpolation between samples.
 export function skyNight(lat, lon, now, step) {
   var H0 = -0.833, dt = (step || 10) * 6e4, sunAlt = function (t) { return skyPos(t, lat, lon).Sun.alt; };
@@ -300,6 +301,11 @@ export function skyNight(lat, lon, now, step) {
   else { start = cross(now, now + 864e5, false); if (start === null) { kind = "midnightSun"; start = now; } }
   end = kind === "midnightSun" ? start + 432e5 : cross(start, start + 864e5, true);
   if (end === null) { kind = "polarNight"; end = start + 864e5; }
+  // OURS: in the last hour before sunrise the widget shows the coming night instead of a few minutes of dawn
+  if (under && kind === "night" && end - now < 36e5) {
+    var next = cross(end + dt, end + 864e5, false), nend = next === null ? null : cross(next, next + 864e5, true);
+    if (next !== null && nend !== null) { start = next; end = nend; under = false; }
+  }
   var samples = [];
   for (var t = start; t < end + dt; t += dt) { var tt = Math.min(t, end); samples.push({ t: tt, p: skyPos(tt, lat, lon) }); if (tt === end) break; }
   return { kind: kind, start: start, end: end, underWay: under, samples: samples };

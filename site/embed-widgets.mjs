@@ -143,8 +143,8 @@ export function drawKp(ctx, W, H, m, f) {
   var c = f.col, lev = [c.ion, c.signal, c.orange, c.alert, c.violet, c.violet], side = W > H * 1.45, gw = side ? W * 0.55 : W, gh = side ? H : H * 0.66;
   // the arc of radius R above the pivot and two lines of text below it must fit the height: R + 1.5R + 10 for a large gauge, R + 36 for
   // a small one (the text has a minimum size)
-  var R = Math.max(18, Math.min(gw / 2 - 12, (gh - 10) / 1.5, gh - 40)), tx = Math.max(13, R * 0.27) * 1.05 + Math.max(13, R * 0.2) + 4;
-  var cx = gw / 2, cy = Math.max(R + 4, (gh - R - tx) / 2 + R), A = function (v) { return Math.PI + (v / 9) * Math.PI; };
+  var R = Math.max(18, Math.min((gw / 2 - 8) / 1.09, (gh - 10) / 1.58, (gh - 42) / 1.09)), tx = Math.max(13, R * 0.27) * 1.05 + Math.max(13, R * 0.2) + 4;
+  var cx = gw / 2, cy = Math.max(R * 1.09 + 2, (gh - R * 1.09 - tx) / 2 + R * 1.09), A = function (v) { return Math.PI + (v / 9) * Math.PI; };
   var e = f.still ? 1 : Math.min(1, f.t / 1.8), v = m.kp * (1 - Math.pow(1 - e, 3));
   if (!f.still) {
     var glow = 0.08 + m.kp / 9 * 0.35;
@@ -198,6 +198,7 @@ export function drawStorms(ctx, W, H, m, f) {
     box = [cx - hw, cy - hh, cx + hw, cy + hh];
   }
   var P = wMap(ctx, W, H, box, f);
+  if (!st.length) { ctx.fillStyle = c.muted; ctx.font = "600 13px system-ui,sans-serif"; ctx.textAlign = "center"; ctx.fillText("No active storms in NHC's list", W / 2, H / 2); return; }
   ctx.save(); ctx.beginPath(); ctx.rect(P.ox, P.oy, P.w, P.h); ctx.clip();
   st.forEach(function (x, i) {
     var pts = [[U(x.lon), x.lat]].concat(x.track.map(function (p) { return [U(p.lon), p.lat]; })), sz = Math.max(6, Math.min(16, 6 + x.cat * 2)), col = x.cat ? c.alert : c.signal;
@@ -249,7 +250,7 @@ export function drawFires(ctx, W, H, m, f) {
   ctx.drawImage(f.cache.heat, 0, 0, W, H);
   if (f.still) return;
   var bx = P.ox + ((f.t / 7) % 1) * (P.w + 80) - 40, grd = ctx.createLinearGradient(bx - 40, 0, bx + 40, 0);
-  grd.addColorStop(0, "rgba(255,200,80,0)"); grd.addColorStop(0.5, "rgba(255,200,80,0.16)"); grd.addColorStop(1, "rgba(255,200,80,0)");
+  grd.addColorStop(0, "rgba(255,200,80,0)"); grd.addColorStop(0.5, "rgba(255,200,80,0.08)"); grd.addColorStop(1, "rgba(255,200,80,0)");
   ctx.fillStyle = grd; ctx.fillRect(Math.max(P.ox, bx - 40), P.oy, 80, P.h);
   ctx.save(); ctx.beginPath(); ctx.rect(bx - 30, P.oy, 60, P.h); ctx.clip(); ctx.globalAlpha = light ? 0.5 : 0.8; ctx.globalCompositeOperation = light ? "source-over" : "lighter";
   ctx.drawImage(f.cache.heat, 0, 0, W, H); ctx.restore();
@@ -267,19 +268,20 @@ export function drawSky(ctx, W, H, m, f) {
   var grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
   grd.addColorStop(0, dark > 0.6 ? c.night : c.dusk); grd.addColorStop(1, dark > 0.3 ? c.dusk : c.day);
   ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill();
-  ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(200,215,255,.16)"; ctx.lineWidth = 1;
   [30, 60].forEach(function (a) { ctx.beginPath(); ctx.arc(cx, cy, R * (90 - a) / 90, 0, 6.2832); ctx.stroke(); });
   ctx.strokeStyle = c.land; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.stroke();
   ctx.fillStyle = c.muted; ctx.font = "600 11px system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   [["N", 0], ["E", 90], ["S", 180], ["W", 270]].forEach(function (d) { var q = pr(-9, d[1]); ctx.fillText(d[0], q[0], q[1]); });
-  var names = ["Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"], pc = { Moon: c.text, Mercury: c.muted, Venus: c.signal, Mars: c.alert, Jupiter: c.orange, Saturn: c.sky };
+  var names = ["Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"], pc = { Moon: "#eef2ff", Mercury: "#b8c2dc", Venus: "#ffd166", Mars: "#ff7b6b", Jupiter: "#ffae5c", Saturn: "#8fc4ff" }, ink = "#e8eeff";
   ctx.lineWidth = 1.2;
   names.forEach(function (b) {
-    ctx.strokeStyle = pc[b]; ctx.globalAlpha = 0.28; ctx.beginPath(); var on = false;
+    ctx.strokeStyle = pc[b]; ctx.globalAlpha = 0.4; ctx.beginPath(); var on = false;
     n.samples.forEach(function (s) { var q = s.p[b]; if (q.alt > 0) { var xy = pr(q.alt, q.az); if (on) ctx.lineTo(xy[0], xy[1]); else ctx.moveTo(xy[0], xy[1]); on = true; } else on = false; });
     ctx.stroke();
   });
   ctx.globalAlpha = 1; ctx.textBaseline = "alphabetic"; ctx.font = "11px system-ui,sans-serif";
+  var placed = [];
   names.forEach(function (b) {
     var q = p[b]; if (q.alt <= 0) return;
     var xy = pr(q.alt, q.az), r = b === "Moon" ? Math.max(5, R * 0.06) : 3;
@@ -287,11 +289,18 @@ export function drawSky(ctx, W, H, m, f) {
       var sp = pr(sa, p.Sun.az), k = q.lit;
       ctx.save(); ctx.translate(xy[0], xy[1]); ctx.rotate(Math.atan2(sp[1] - xy[1], sp[0] - xy[0]));
       ctx.fillStyle = c.moonDark; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.2832); ctx.fill();
-      ctx.fillStyle = c.text; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+      ctx.fillStyle = pc.Moon; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
       ctx.ellipse(0, 0, Math.abs(1 - 2 * k) * r, r, 0, Math.PI / 2, -Math.PI / 2, k < 0.5);
       ctx.fill(); ctx.restore();
     } else { ctx.fillStyle = pc[b]; ctx.beginPath(); ctx.arc(xy[0], xy[1], r, 0, 6.2832); ctx.fill(); }
-    if (R > 55 || b === "Moon") { ctx.fillStyle = c.text; ctx.textAlign = xy[0] < cx ? "left" : "right"; ctx.fillText(R > 55 ? b : b.charAt(0), xy[0] + (xy[0] < cx ? r + 3 : -r - 3), xy[1] + 4); }
+    if (R > 55 || b === "Moon") {
+      // a label that would overlap one already placed moves down a line, up to three times, or is left out
+      var t = R > 55 ? b : b.charAt(0), tw = ctx.measureText(t).width, left = xy[0] < cx, lx = left ? xy[0] + r + 3 : xy[0] - r - 3 - tw;
+      for (var k2 = 0; k2 < 4; k2++) {
+        var ly = xy[1] + 4 + k2 * 12, hit = placed.some(function (q) { return lx < q[0] + q[2] && lx + tw > q[0] && ly - 10 < q[1] && ly > q[1] - 10; });
+        if (!hit) { placed.push([lx, ly, tw]); ctx.fillStyle = ink; ctx.textAlign = "left"; ctx.fillText(t, lx, ly); break; }
+      }
+    }
   });
   ctx.fillStyle = c.text; ctx.font = "600 12px system-ui,sans-serif"; ctx.textAlign = "left";
   ctx.fillText(f.fmt(at), 2, 12);

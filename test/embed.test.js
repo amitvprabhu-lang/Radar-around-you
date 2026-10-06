@@ -219,6 +219,15 @@ test("tonight's window and the Moon's rises and sets agree with the sky pages (s
   assert.ok(checked >= 25, `${checked} nights compared`);
 });
 
+test("less than an hour before sunrise the sky widget shows the coming night, as the sky pages would from just after sunrise", () => {
+  const c = cities.pune, w = nightWindow({ ...c, id: "pune" }, Date.parse("2026-10-05T12:00:00Z"));
+  const atDawn = skyNight(c.lat, c.lon, w.end - 30 * 6e4, 10), next = nightWindow({ ...c, id: "pune" }, w.end + 6e4);
+  assert.equal(atDawn.underWay, false);
+  assert.ok(Math.abs(atDawn.start - next.start) < 2 * 6e4 && Math.abs(atDawn.end - next.end) < 2 * 6e4);
+  const earlier = skyNight(c.lat, c.lon, w.end - 90 * 6e4, 10);
+  assert.ok(earlier.underWay && Math.abs(earlier.end - w.end) < 2 * 6e4, "with more than an hour left, the rest of the night");
+});
+
 test("the sky words: the window, the Moon, the planets in the dark and the cloud range, with out-of-date and missing cloud said plainly", () => {
   const clouds = fxj("sky/clouds-20261006.json"), now = T("clouds") + 30 * 6e4, c = cities.pune, C = { cloudHours: SKY_MAX_AGE_HOURS.clouds };
   const n = skyNight(c.lat, c.lon, now, 10), cl = skyCloud(clouds, "pune", n, now, C);
