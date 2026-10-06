@@ -11,12 +11,13 @@ const COAST_STEP = 5;
 const fin = (lat, lon) => Number.isFinite(lat) && Number.isFinite(lon);
 const ux = (lon) => Math.round(Math.max(-180, Math.min(180, lon)) * MAP_UNITS_PER_DEGREE) + W / 2;
 const uy = (lat) => H / 2 - Math.round(Math.max(-90, Math.min(90, lat)) * MAP_UNITS_PER_DEGREE);
-const snap = (u) => Math.round(u / COAST_STEP);
+const snap = (u, step = COAST_STEP) => Math.round(u / step);
 
 // coast: polylines of [lat, lon] (decodeCoast in src/data.js). A line is broken where it jumps more than 180 degrees of longitude
 // (it crosses the antimeridian), so no stroke runs across the whole map. Runs of one point draw nothing and are left out.
-// The result is in half degree steps: an absolute start, then relative steps ("M720 180l1 0 1 -1").
-export function coastPath(coast) {
+// The result is in half degree steps: an absolute start, then relative steps ("M720 180l1 0 1 -1"). step: the grid in map units (5, half
+// a degree, unless a page asks for a coarser one to stay small; the SVG then scales the path by the same step).
+export function coastPath(coast, step = COAST_STEP) {
   const runs = [];
   for (const line of coast) {
     let run = [], prevLon = null;
@@ -25,7 +26,7 @@ export function coastPath(coast) {
       if (!fin(lat, lon)) { close(); prevLon = null; continue; }
       if (prevLon !== null && Math.abs(lon - prevLon) > 180) close();
       prevLon = lon;
-      const x = snap(ux(lon)), y = snap(uy(lat)), last = run[run.length - 1];
+      const x = snap(ux(lon), step), y = snap(uy(lat), step), last = run[run.length - 1];
       if (last && last[0] === x && last[1] === y) continue;
       run.push([x, y]);
     }

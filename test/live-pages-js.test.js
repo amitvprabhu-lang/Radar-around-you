@@ -12,7 +12,8 @@ test("sorting: numbers by size before text, text alphabetically, stable, both di
   assert.equal(cellSortValue("1,234 launches"), 1234);
   assert.equal(cellSortValue("-2.5"), -2.5);
   assert.equal(cellSortValue("  SpaceX "), "spacex");
-  assert.equal(cellSortValue("2026-10-07T03:23:00Z"), 2026, "a raw ISO time sorts by its year only, so time cells carry data-sort");
+  assert.equal(cellSortValue("2026-10-07T03:23:00Z"), "2026-10-07T03:23:00Z", "an ISO time sorts as text");
+  assert.ok(compareSortValues(cellSortValue("2026-10"), cellSortValue("2026-11-01")) < 0);
   const keys = ["b", 10, 2, "a", 2];
   assert.deepEqual(sortOrder(keys, false), [2, 4, 1, 3, 0]);
   assert.deepEqual(sortOrder(keys, true), [0, 3, 1, 2, 4], "descending, equal keys still in their order");

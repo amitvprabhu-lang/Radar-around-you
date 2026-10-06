@@ -8,11 +8,13 @@
 // Everything else (the build, the deploy-time copies, the hub, the sitemap, llms.txt) looks pages up by key from these lists.
 import { HUB_FILE, COUNTRY_PAGES } from "./satcountry.mjs";
 import { HAZARD_PAGES, RIGHT_NOW_FILE } from "./hazard.mjs";
+import { EVENT_PAGES } from "./events.mjs";
 
 export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
 
 export const FAMILY_PAGES = [
   ...HAZARD_PAGES,
+  ...EVENT_PAGES,
 ];
 export const familyPage = (key) => FAMILY_PAGES.find((p) => p.key === key) || null;
 
@@ -30,5 +32,6 @@ export const LIVE_FILES = LIVE_PAGES.map((p) => p.file);
 // the satellite count page, the satellites by country hub and the five country pages
 export const SATELLITE_FILES = LIVE_PAGES.filter((p) => SATELLITE_KINDS.includes(p.kind)).map((p) => p.file);
 export const HAZARD_FILES = HAZARD_PAGES.map((p) => p.file);
+export const EVENT_FILES = EVENT_PAGES.map((p) => p.file);
 export const FAMILY_FILES = FAMILY_PAGES.map((p) => p.file);
 export { RIGHT_NOW_FILE };

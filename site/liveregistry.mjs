@@ -14,6 +14,8 @@
 import { FAMILY_PAGES } from "./livepages.mjs";
 import { summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires } from "./hazard.mjs";
 import { HAZARD_PAGE_FUNCTIONS } from "./pages-hazard.mjs";
+import { summariseLaunches, summariseDisasters, summariseStarlink, EVENT_HISTORY } from "./events.mjs";
+import { EVENT_PAGE_FUNCTIONS, EVENT_HUB_ROWS } from "./pages-events.mjs";
 
 const BUILDERS = {
   quakes: {
@@ -41,8 +43,24 @@ const BUILDERS = {
     read: (rd, o) => summariseFires({ summary: rd.json("fires", "fires.json"), bin: rd.bytes("fires", "fires.bin") }, { now: o.now, allowStale: o.allowStale, places: o.places }),
     snapshot: (h, o) => h.fires && h.places && summariseFires(h.fires, { ...o, places: h.places }),
   },
+  starlink: {
+    read: (rd, o) => summariseStarlink({ meta: rd.json("satellites", "satmeta.json"), details: rd.bytes("satellites", "details.bin"), swarm: rd.bytes("satellites", "swarm.bin") }, { now: o.now, allowStale: o.allowStale, bounds: o.bounds, ...(o.starlinkMin === undefined ? {} : { min: o.starlinkMin }) }),
+    snapshot: (h, o) => h.satellites && summariseStarlink(h.satellites, { now: o.now, allowStale: o.allowStale }),
+    hubRow: EVENT_HUB_ROWS.starlink, history: EVENT_HISTORY.starlink,
+  },
+  disasters: {
+    read: (rd, o) => summariseDisasters(rd.json("events", "events.json"), { now: o.now, allowStale: o.allowStale, dataTime: rd.time("events"), storms: rd.has("storms") ? rd.json("storms", "storms.json") : null }),
+    // the bundled events.json carries no data time, so there is no deploy-time copy (h.events is never set by loadHazards)
+    snapshot: (h, o) => h.events && h.eventsTime && summariseDisasters(h.events, { now: o.now, allowStale: o.allowStale, dataTime: h.eventsTime, storms: h.storms || null }),
+    hubRow: EVENT_HUB_ROWS.disasters, history: EVENT_HISTORY.disasters,
+  },
+  launches: {
+    read: (rd, o) => summariseLaunches(rd.json("launches", "launches.json"), { now: o.now, allowStale: o.allowStale }),
+    snapshot: (h, o) => h.launches && summariseLaunches(h.launches, { now: o.now, allowStale: o.allowStale }),
+    hubRow: EVENT_HUB_ROWS.launches, history: EVENT_HISTORY.launches,
+  },
 };
-const RENDER = { ...HAZARD_PAGE_FUNCTIONS };
+const RENDER = { ...HAZARD_PAGE_FUNCTIONS, ...EVENT_PAGE_FUNCTIONS };
 
 export const LIVE_FAMILY = FAMILY_PAGES.map((p) => ({ ...p, ...BUILDERS[p.key], render: RENDER[p.key], hubRow: (BUILDERS[p.key] && BUILDERS[p.key].hubRow) || null, history: (BUILDERS[p.key] && BUILDERS[p.key].history) || null }));
 export const liveFamily = (key) => LIVE_FAMILY.find((p) => p.key === key) || null;

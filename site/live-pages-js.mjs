@@ -11,7 +11,7 @@
 // What a page can carry (all optional):
 //   <body data-live-v="1" data-live-page="launches|disasters" data-live-base="../live/" data-live-time="<the page's data time>">
 //   <time datetime="...Z">            shown also in the reader's own time zone (the UTC text stays)
-//   <td data-sort="...">              the value a column sorts by, when the visible text does not sort well (times)
+//   <td data-sort="..."> or a <time datetime> in the cell: the value a column sorts by, when the visible text does not sort well
 //   <... data-tip="text">              inside a figure: a tooltip on hover and keyboard focus
 //   <... data-countdown="ISO" data-precision="MIN" data-status="Go for Launch">   a countdown "if the time holds", minute precision or better
 //   <... data-live-key="name">        a number the live refresh may update in place
@@ -27,6 +27,7 @@ export const LIVE_REFRESH_MS = 5 * 60 * 1000;
 // The value a table cell sorts by: a number when the text starts with one (commas allowed), otherwise the lower-case text.
 export function cellSortValue(text) {
   var t = String(text == null ? "" : text).trim();
+  if (/^\d{4}-\d\d/.test(t)) return t;  // an ISO date or time (a time element's datetime) sorts as text
   var m = /^-?\d[\d,]*(\.\d+)?/.exec(t);
   if (m) return Number(m[0].replace(/,/g, ""));
   return t.toLowerCase();
@@ -186,6 +187,7 @@ function liveTimes(d) {
   try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { tz = ""; }
   if (!tz || tz === "UTC" || tz === "Etc/UTC") return;
   Array.prototype.forEach.call(d.querySelectorAll("main time[datetime]"), function (t) {
+    if (t.closest && t.closest("table")) return;  // tables keep one time per cell
     var txt = localTimeText(t.getAttribute("datetime"), tz);
     if (!txt) return;
     var s = d.createElement("span");
@@ -212,7 +214,7 @@ function liveTables(d) {
         Array.prototype.forEach.call(heads, function (h) { h.removeAttribute("aria-sort"); });
         th.setAttribute("aria-sort", desc ? "descending" : "ascending");
         var rows = Array.prototype.slice.call(body.rows);
-        var keys = rows.map(function (r) { var c = r.cells[col]; return cellSortValue(c ? c.getAttribute("data-sort") || c.textContent : ""); });
+        var keys = rows.map(function (r) { var c = r.cells[col], tm = c && c.querySelector("time[datetime]"); return cellSortValue(c ? c.getAttribute("data-sort") || (tm && tm.getAttribute("datetime")) || c.textContent : ""); });
         sortOrder(keys, desc).forEach(function (i) { body.appendChild(rows[i]); });
       });
     });

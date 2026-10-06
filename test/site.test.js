@@ -44,8 +44,9 @@ const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<
 
 test("the site has the expected pages and no duplicates", () => {
   // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about,
-  // the satellites by country hub and its 5 country pages, and from the bundled hazard data the earthquake page and the right-now hub
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2);
+  // the satellites by country hub and its 5 country pages, from the bundled hazard data the earthquake page and the right-now hub, and
+  // from the bundled satellite data the Starlink tracker (the launch and GDACS data are not bundled with a data time)
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1);
   assert.deepEqual(result.liveSkipped, []);
   assert.deepEqual(result.skipped, [], "every country page passes the guard on the bundled snapshot");
   assert.equal(pageFiles.length, result.pages);
@@ -727,7 +728,7 @@ test("with every hazard feed bundled, the deploy-time copy writes all five hazar
   }
   const xml = fs.readFileSync(path.join(dir, "sitemap.xml"), "utf8");
   assert.ok(!/earthquakes-today|aurora-tonight|asteroid-close|tropical-storms|wildfires-today|right-now/.test(xml), "the main sitemap leaves out every live page");
-  assert.equal([...fs.readFileSync(path.join(dir, "sitemap-live.xml"), "utf8").matchAll(/<loc>/g)].length, 13);
+  assert.equal([...fs.readFileSync(path.join(dir, "sitemap-live.xml"), "utf8").matchAll(/<loc>/g)].length, 14, "the 13 satellite and hazard pages and the Starlink tracker");
 });
 
 test("an indexable build writes the IndexNow key file at the site root, holding the key and nothing else", () => {

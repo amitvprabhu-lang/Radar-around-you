@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { quakesPage, auroraPage, approachesPage, stormsPage, firesPage, rightNowPage, hubRows, datasetLd, stormBounds, HAZARD_PAGE_FUNCTIONS } from "../site/pages-hazard.mjs";
 import { summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, HAZARD_PAGES, RIGHT_NOW_FILE, TERMS_VERIFIED, PLACE_MAX_KM } from "../site/hazard.mjs";
-import { LIVE_FILES, LIVE_PAGES, SATCOUNT_FILE } from "../site/livepages.mjs";
+import { LIVE_FILES, LIVE_PAGES, SATCOUNT_FILE, EVENT_FILES } from "../site/livepages.mjs";
 import { renderPage, SITE, urlPath, NAV } from "../site/layout.mjs";
 import { coastFromBuffer } from "../site/pages-country.mjs";
 import { satelliteCountPage } from "../site/pages-satcount.mjs";
@@ -267,7 +267,8 @@ test("the storm map frames the storms and their tracks, and falls back to the wh
 test("the hub lists every live page it can link, links each one that exists, and shows a stale page without a link or a number", () => {
   const t = mainText(smallHtml.hub);
   for (const p of HAZARD_PAGES) assert.ok(smallHtml.hub.includes(`href="../${p.slug}/"`), p.slug);
-  for (const f of LIVE_FILES.filter((x) => x !== RIGHT_NOW_FILE)) assert.ok(smallHtml.hub.includes(`href="../${urlPath(f)}"`), `${f} is linked from the hub`);
+  // the rows of the fleet and events pages come from their own family (hubRows' "more"); test/pages-events.test.js checks them
+  for (const f of LIVE_FILES.filter((x) => x !== RIGHT_NOW_FILE && !EVENT_FILES.includes(x))) assert.ok(smallHtml.hub.includes(`href="../${urlPath(f)}"`), `${f} is linked from the hub`);
   assert.ok(t.includes("16,624 active satellites"));
   assert.ok(t.includes("8 earthquakes in 24 hours in USGS's magnitude 2.5 and above feed, largest magnitude 6.4"));
   const rows = hubRows({ satellites: { active: 16624, dataTime: "2026-10-05T14:00:00Z" }, quakes: S.quakes, space: S.space, missing: { asteroids: "data older than 48 hours" } });
@@ -288,9 +289,9 @@ test("the hub lists every live page it can link, links each one that exists, and
   }
 });
 
-test("the registry of live pages holds the count page, the country hub, five country pages, five hazard pages and the hub", () => {
-  assert.equal(LIVE_FILES.length, 13);
-  assert.equal(new Set(LIVE_FILES).size, 13);
+test("the registry of live pages holds the count page, the country hub, five country pages, five hazard pages, three fleet and events pages and the hub", () => {
+  assert.equal(LIVE_FILES.length, 16);
+  assert.equal(new Set(LIVE_FILES).size, 16);
   assert.equal(LIVE_FILES[0], SATCOUNT_FILE);
   assert.deepEqual(LIVE_PAGES.filter((p) => p.kind === "hazard").map((p) => p.file), HAZARD_PAGES.map((p) => p.file));
   assert.equal(LIVE_FILES.at(-1), RIGHT_NOW_FILE);
