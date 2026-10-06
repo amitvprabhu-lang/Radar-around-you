@@ -29,3 +29,10 @@ test("without JavaScript the same font stylesheet is loaded plainly, after the h
   assert.equal(m[1], main[1], "the same address");
   assert.ok(html.indexOf("<noscript>") > html.indexOf('<div id="app"'), "in the body, not among the head elements");
 });
+
+test("the stats strip carries no list roles: its tiles are buttons and links (Lighthouse 13 flagged role=listitem on a button)", () => {
+  assert.ok(html.includes('<div id="stats" class="scroller"></div>'));
+  const main = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.ok(main.includes('{ class: "stat glass", ...(typeof to === "string"'), "the tile is made without a role");
+  assert.ok(!/role: "listitem"|role="list(item)?"/.test(main + html));
+});

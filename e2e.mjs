@@ -82,6 +82,8 @@ async function suite(label, viewport, mobile) {
   check(L("stats strip shows the catalogue size"), (await p.textContent("#stats")).includes("19,316"));
   check(L("the catalogue tile is labelled tracked objects, not objects in orbit"), (await p.textContent("#stats")).includes("tracked objects") && !(await p.textContent("#stats")).includes("objects in orbit"));
   check(L("the catalogue tile is a link to the satellite count page"), (await p.getAttribute("#stats a.stat", "href")) === "how-many-satellites-in-orbit/" && (await p.textContent("#stats a.stat")).includes("19,316"));
+  // the tiles keep their own button and link roles (Lighthouse 13's accessibility tree check failed on role="listitem" on a button)
+  check(L("the stats tiles are plain buttons and links, with no list roles over them"), await p.evaluate(() => { const t = [...document.querySelectorAll("#stats .stat")]; return t.length > 2 && !document.getElementById("stats").hasAttribute("role") && t.every((e) => !e.hasAttribute("role") && /^(A|BUTTON)$/.test(e.tagName)); }));
   check(L("place chip shows a place"), (await p.textContent("#placeChip")).length > 3);
   check(L("four tabs"), (await p.locator(".tab").count()) === 4);
   check(L("layer chips present"), (await p.locator("#layerChips .chip").count()) === 9);

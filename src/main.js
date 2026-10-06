@@ -414,7 +414,7 @@ async function main() {
     const key = stats.map((s) => s[1]).join("|");
     if (!force && S.statsKey === key) return;
     S.statsKey = key;
-    el.replaceChildren(...stats.map(([id, v, label, to]) => h(typeof to === "string" ? "a" : "button", { class: "stat glass", role: "listitem", ...(typeof to === "string" ? { href: to } : { onclick: to }) }, h("b", { text: v }), h("span", { text: label }))));
+    el.replaceChildren(...stats.map(([id, v, label, to]) => h(typeof to === "string" ? "a" : "button", { class: "stat glass", ...(typeof to === "string" ? { href: to } : { onclick: to }) }, h("b", { text: v }), h("span", { text: label }))));
   }
   const chipButtons = (defs, state) => defs.map((d) => h("button", { class: "chip glass", style: { "--c": d.color }, "aria-pressed": String(!!state[d.key]), onclick: () => toggleLayer(d.key) }, h("i", { class: "sw" }), d.label));
   function renderLayerChips() {
