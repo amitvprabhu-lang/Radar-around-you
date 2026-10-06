@@ -39,12 +39,27 @@ export function rankPhrase(r, word = "largest") {
   return r.rank === 1 ? `${joint}${word}` : `${joint}${ordinal(r.rank)} ${word}`;
 }
 
-// a share as a whole percent ("70"); "under 1" for a share above zero but under 1 percent; "0" for an empty whole
+// a share as a whole percent ("70"); "under 1" for a share above zero but under 1 percent, "over 99" for one above 99 percent but not
+// all (so 249 of 250 never reads as 100); "0" for an empty whole
 export function percentText(part, whole) {
   if (!whole) return "0";
   const p = (part / whole) * 100;
   if (p > 0 && p < 1) return "under 1";
+  if (p > 99 && part < whole) return "over 99";
   return String(Math.round(p));
+}
+
+// Rows sorted by count, most first: the first n and every row that ties with the n-th, so a tie at the edge is never cut in two
+// (n = 1 gives every row that shares the top count). An empty list gives an empty list.
+export function topWithTies(rows, n = 1, count = (r) => r.count) {
+  if (!rows.length || n < 1) return [];
+  const edge = count(rows[Math.min(n, rows.length) - 1]);
+  return rows.filter((r, i) => i < n || count(r) === edge);
+}
+
+// "a", "a and b", "a, b and c", "a, b, c and 2 more" (more: the word after the count, "more" unless given)
+export function namesCapped(names, cap = 3, more = "more") {
+  return names.length > cap ? `${names.slice(0, cap).join(", ")} and ${names.length - cap} ${more}` : and(names);
 }
 
 // The first n rows of a list already sorted by count, and their share of total: { rows, count, total, share }.
@@ -87,11 +102,14 @@ export function readHistory(text) {
 }
 
 // A new history with entry added for key: an entry with the same data time is replaced, the list is kept in data time order and cut to
-// the newest `keep`. Only finite numbers are kept. The input is not changed.
+// the newest `keep`. Only finite numbers are kept, and an old entry without a readable data time or a values object is dropped. The
+// input is not changed.
 export function historyAdd(history, key, { dataTime, values }, keep = HISTORY_KEEP) {
   const pages = { ...((history && history.pages) || {}) };
   const clean = Object.fromEntries(Object.entries(values || {}).filter(([, v]) => Number.isFinite(v)).sort((a, b) => a[0].localeCompare(b[0])));
-  const list = (Array.isArray(pages[key]) ? pages[key] : []).filter((e) => e && typeof e.dataTime === "string" && e.dataTime !== dataTime);
+  const ok = (e) => e && typeof e.dataTime === "string" && Number.isFinite(Date.parse(e.dataTime)) && e.values && typeof e.values === "object" && !Array.isArray(e.values);
+  const list = (Array.isArray(pages[key]) ? pages[key] : []).filter((e) => ok(e) && e.dataTime !== dataTime)
+    .map((e) => ({ dataTime: e.dataTime, values: Object.fromEntries(Object.entries(e.values).filter(([, x]) => Number.isFinite(x))) }));
   list.push({ dataTime, values: clean });
   list.sort((a, b) => a.dataTime.localeCompare(b.dataTime));
   pages[key] = list.slice(-keep);

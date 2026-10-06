@@ -109,12 +109,106 @@ const RULES = {
     return h.includes(robotsMeta(false)) ? null : "robots is not index,follow";
   },
   "sources": (f, h) => (/<h2 id="sources">Sources<\/h2>\s*<(ul|p)[^>]*>(<li>)?[^<]{0,40}<a href="https:\/\//.test(h) ? null : "no visible sources section with links"),
-  "html-first": (f, h) => (/\d/.test(((h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "").replace(/<[^>]+>/g, "")) ? null : "no number in the server HTML's lead"),
+  // the headline is in the HTML the server sends: a <strong> in the lead holding a number (or the words no or none, for an empty list),
+  // no number left for a script to fill in (every data-live-key span already holds text), and every table with its rows
+  "html-first": (f, h) => {
+    const lead = (h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "";
+    const strong = [...lead.matchAll(/<strong>([\s\S]*?)<\/strong>/g)].map((m) => m[1].replace(/<[^>]+>/g, ""));
+    if (!strong.some((t) => /\d|\b(no|none)\b/i.test(t))) return "no headline number in a <strong> of the server HTML's lead";
+    if (/data-live-key="[^"]+">\s*</.test(h)) return "a live number that is empty until a script runs";
+    return /<tbody>\s*<\/tbody>/.test(mainOf(h)) ? "a table with no rows in the server HTML" : null;
+  },
 };
 const audit = (f) => Object.entries(RULES).map(([rule, fn]) => [rule, fn(f, PAGES.get(f))]).filter(([, why]) => why);
 
-// The earlier live pages and the rules each still fails on 2026-10-06 (see the report of the fleet and events branch). Only shrinks.
+// The earlier live pages, each rule it still fails, and why (the audit of 2026-10-06, before the later pass of section 8.3). The list may
+// only shrink: a test fails when a listed page passes a listed rule, when an entry has no reason, and when a page or rule is added that
+// the audit of 2026-10-06 (BASELINE_GAPS) did not record.
 export const ALLOWED_GAPS = {
+  "how-many-satellites-in-orbit/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  "satellites-by-country/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  "satellites-by-country/united-states/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+    "linked": "llms.txt lists only the country hub, not the five country pages",
+  },
+  "satellites-by-country/china/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+    "linked": "llms.txt lists only the country hub, not the five country pages",
+  },
+  "satellites-by-country/united-kingdom/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+    "linked": "llms.txt lists only the country hub, not the five country pages",
+  },
+  "satellites-by-country/cis-former-ussr/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+    "linked": "llms.txt lists only the country hub, not the five country pages",
+  },
+  "satellites-by-country/japan/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+    "linked": "llms.txt lists only the country hub, not the five country pages",
+  },
+  "earthquakes-today/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  "aurora-tonight/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  "asteroid-close-approaches/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  "tropical-storms-now/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  "wildfires-today/index.html": {
+    "time-in-lead": "built before the section 7 checklist; the lead prints its time as text, not in a time element",
+    "figures": "built before the section 7 checklist; its charts and maps are bare SVGs without figure and figcaption",
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+  [RIGHT_NOW_FILE]: {
+    "tables": "site/layout.mjs's shared table writes header cells without scope",
+    "structured-data": "its WebPage markup predates section 7 (no inLanguage, isPartOf or breadcrumb)",
+  },
+};
+// the audit of 2026-10-06, fixed: the allowlist may never hold more than this
+const BASELINE_GAPS = {
   "how-many-satellites-in-orbit/index.html": ["time-in-lead", "figures", "tables", "structured-data"],
   "satellites-by-country/index.html": ["time-in-lead", "figures", "tables", "structured-data"],
   "satellites-by-country/united-states/index.html": ["time-in-lead", "figures", "tables", "structured-data", "linked"],
@@ -148,16 +242,28 @@ test("the fleet and events pages pass every rule of the checklist", () => {
 
 test("the earlier live pages fail no rule beyond the ones the allowlist names", () => {
   for (const f of LIVE_FILES.filter((x) => !EVENT_FILES.includes(x))) {
-    const extra = audit(f).filter(([r]) => !(ALLOWED_GAPS[f] || []).includes(r));
+    const extra = audit(f).filter(([r]) => !(r in (ALLOWED_GAPS[f] || {})));
     assert.deepEqual(extra, [], `${f} newly fails: ${extra.map(([r, w]) => `${r} (${w})`).join("; ")}`);
   }
 });
 
 test("the allowlist only shrinks: every page and rule on it still fails, so a fixed rule must be taken off", () => {
-  for (const [f, rules] of Object.entries(ALLOWED_GAPS)) {
+  for (const [f, reasons] of Object.entries(ALLOWED_GAPS)) {
+    const rules = Object.keys(reasons);
     assert.ok(LIVE_PAGES.some((p) => p.file === f), `${f} is not a live page any more; take it off the allowlist`);
     const failing = audit(f).map(([r]) => r);
     for (const r of rules) assert.ok(failing.includes(r), `${f} now passes "${r}": take it off ALLOWED_GAPS in test/live-seo.test.js`);
   }
   assert.ok(EVENT_FILES.every((f) => !(f in ALLOWED_GAPS)), "the fleet and events pages are never on the allowlist");
+});
+
+test("every allowlist entry has a documented reason and none goes beyond the audit of 2026-10-06", () => {
+  for (const [f, reasons] of Object.entries(ALLOWED_GAPS)) {
+    assert.ok(f in BASELINE_GAPS, `${f} was not on the allowlist on 2026-10-06; fix the page instead of adding it`);
+    for (const [rule, why] of Object.entries(reasons)) {
+      assert.ok(rule in RULES, `${f}: ${rule} is not a rule`);
+      assert.ok(BASELINE_GAPS[f].includes(rule), `${f}: "${rule}" was not allowed on 2026-10-06; fix the page instead of adding it`);
+      assert.ok(typeof why === "string" && why.trim().length >= 20, `${f}: "${rule}" has no documented reason`);
+    }
+  }
 });

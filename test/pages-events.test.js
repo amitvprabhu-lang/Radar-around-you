@@ -51,7 +51,9 @@ test("each page has its fixed address, one h1, its canonical address and an answ
     assert.ok(leadOf(h).startsWith(`As of <time datetime="${p.dataTime}">`), `${name}: ${leadOf(h).slice(0, 80)}`);
     assert.match(leadOf(h), /<strong>[^<]*(<span[^>]*>)?[^<]*\d/, `${name}: a number in the lead`);
   }
-  assert.equal(textOf(leadOf(html(small.launches))), 'As of 6 October 2026, 00:00 UTC, when our collector read Launch Library 2, the next launch in its list is Falcon 9 Block 5 | Starlink Group 10-1, planned for 6 October 2026, 20:15 UTC by SpaceX, status "Go for Launch". 4 launches are planned in the 30 days after it.');
+  // the lead read as a browser shows it: a tag adds no space
+  const flat = (x) => textOf(x.replace(/<\/?span[^>]*>/g, ""));
+  assert.equal(flat(leadOf(html(small.launches))), 'As of 6 October 2026, 00:00 UTC, when our collector read Launch Library 2, the next launch in its list is Falcon 9 Block 5 | Starlink Group 10-1, planned for 6 October 2026, 20:15 UTC by SpaceX, status "Go for Launch". 4 launches are planned in the 30 days after it.');
   assert.equal(textOf(leadOf(html(small.disasters))), "As of 6 October 2026, 00:30 UTC, the time of GDACS's newest update, the Global Disaster Alert and Coordination System lists 4 current events that are not earthquakes: 1 with an Orange alert, 0 with a Red alert and the rest Green. 1 more are no longer current, with an end date in the 7 days before.");
   assert.equal(textOf(leadOf(html(small.starlink))), "As of 5 October 2026, 08:14 UTC, the time of the satellite data, CelesTrak's active list holds 70 active Starlink satellites, 17 percent of the 402 active satellites in our count. A Starlink satellite here is one whose catalogue name contains STARLINK.");
 });
@@ -143,8 +145,8 @@ test("launch times are in UTC with the source's precision; no countdown in the H
   assert.ok(t.includes("9 October 2026, in the hour from 03:00 UTC To the hour"));
   assert.ok(!/T-minus|countdown:/i.test(t), "no countdown text in the server HTML");
   assert.ok(html(small.launches).includes('<p data-countdown="2026-10-06T20:15:00Z" data-precision="MIN" data-status="Go for Launch">'));
-  assert.equal(launchTimeEl({ net: "2026-10-31T00:00:00Z", precision: "M", when: "October 2026, day not set" }), '<time datetime="2026-10">October 2026, day not set</time>');
-  assert.equal(launchTimeEl({ net: "2026-12-31T00:00:00Z", precision: "Q4", when: "x" }), '<time datetime="2026">x</time>');
+  assert.equal(launchTimeEl({ net: "2026-10-31T00:00:00Z", precision: "M", when: "October 2026, day not set" }), '<time datetime="2026-10" data-sort="2026-10-31T00:00:00Z">October 2026, day not set</time>');
+  assert.equal(launchTimeEl({ net: "2026-12-31T00:00:00Z", precision: "Q4", when: "x" }), '<time datetime="2026" data-sort="2026-12-31T00:00:00Z">x</time>');
   // the passed launch is listed without a claim that it happened
   assert.ok(t.includes("The list does not say whether they launched"));
 });
@@ -209,8 +211,14 @@ test("no safety advice, no prediction and no claim of danger", () => {
 
 test("the live refresh hooks hold exactly the numbers the script computes from the same files", () => {
   const keys = (h) => Object.fromEntries([...h.matchAll(/data-live-key="([a-z0-9-]+)">([^<]*)</g)].map((m) => [m[1], textOf(m[2])]));
-  assert.deepEqual(keys(html(real.launches)), launchesHeadline(realLaunches()));
-  assert.deepEqual(keys(html(real.disasters)), disastersHeadline(realEvents(), realStorms()));
+  // every number or text the refresh may change is on the page under its key, with the value the script works out from the same file
+  // (the three countdown keys are attributes, checked below)
+  const ATTR = ["next-net", "next-precision-code", "next-status-text"];
+  const strip = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !ATTR.includes(k)));
+  assert.deepEqual(keys(html(real.launches)), strip(launchesHeadline(realLaunches())));
+  assert.deepEqual(keys(html(real.disasters)), disastersHeadline(realEvents(), realStorms(), EVENTS_TIME()));
+  const hl = launchesHeadline(realLaunches());
+  assert.ok(html(real.launches).includes(`data-countdown="${hl["next-net"]}" data-precision="${hl["next-precision-code"]}" data-status="${hl["next-status-text"]}"`));
   assert.equal(real.launches.bodyAttrs["data-live-page"], "launches");
   assert.equal(real.disasters.bodyAttrs["data-live-page"], "disasters");
   assert.ok(!("data-live-page" in real.starlink.bodyAttrs), "no refresh for the satellite data");

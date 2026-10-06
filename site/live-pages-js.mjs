@@ -33,6 +33,14 @@ export function cellSortValue(text) {
   return t.toLowerCase();
 }
 
+// The value a table cell sorts by: its own data-sort, else the data-sort of an element inside it (dates and times carry an ISO value
+// there; a launch whose time is only a month or a quarter carries the feed's own planned time, a date the source sets inside that
+// period), else a time element's datetime, else its text.
+export function cellSortKey(cellSort, innerSort, datetime, text) {
+  var pick = [cellSort, innerSort, datetime].filter(function (x) { return typeof x === "string" && x !== ""; })[0];
+  return cellSortValue(pick === undefined ? text : pick);
+}
+
 // Numbers before text, numbers by size, text in alphabetical order.
 export function compareSortValues(a, b) {
   var an = typeof a === "number", bn = typeof b === "number";
@@ -106,7 +114,32 @@ export function launchWhenText(l) {
   if (p === "HR") return day + ", in the hour from " + p2(d.getUTCHours()) + ":00 UTC";
   if (p === "M") return months[d.getUTCMonth()] + " " + d.getUTCFullYear() + ", day not set";
   if (quarters[p]) return "the " + quarters[p] + " quarter of " + d.getUTCFullYear() + ", day not set";
-  return day + ", not an exact date" + (l.precisionName ? " (the source calls it \"" + String(l.precisionName) + "\")" : "");
+  // other precisions are worded by the source's own name for them (the codes behind these names were not seen in our data, so they are
+  // matched by the name): a day without a time, a half year or a year; the placeholder day the source puts in `net` is not printed
+  var name = String(l.precisionName || "");
+  if (/^day$/i.test(name)) return day + ", time not set";
+  if (/half/i.test(name)) return (/1/.test(name) ? "the first half of " : /2/.test(name) ? "the second half of " : "a half year in ") + d.getUTCFullYear() + ", day not set";
+  if (/year/i.test(name)) return d.getUTCFullYear() + ", day not set";
+  return d.getUTCFullYear() + ", not an exact date" + (name ? " (the source calls its precision \"" + name + "\")" : "");
+}
+
+// How exact a planned time is, in words, from the source's precision (lower case; the page capitalises it in tables).
+export function launchPrecisionText(l) {
+  var words = { SEC: "to the second", MIN: "to the minute", HR: "to the hour", M: "only to the month", Q1: "only to the quarter", Q2: "only to the quarter", Q3: "only to the quarter", Q4: "only to the quarter" };
+  if (words[l && l.precision]) return words[l.precision];
+  return l && l.precisionName ? "only as \"" + String(l.precisionName) + "\" (the source's word)" : "not given";
+}
+
+// A country name for an ISO code from the runtime's own region names; the code itself if there is none; "Not given" for none.
+export function regionName(cc) {
+  if (!cc) return "Not given";
+  try { return new Intl.DisplayNames(["en"], { type: "region" }).of(cc) || cc; } catch (e) { return cc; }
+}
+
+// An ISO time with or without a zone in milliseconds; no zone means UTC (GDACS's times have none).
+export function isoMs(s) {
+  if (typeof s !== "string") return NaN;
+  return Date.parse(/(Z|[+-]\d\d:\d\d)$/.test(s.trim()) ? s.trim() : s.trim() + "Z");
 }
 
 // The headline numbers of the launches page from a launches.json document: the next launch at or after the list's own time
@@ -118,7 +151,29 @@ export function launchesHeadline(doc) {
   up.sort(function (a, b) { return Date.parse(a.net) - Date.parse(b.net) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
   var in30 = up.filter(function (l) { return Date.parse(l.net) < gen + 30 * 86400000; }).length;
   var next = up[0] || null;
-  return { "next-name": next ? String(next.name) : "none in the list", "next-when": next ? launchWhenText(next) : "", "launches-30": in30.toLocaleString("en-GB") };
+  var exact = up.filter(function (l) { return l.precision === "SEC" || l.precision === "MIN" || l.precision === "HR"; }).length;
+  var out = { "next-name": "none in the list", "next-when": "", "launches-30": in30.toLocaleString("en-GB"), "exact-upcoming": exact.toLocaleString("en-GB") };
+  if (!next) return out;
+  var f = nextLaunchFields(next);
+  Object.keys(f).forEach(function (k) { out[k] = f[k]; });
+  return out;
+}
+
+// Every field of the next launch the page shows, as text, keyed as the page's data-live-key spans: the page builds its lead, card and
+// table from this, and the live refresh from the same function, so a refresh that brings a new next launch changes all of them
+// together. The last three keys set the countdown's attributes, not text.
+export function nextLaunchFields(next) {
+  var txt = function (v) { return typeof v === "string" && v.trim() ? v.trim() : "Not given"; };
+  var precision = launchPrecisionText(next);
+  var cc = String(next.country || "").trim();
+  return {
+    "next-name": String(next.name).trim(), "next-when": launchWhenText(next),
+    "next-provider": typeof next.provider === "string" && next.provider.trim() ? next.provider.trim() : "a provider the list does not name",
+    "next-provider-name": txt(next.provider), "next-status": txt(next.statusName || next.status), "next-rocket": txt(next.rocket), "next-mission": txt(next.mission),
+    "next-mission-type": txt(next.missionType), "next-orbit": txt(next.orbit), "next-pad": txt(next.pad), "next-location": txt(next.location),
+    "next-country": regionName(/^[A-Z]{2,3}$/.test(cc) ? cc : ""), "next-precision": precision.charAt(0).toUpperCase() + precision.slice(1), "next-precision-words": precision,
+    "next-net": String(next.net), "next-precision-code": String(next.precision || ""), "next-status-text": txt(next.statusName || next.status),
+  };
 }
 
 // The name part GDACS and NHC share for a tropical cyclone ("Tropical Cyclone NOLO-26" and "Nolo" both give "NOLO"), the same rule as
@@ -142,13 +197,19 @@ export function sameStormRule(nhc, ev) {
 }
 
 // The headline numbers of the disasters page from events.json (and NHC's storms.json, or null): current events that are not
-// earthquakes, without the cyclones NHC also lists, counted by alert level.
-export function disastersHeadline(list, storms) {
+// earthquakes, without the cyclones NHC also lists, counted by alert level, and the events no longer current whose end date is in the 7
+// days before dataTime (the feed's own time).
+export function disastersHeadline(list, storms, dataTime) {
   if (!Array.isArray(list)) return null;
-  var nhc = storms && Array.isArray(storms.storms) ? storms.storms : [];
-  var cur = list.filter(function (e) { return e && e.type !== "EQ" && e.current === true && !nhc.some(function (s) { return sameStormRule(s, e); }); });
+  var nhc = storms && Array.isArray(storms.storms) ? storms.storms.filter(function (s) { return s && typeof s === "object"; }) : [];
+  var kept = list.filter(function (e) { return e && e.type !== "EQ" && !nhc.some(function (s) { return sameStormRule(s, e); }); });
+  var cur = kept.filter(function (e) { return e.current === true; });
+  var t = isoMs(dataTime);
+  var recent = kept.filter(function (e) { return e.current !== true && isoMs(e.to) >= t - 7 * 86400000; });
   var n = function (level) { return cur.filter(function (e) { return e.alert === level; }).length.toLocaleString("en-GB"); };
-  return { "current": cur.length.toLocaleString("en-GB"), "orange": n("Orange"), "red": n("Red") };
+  var out = { "current": cur.length.toLocaleString("en-GB"), "orange": n("Orange"), "red": n("Red") };
+  if (isFinite(t)) out.recent = recent.length.toLocaleString("en-GB");
+  return out;
 }
 
 // What the refresh should do with a feed: "newer" (fresher than the page and within its limit), "same", "stale" or "missing".
@@ -214,7 +275,12 @@ function liveTables(d) {
         Array.prototype.forEach.call(heads, function (h) { h.removeAttribute("aria-sort"); });
         th.setAttribute("aria-sort", desc ? "descending" : "ascending");
         var rows = Array.prototype.slice.call(body.rows);
-        var keys = rows.map(function (r) { var c = r.cells[col], tm = c && c.querySelector("time[datetime]"); return cellSortValue(c ? c.getAttribute("data-sort") || (tm && tm.getAttribute("datetime")) || c.textContent : ""); });
+        var keys = rows.map(function (r) {
+          var c = r.cells[col];
+          if (!c) return cellSortValue("");
+          var inner = c.querySelector("[data-sort]"), tm = c.querySelector("time[datetime]");
+          return cellSortKey(c.getAttribute("data-sort"), inner && inner.getAttribute("data-sort"), tm && tm.getAttribute("datetime"), c.textContent);
+        });
         sortOrder(keys, desc).forEach(function (i) { body.appendChild(rows[i]); });
       });
     });
@@ -257,13 +323,13 @@ function liveTips(d) {
 
 function liveCountdown(d, w) {
   Array.prototype.forEach.call(d.querySelectorAll("[data-countdown]"), function (el) {
-    var target = Date.parse(el.getAttribute("data-countdown"));
     var out = d.createElement("span");
     out.className = "lt";
     out.setAttribute("aria-live", "off");
     el.appendChild(out);
     var tick = function () {
-      var txt = countdownText(target, Date.now(), el.getAttribute("data-precision"), el.getAttribute("data-status"));
+      // read on every tick, so a live refresh that brings a new next launch moves the countdown with it
+      var txt = countdownText(Date.parse(el.getAttribute("data-countdown")), Date.now(), el.getAttribute("data-precision"), el.getAttribute("data-status"));
       out.textContent = txt ? " " + txt + "." : "";
     };
     tick();
@@ -279,16 +345,18 @@ function liveRefresh(d, w) {
   var say = function (t) { status.textContent = t; };
   var getJson = function (u) { return w.fetch(u, { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); }); };
   var shownAt = null;
+  // after a successful refresh the page no longer shows the build's numbers, so a later failure says which numbers stay
+  var keeps = function () { return shownAt === null ? "this page shows the numbers from its data time" : "this page keeps the numbers from the live data of " + (localTimeText(built) || built); };
   var check = function () {
     getJson(base + "manifest.json").then(function (m) {
       var entry = m && m.feeds && m.feeds[feeds[0]];
       var state = feedState(entry, built, feeds[2], Date.now());
-      if (state !== "newer") { say(state === "same" ? "Checked the live data: nothing newer than the numbers on this page." : "The live data is not usable right now, so this page shows the numbers from its data time."); return null; }
+      if (state !== "newer") { say(state === "same" ? "Checked the live data: nothing newer than the numbers on this page." : "The live data is not usable right now, so " + keeps() + "."); return null; }
       var storms = m.feeds.storms;
       var stormsFile = page === "disasters" && storms && storms.files && storms.files["storms.json"] ? getJson(base + storms.files["storms.json"]).catch(function () { return null; }) : Promise.resolve(null);
       return Promise.all([getJson(base + entry.files[feeds[1]]), stormsFile]).then(function (r) {
         var st = r[1] && Date.now() - Date.parse(r[1].generated) <= 12 * 3600000 ? r[1] : null;
-        var fresh = page === "launches" ? launchesHeadline(r[0]) : disastersHeadline(r[0], st);
+        var fresh = page === "launches" ? launchesHeadline(r[0]) : disastersHeadline(r[0], st, entry.sourceTime || entry.fetchedAt);
         if (!fresh) throw new Error("unreadable");
         var els = d.querySelectorAll("[data-live-key]"), current = {};
         Array.prototype.forEach.call(els, function (el) { current[el.getAttribute("data-live-key")] = el.textContent; });
@@ -298,29 +366,33 @@ function liveRefresh(d, w) {
           el.textContent = merged.values[k];
           if (merged.changed.indexOf(k) >= 0) el.classList.add("live-new");
         });
+        if (fresh["next-net"]) Array.prototype.forEach.call(d.querySelectorAll("[data-countdown]"), function (el) {
+          el.setAttribute("data-countdown", fresh["next-net"]); el.setAttribute("data-precision", fresh["next-precision-code"]); el.setAttribute("data-status", fresh["next-status-text"]);
+        });
         built = entry.sourceTime || entry.fetchedAt;
         shownAt = Date.parse(built);
         say("Updated in place from the live data of " + (localTimeText(built) || built) + ", " + minutesAgoText(shownAt, Date.now()) + ". Marked numbers changed since the page was built; the rest of the page is from its data time.");
         return null;
       });
-    }).catch(function () { say("Could not read the live data, so this page shows the numbers from its data time."); });
+    }).catch(function () { say("Could not read the live data, so " + keeps() + "."); });
   };
   w.setTimeout(check, 3000);
   w.setInterval(check, 300000);
 }
 
-function liveMain(d, w) {
+// version: the script's own version, written into the call at the end of the script from LIVE_SCRIPT_VERSION
+function liveMain(d, w, version) {
   var b = d.body;
-  if (!b || b.getAttribute("data-live-v") !== "1") return;
+  if (!b || b.getAttribute("data-live-v") !== version) return;
   [liveStyle, liveTimes, liveTables, liveTips, liveCountdown, liveRefresh].forEach(function (f) { try { f(d, w); } catch (e) { /* each part fails silently */ } });
 }
 
 // The pure functions the browser parts use, in the order they are written into the script.
-const PURE = [cellSortValue, compareSortValues, sortOrder, filterMatch, localTimeText, countdownText, minutesAgoText, launchWhenText, launchesHeadline, stormNameToken, sameStormRule, disastersHeadline, feedState, mergeRefresh];
+const PURE = [cellSortValue, cellSortKey, compareSortValues, sortOrder, filterMatch, localTimeText, countdownText, minutesAgoText, launchWhenText, launchPrecisionText, regionName, isoMs, launchesHeadline, nextLaunchFields, stormNameToken, sameStormRule, disastersHeadline, feedState, mergeRefresh];
 const DOM = [liveStyle, liveTimes, liveTables, liveTips, liveCountdown, liveRefresh, liveMain];
 
 // The text of live-pages.js. Deterministic: the same code gives the same bytes.
 export function liveScriptSource() {
   return `// live-pages.js, version ${LIVE_SCRIPT_VERSION}: progressive enhancement for the live pages of Radar Around You. Generated by site/live-pages-js.mjs.\n` +
-    `(function () {\n"use strict";\n${[...PURE, ...DOM].map((f) => f.toString()).join("\n")}\ntry { liveMain(document, window); } catch (e) { /* silent */ }\n})();\n`;
+    `(function () {\n"use strict";\n${[...PURE, ...DOM].map((f) => f.toString()).join("\n")}\ntry { liveMain(document, window, ${JSON.stringify(String(LIVE_SCRIPT_VERSION))}); } catch (e) { /* silent */ }\n})();\n`;
 }
