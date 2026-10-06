@@ -54,3 +54,18 @@ Planes over a city; per-country launch pages; any change to the 3D app; countdow
 | Wrong sky or pass times | Reuse the app's checked functions, add tests against documented values, list what was and was not verified; never claim visibility |
 | The sky pages change every night, many pages | Six data-backed cities, each with its own cloud forecast; daily rebuild; each page differs in substance (own weather, own planets' positions, own passes) |
 | The satellite feed is paused for hours by CelesTrak | Pages show their own data time and the staleness limit is 30 hours |
+
+## 7. Indexable and understandable by Google (owner's requirement, 2026-10-06)
+
+The owner asked that these pages be "indexable and understandable by Google". Everything in the hazard design section 2a applies. In addition, every live page (the new ones and, in a later pass, the earlier ones) meets this checklist, and a test over the built pages enforces it (`test/live-seo.test.js`):
+
+- Machine-readable times: the data time in the lead is wrapped in `<time datetime="...Z">` with the same instant as `dateModified`.
+- Charts and maps are `<figure>` elements with a `<figcaption>` that says in one sentence what the figure shows and what its data time is; the SVG keeps `role="img"`, `<title>` and `<desc>`; the same numbers are in a visible table or sentence nearby (never only in the picture).
+- Tables have a `<caption>`, header cells are `<th scope="col">` (or `scope="row"`), no layout tables.
+- Headings: one `<h1>`, `<h2>` for sections, `<h3>` only under an `<h2>`, no skipped levels, headings written as the question or the topic a searcher uses.
+- Structured data (JSON-LD), valid JSON, no invented values: `BreadcrumbList`, `WebPage` with `name`, `description`, `url`, `inLanguage: "en"`, `dateModified`, `isPartOf` pointing at the `WebSite` (`url`, `name`), and `breadcrumb`; Dataset only where the design allows it; no FAQPage markup (the FAQ rich result is not shown); no markup for content that is not on the page.
+- Every page is in `sitemap-live.xml` with `lastmod` = data time, linked from the `/right-now/` hub, from at least two other pages, and from `llms.txt`; descriptive link text (no "click here").
+- Titles under 60 characters and unique, descriptions under 160 and unique, one canonical to the page's own apex address, `index,follow` when the site is indexable.
+- Sources: a visible sources section naming the source, linking to its own page, and stating what we computed ourselves.
+- Plain HTML first: the numbers, tables and figures are in the HTML the server sends, readable without JavaScript.
+- Open items outside the build (the owner's steps): submit `sitemap.xml` and `sitemap-live.xml` in Search Console; request indexing of the hub pages there; check the Page indexing and Enhancements reports after a few days. Whether Google indexes or ranks any page is NOT CONFIRMED.
