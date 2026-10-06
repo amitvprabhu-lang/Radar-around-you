@@ -835,12 +835,17 @@ async function main() {
   // ------------------------------------------------------------------ first run
   // A scene's shaders are compiled and linked before it is first drawn, so that frame does not stop the page while the graphics
   // driver works. With KHR_parallel_shader_compile the wait is asynchronous (capped, so a lost context can never keep the loader
-  // up). Without it the compile calls go out in one task and the first frame comes in a later one, which gives the driver a head
-  // start; three.js would warn if compileAsync asked for the missing extension, so it is not used then.
+  // up). Without it, see below; three.js would warn if compileAsync asked for the missing extension, so it is not used then.
   async function precompile(scene, camera) {
     try {
       if (renderer.extensions.has("KHR_parallel_shader_compile")) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 10000))]);
-      else { renderer.compile(scene, camera); await yieldToMain(); }
+      else {
+        // Without the extension (SwiftShader, which test browsers and probably Google's PageSpeed machines use) the first draw waited
+        // for every program to link in one task of seconds. Asking each program for its uniforms waits for that one program only,
+        // so the waits are spread over one task per program; three.js would ask the same questions at the first draw.
+        renderer.compile(scene, camera);
+        for (const program of [...(renderer.info.programs || [])]) { await yieldToMain(); if (program.getUniforms) program.getUniforms(); }
+      }
     } catch { /* the first frame of the scene compiles them instead, as before */ }
   }
   function onFirstFrames() {
@@ -883,8 +888,12 @@ async function main() {
     startLive();
     // Not needed for the first screen: the sky and Under views' shaders and the Moon's texture are prepared when the
     // browser is idle, so the first switch to those views does not stall while they compile.
-    idle.add(() => precompile(sky.scene, sky.camera));
-    idle.add(() => precompile(under.scene, under.camera));
+    // Only with parallel compiling: without it each link holds the main thread (about half a second per program on SwiftShader), so
+    // those scenes are left to link at their first draw, as before.
+    if (renderer.extensions.has("KHR_parallel_shader_compile")) {
+      idle.add(() => precompile(sky.scene, sky.camera));
+      idle.add(() => precompile(under.scene, under.camera));
+    }
     idle.add(() => renderer.initTexture(app.tex.moon));
   });
 
