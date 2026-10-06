@@ -32,12 +32,13 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 606 unit tests for the app and the content site, no browser needed
+npm test                # 637 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
-npm run test:hosting    # 425 checks of the PHP hosting scripts (needs php)
-npm run site            # the content site into dist/site: 121 pages (120 static pages and the app as index.html), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
+npm run test:hosting    # 454 checks of the PHP hosting scripts (needs php)
+npm run site            # the content site into dist/site: 130 pages (129 static pages and the app as index.html, 2026-10-06), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
+npm run build:hosting   # what Hostinger runs: the app, the content site, then the build-time live snapshot (site/live-snapshot.mjs downloads the published live/ folder and live pages from the data branch; LIVE_SNAPSHOT=0 or -- --no-live-snapshot turns it off, see docs/hosting.md)
 npm run e2e             # 291 browser checks (last recorded run) on the snapshot build, phone and desktop windows (needs Playwright, see below)
 npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first); 65 checks on branch feature/home-seo (2026-10-06, indexable build, run once: 63 passed, the 2 word-count failures were fixed in the check afterwards and not rerun); 56 before it
 npm run e2e:live        # 112 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
@@ -132,7 +133,8 @@ site/        the content site generator: layout.mjs (page shell), data.mjs and v
             home-text.mjs (the home page text section), home-strip.mjs (its live figures), assets/og-image.png (the share image), satcount.mjs, satcountry.mjs, svgmap.mjs, hazard.mjs (hazard feed summaries),
             pages-hazard.mjs, livepages.mjs (the list of every live page), liveregistry.mjs (how each page is made, by key), events.mjs and
             pages-events.mjs (Starlink, disasters, launches), liveseo.mjs, insight.mjs (findings and history.json), live-pages-js.mjs (the
-            live pages' shared script), indexnow.mjs (the IndexNow key) and build-live.mjs for the live pages;
+            live pages' shared script), indexnow.mjs (the IndexNow key) and build-live.mjs for the live pages; live-snapshot.mjs (the last step of build:hosting: copies
+            the published live folder and live pages into the build output, with the pull job's checks);
             sky.mjs, pages-sky.mjs, sky-family.mjs and sky-data.mjs for tonight's sky and the ISS page
 hosting/     two PHP scripts for cron on shared hosting (start the GitHub collector, copy its data and the live pages into the site, ping IndexNow for the pages that changed) with 454 checks; see hosting/README.md
 template.html   page shell and all CSS
