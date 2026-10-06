@@ -69,3 +69,31 @@ The owner asked that these pages be "indexable and understandable by Google". Ev
 - Sources: a visible sources section naming the source, linking to its own page, and stating what we computed ourselves.
 - Plain HTML first: the numbers, tables and figures are in the HTML the server sends, readable without JavaScript.
 - Open items outside the build (the owner's steps): submit `sitemap.xml` and `sitemap-live.xml` in Search Console; request indexing of the hub pages there; check the Page indexing and Enhancements reports after a few days. Whether Google indexes or ranks any page is NOT CONFIRMED.
+
+## 8. JavaScript is allowed, and the data must make sense (owner's requirements, 2026-10-06)
+
+The owner said: "you can use JavaScript as well. Also make some sense out of the data." This changes the "no JavaScript" rule above to progressive enhancement, and adds a duty to explain the numbers.
+
+### 8.1 JavaScript: progressive enhancement only
+
+- The server HTML always carries everything Google and a reader without JavaScript need: every number, table, figure caption and sentence, as sent at build time. JavaScript may only add convenience on top; no content exists only after a script runs, and the script never replaces the build-time numbers in the HTML a crawler receives.
+- One shared script, `live-pages.js`, written by `site/build.mjs` into the site output (so it survives redeploys and is cached), vanilla JavaScript, no libraries, no `eval`, no external requests except the site's own `/live/` data files, under 20 KB, with a version attribute contract (`data-live-v="1"` on `<body>` of each live page) so an older page and a newer script never disagree silently. Pages reference it with a normal `<script src defer>`.
+- What it does, each part optional and failing silently: (a) shows each `<time datetime>` also in the visitor's local time zone (the UTC text stays); (b) sortable and filterable tables where a table has more than 8 rows (launches by provider or country, disasters by type or alert level, the country ranking), keyboard usable, with `aria-sort`; (c) chart tooltips: hover and keyboard focus show the exact value of a bar, point or marker (the data is in `data-*` attributes or the nearby table); (d) live refresh: every 5 minutes or more it reads the page's feed files from the site's `/live/` folder (the same files the 3D app reads) and updates the headline numbers, the insight sentences' numbers and the "updated N minutes ago" label in place, marking updated values; if a feed is stale or the fetch fails it leaves the build-time values and says so; (e) launches: a countdown to the next launch, labelled "if the time holds", shown only when the time precision is minute or better, switching to the status text after T-0; (f) sky pages: a switch between the city's time zone and the visitor's; (g) respects `prefers-reduced-motion`, works with keyboard and screen readers, and leaves the page readable and printable with it switched off.
+- Tests: the script's pure functions are exported and unit tested in node (sorting, time conversion, countdown, refresh merge); `e2e-site.mjs` checks in Chromium that sorting works, a refresh with a mocked `/live/` file updates the number, the page shows the same content with JavaScript disabled, and there are no console errors; a raw-HTML test asserts the numbers are in the server HTML.
+
+### 8.2 Make sense of the data: "What this means"
+
+Every live page gets an `<h2>` section near the top, right after the lead, with 3 to 6 plain-language findings, each a sentence made by a tested function from the page's own summary. Each finding states the number, what it is compared with, and the basis of the comparison. Allowed comparisons (all computed, none invented):
+
+- against the feed's own window: today's count against the daily average of the days in the feed (quakes have a 7-day window), with the range ("36 in 24 hours, the 7-day daily average is 42, the range 31 to 55, so a quieter day than most");
+- rank in the window ("the largest is magnitude 5.3, the 2nd largest of the past week");
+- concentration (share by region, provider, country, owner; "three providers account for 70 percent of the next 30 days of launches");
+- change since the previous build, from a small history file `history.json` kept in the pages folder on the data branch (restored by the workflow like `index.json`, last 48 builds of each page's headline numbers, written by `site/build-live.mjs`; if there is no history the finding is left out);
+- a published scale, only where the repository's source records contain it (for example the NOAA G scale for Kp from `docs/hazard-sources.md`, the NHC category from wind from the hazard sources, the alert levels as GDACS states them); a scale or typical value that is not recorded in `docs/` is never typed in: link the agency instead;
+- for the sky pages: what is best tonight and why, from the computed Moon, planets, cloud and pass data ("the Moon sets at 21:40, so 22:00 to 01:00 is dark and has 8 percent cloud").
+
+Direction words ("above", "below", "about the same as") come from one explicit threshold (within 15 percent of the comparison is "about the same"), defined once in code and written in the method section. Wording is plain, not alarmist, no safety advice beyond the source, never a prediction. A finding whose inputs are missing is left out, not guessed. The `/right-now/` hub gets a "What is notable" list built from the same findings (an Orange or Red disaster, a large quake, Kp at G1 or above, a launch in the next 24 hours, the best sky window in Pune). Tests: each finding function has cases for above, below and about-the-same, for ties, for missing history and for an empty window; the sentences contain only numbers that also appear in the summary.
+
+### 8.3 Scope
+
+Applies first to the new pages (this branch family) and in a later pass to the earlier live pages (hazard pages, count page, country pages), which then also lose their entries on the `test/live-seo.test.js` allowlist.
