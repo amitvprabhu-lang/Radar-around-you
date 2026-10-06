@@ -43,18 +43,21 @@ const textureCheck = (p) => p.evaluate(async () => {
     return px;
   };
   const out = { differing: {}, kinds: {} };
+  // once the globe was zoomed in, it draws the 4k day map (loaded the same way) instead of the 2k one
+  const onGlobe = { ...tex, day: window.__radar.orbit.earthU.dayTex.value };
+  if (onGlobe.day !== tex.day) files.day = "tex/day4k.webp";
   for (const [k, f] of Object.entries(files)) {
     const old = await new THREE.TextureLoader().loadAsync(f);
     renderer.initTexture(old);
     const w = old.image.width, h = old.image.height;
-    const a = readGL(old, w, h), b = readGL(tex[k], w, h);
+    const a = readGL(old, w, h), b = readGL(onGlobe[k], w, h);
     let n = !a || !b ? -1 : 0;
     for (let i = 0; n >= 0 && i < a.length; i++) if (a[i] !== b[i]) n++;
     out.differing[k] = n;
-    out.kinds[k] = tex[k].image && tex[k].image.constructor.name;
+    out.kinds[k] = onGlobe[k].image && onGlobe[k].image.constructor.name;
     old.dispose();
   }
-  out.released = Object.values(out.kinds).every((c) => c === "HTMLImageElement") && Object.keys(files).every((k) => tex[k].userData.image === tex[k].image);
+  out.released = Object.values(out.kinds).every((c) => c === "HTMLImageElement") && Object.keys(files).every((k) => onGlobe[k].userData.image === onGlobe[k].image);
   const img = new Image(); img.src = files.night; await img.decode();
   const place = window.__radar.S.place, w = img.width, h = img.height;
   const c = document.createElement("canvas"); c.width = 16; c.height = 8;
