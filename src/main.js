@@ -59,7 +59,7 @@ async function main() {
   const loadBar = $("loadBar"), loadText = $("loadText");
   let app;
   try {
-    app = await boot({ canvas, quality: safeStore.get("radar2.quality", "auto"), yieldFn: yieldToMain, onProgress: (f, label) => { loadBar.style.width = `${Math.round(f * 100)}%`; loadText.textContent = label; } });
+    app = await boot({ canvas, quality: safeStore.get("radar2.quality", "auto"), yieldFn: yieldToMain, onProgress: (f, label) => { loadBar.style.transform = `scaleX(${Math.round(f * 100) / 100})`; loadText.textContent = label; } });
   } catch (e) {
     $("loader").replaceChildren(h("div", { id: "nogl" }, h("h1", { text: "3D graphics could not start" }), h("p", { text: "This page needs WebGL 2, which this browser did not provide. Try a recent Chrome, Safari or Firefox." }), h("p", { class: "mono", text: String(e && e.message || e) })));
     return;

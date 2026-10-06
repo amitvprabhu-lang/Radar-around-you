@@ -36,3 +36,12 @@ test("the stats strip carries no list roles: its tiles are buttons and links (Li
   assert.ok(main.includes('{ class: "stat glass", ...(typeof to === "string"'), "the tile is made without a role");
   assert.ok(!/role: "listitem"|role="list(item)?"/.test(main + html));
 });
+
+test("the loader's progress bar animates transform, not width, so the compositor can run it (Lighthouse: non-composited animations)", () => {
+  const rule = html.match(/#loader \.progress i \{[^}]*\}/)[0];
+  assert.match(rule, /transform: scaleX\(0\); transform-origin: 0 50%;/);
+  assert.match(rule, /transition: transform \.25s ease;/);
+  assert.ok(!/transition:[^;]*width/.test(html), "no width transition anywhere in the template");
+  const main = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.ok(main.includes("loadBar.style.transform = `scaleX(${Math.round(f * 100) / 100})`;") && !main.includes("loadBar.style.width"));
+});
