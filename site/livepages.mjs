@@ -23,12 +23,14 @@ export const familyPage = (key) => FAMILY_PAGES.find((p) => p.key === key) || nu
 const familyFeeds = [...new Set(FAMILY_PAGES.flatMap((p) => p.feeds))];
 // the kinds of the satellite pages, which build-live.mjs builds together from the satellites feed (all or nothing)
 const SATELLITE_KINDS = ["count", "country-hub", "country"];
+// name: the page's short name, used as the link text in the home page's row of live pages (site/home-text.mjs); a test checks every
+// entry has one, so a page added here is linked from the home page with a descriptive name. Family pages bring their own name.
 export const LIVE_PAGES = [
-  { file: SATCOUNT_FILE, kind: "count", feeds: ["satellites"] },
-  { file: HUB_FILE, kind: "country-hub", feeds: ["satellites"] },
-  ...COUNTRY_PAGES.map((p) => ({ file: p.file, kind: "country", feeds: ["satellites"] })),
-  ...FAMILY_PAGES.map((p) => ({ file: p.file, kind: p.family, key: p.key, feeds: p.feeds })),
-  { file: RIGHT_NOW_FILE, kind: "hub", feeds: [...new Set(["satellites", ...familyFeeds])] },
+  { file: SATCOUNT_FILE, kind: "count", feeds: ["satellites"], name: "Satellite count" },
+  { file: HUB_FILE, kind: "country-hub", feeds: ["satellites"], name: "Satellites by country" },
+  ...COUNTRY_PAGES.map((p) => ({ file: p.file, kind: "country", feeds: ["satellites"], name: `Satellites of ${p.phrase}` })),
+  ...FAMILY_PAGES.map((p) => ({ file: p.file, kind: p.family, key: p.key, feeds: p.feeds, name: p.name })),
+  { file: RIGHT_NOW_FILE, kind: "hub", feeds: [...new Set(["satellites", ...familyFeeds])], name: "Right now: every live figure" },
 ];
 export const LIVE_FILES = LIVE_PAGES.map((p) => p.file);
 // the satellite count page, the satellites by country hub and the five country pages

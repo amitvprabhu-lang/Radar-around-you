@@ -38,6 +38,21 @@ export const SITE = {
   noindex: noindexFromEnv(process.env.SITE_NOINDEX),
 };
 
+// The one share image for every page (tools/make-og-image.mjs draws it; site/build.mjs copies it to the site root). The alt text says what
+// the picture shows.
+export const OG_IMAGE = {
+  file: "og-image.png", width: 1200, height: 630,
+  alt: "A dark blue globe crossed by thin orbit lines with small dots, beside the name Radar Around You and the line: A free live feed of what is above, around and under you.",
+};
+export const ogImageTags = (url = SITE.url) => `<meta property="og:image" content="${esc(`${url}/${OG_IMAGE.file}`)}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="${OG_IMAGE.width}">
+<meta property="og:image:height" content="${OG_IMAGE.height}">
+<meta property="og:image:alt" content="${esc(OG_IMAGE.alt)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${esc(`${url}/${OG_IMAGE.file}`)}">
+<meta name="twitter:image:alt" content="${esc(OG_IMAGE.alt)}">`;
+
 export const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // "moon-phases/index.html" -> "moon-phases/"; "index.html" -> ""
@@ -201,7 +216,7 @@ ${robotsMeta(noindex)}
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta name="twitter:card" content="summary">
+${ogImageTags()}
 <meta name="theme-color" content="#04060c">
 ${ld.map((o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`).join("\n")}
 <style>${CSS}</style>
