@@ -586,6 +586,8 @@ async function suite(label, viewport, mobile) {
       const r = window.__radar, gl = r.app.renderer.getContext();
       const ext = gl.getExtension("WEBGL_lose_context");
       if (!ext) return { ok: false, why: "no WEBGL_lose_context" };
+      // the globe view, so the frames after the restore upload the globe's textures again (the suite ends in another view)
+      r.setView("globe");
       ext.loseContext();
       await new Promise((res) => setTimeout(res, 500));
       ext.restoreContext();
