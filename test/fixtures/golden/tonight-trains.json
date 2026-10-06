@@ -1,0 +1,622 @@
+{
+ "made": "Output of origin/main f1ea51a (before the sliced forms) for the two calls in test/golden-tonight.test.js, written on 2026-10-06 with that commit's src/ and the bundled public/ data; regenerate the same way only for a deliberate change of the plan",
+ "snapshotTaken": "2026-10-04T14:19:25Z",
+ "plan": {
+  "items": [
+   {
+    "id": "aurora",
+    "kind": "aurora",
+    "tag": "AURORA",
+    "title": "Aurora chance about 7%",
+    "time": "2026-10-05T17:39:25.000Z",
+    "detail": "The aurora oval is about 0 km away. Look north, away from city lights.",
+    "interest": 27,
+    "sky": {
+     "alt": 20,
+     "az": 0
+    },
+    "timeless": false
+   },
+   {
+    "id": "train-25197-1791223885000",
+    "kind": "train",
+    "tag": "TRAIN",
+    "title": "Starlink string of 26",
+    "time": "2026-10-05T18:20:25.000Z",
+    "start": "2026-10-05T18:11:25.000Z",
+    "end": "2026-10-05T18:22:25.000Z",
+    "detail": "Up to 6 satellites at once, seen from the NNW to the NNW, highest 18° in the NNW around 18:20. Launched Mon 28 Sept, already stretched into a long string.",
+    "interest": 82,
+    "cloud": null,
+    "track": [
+     {
+      "time": "2026-10-05T18:11:25.000Z",
+      "el": 20.77308979026167,
+      "az": 342.4938352944554,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:12:25.000Z",
+      "el": 19.313704778708153,
+      "az": 350.6612900741647,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:13:25.000Z",
+      "el": 20.230474355816725,
+      "az": 338.241561146193,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:14:25.000Z",
+      "el": 19.592716955512508,
+      "az": 341.0804637684959,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:15:25.000Z",
+      "el": 19.042660537281353,
+      "az": 342.3521757225943,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:16:25.000Z",
+      "el": 18.646101038121163,
+      "az": 317.3927432513936,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:17:25.000Z",
+      "el": 18.611179054270945,
+      "az": 323.0976671156328,
+      "count": 4
+     },
+     {
+      "time": "2026-10-05T18:18:25.000Z",
+      "el": 18.337930816887432,
+      "az": 325.0884300943482,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:19:25.000Z",
+      "el": 17.963934923338314,
+      "az": 332.7894888263147,
+      "count": 5
+     },
+     {
+      "time": "2026-10-05T18:20:25.000Z",
+      "el": 17.500593121495985,
+      "az": 328.54315642150584,
+      "count": 6
+     },
+     {
+      "time": "2026-10-05T18:21:25.000Z",
+      "el": 16.902478062676934,
+      "az": 331.4435155190361,
+      "count": 5
+     },
+     {
+      "time": "2026-10-05T18:22:25.000Z",
+      "el": 16.320560545327908,
+      "az": 335.14475343950096,
+      "count": 4
+     }
+    ],
+    "target": {
+     "kind": "sat",
+     "idx": 16613
+    },
+    "sky": {
+     "alt": 17.500593121495985,
+     "az": 328.54315642150584
+    },
+    "maxEl": 17.500593121495985,
+    "count": 6,
+    "remind": {
+     "title": "Look up: Starlink string over Test",
+     "start": "2026-10-05T18:06:25.000Z",
+     "end": "2026-10-05T18:23:25.000Z",
+     "details": "Up to 6 Starlink satellites in a line, NNW to NNW. Times from Radar Around You (approximate).",
+     "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Test&dates=20261005T180625Z%2F20261005T182325Z&details=Up+to+6+Starlink+satellites+in+a+line%2C+NNW+to+NNW.+Times+from+Radar+Around+You+%28approximate%29.&location=Test"
+    }
+   },
+   {
+    "id": "planet-Saturn",
+    "kind": "planet",
+    "tag": "PLANET",
+    "title": "Saturn",
+    "time": "2026-10-05T22:59:25.000Z",
+    "detail": "Magnitude 0.2. Above 5° from 17:39 to 04:39, highest 87° in the NE at 22:59.",
+    "interest": 32,
+    "target": {
+     "kind": "planet",
+     "name": "Saturn"
+    },
+    "sky": {
+     "alt": 87.32186032384836,
+     "az": 43.95511941179605
+    }
+   },
+   {
+    "id": "train-25197-1791259165000",
+    "kind": "train",
+    "tag": "TRAIN",
+    "title": "Starlink string of 26",
+    "time": "2026-10-06T04:01:25.000Z",
+    "start": "2026-10-06T03:59:25.000Z",
+    "end": "2026-10-06T04:03:25.000Z",
+    "detail": "Up to 8 satellites at once, seen from the NNE to the NNE, highest 12° in the NNE around 04:01. Launched Mon 28 Sept, already stretched into a long string.",
+    "interest": 86,
+    "cloud": null,
+    "track": [
+     {
+      "time": "2026-10-06T03:59:25.000Z",
+      "el": 11.603539668384604,
+      "az": 26.271321397455495,
+      "count": 3
+     },
+     {
+      "time": "2026-10-06T04:00:25.000Z",
+      "el": 11.976515227084215,
+      "az": 30.661856481441134,
+      "count": 6
+     },
+     {
+      "time": "2026-10-06T04:01:25.000Z",
+      "el": 12.06845496964156,
+      "az": 33.58876353192869,
+      "count": 8
+     },
+     {
+      "time": "2026-10-06T04:02:25.000Z",
+      "el": 11.885037715467313,
+      "az": 27.179840719310448,
+      "count": 8
+     },
+     {
+      "time": "2026-10-06T04:03:25.000Z",
+      "el": 12.08126822017695,
+      "az": 23.574988746602855,
+      "count": 3
+     }
+    ],
+    "target": {
+     "kind": "sat",
+     "idx": 16613
+    },
+    "sky": {
+     "alt": 12.06845496964156,
+     "az": 33.58876353192869
+    },
+    "maxEl": 12.06845496964156,
+    "count": 8,
+    "remind": {
+     "title": "Look up: Starlink string over Test",
+     "start": "2026-10-06T03:54:25.000Z",
+     "end": "2026-10-06T04:04:25.000Z",
+     "details": "Up to 8 Starlink satellites in a line, NNE to NNE. Times from Radar Around You (approximate).",
+     "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Test&dates=20261006T035425Z%2F20261006T040425Z&details=Up+to+8+Starlink+satellites+in+a+line%2C+NNE+to+NNE.+Times+from+Radar+Around+You+%28approximate%29.&location=Test"
+    }
+   },
+   {
+    "id": "planet-Mars",
+    "kind": "planet",
+    "tag": "PLANET",
+    "title": "Mars",
+    "time": "2026-10-06T04:39:25.000Z",
+    "detail": "Magnitude 1.1. Above 5° from 01:19 to 04:39, highest 52° in the NE at 04:39.",
+    "interest": 22,
+    "target": {
+     "kind": "planet",
+     "name": "Mars"
+    },
+    "sky": {
+     "alt": 52.27999901250386,
+     "az": 55.718782531395654
+    }
+   },
+   {
+    "id": "planet-Jupiter",
+    "kind": "planet",
+    "tag": "PLANET",
+    "title": "Jupiter",
+    "time": "2026-10-06T04:39:25.000Z",
+    "detail": "Magnitude -1.9. Above 5° from 02:19 to 04:39, highest 40° in the ENE at 04:39.",
+    "interest": 45,
+    "target": {
+     "kind": "planet",
+     "name": "Jupiter"
+    },
+    "sky": {
+     "alt": 39.872349776449475,
+     "az": 69.98478283558195
+    }
+   }
+  ],
+  "verdict": {
+   "level": "fair",
+   "score": 51,
+   "headline": "Fair night, with some gaps",
+   "sentence": "Best window 19:00 to 04:00. Highlights: a Starlink string at 04:01, a Starlink string at 18:20, Jupiter."
+  },
+  "conditions": [
+   {
+    "id": "dark",
+    "kind": "dark",
+    "title": "Dark from 17:39 to Tue 6 Oct 04:49",
+    "detail": "11 h 10 min with the Sun more than 6 degrees below the horizon."
+   },
+   {
+    "id": "cloud",
+    "kind": "weather",
+    "title": "Cloud forecast not available for this place",
+    "detail": "Hourly cloud forecasts are published for the six cities with a full data set only, so none is shown for this place."
+   },
+   {
+    "id": "moon",
+    "kind": "moon",
+    "title": "Moon 26% lit",
+    "detail": "Rises at Tue 6 Oct 01:39, so it is moon-free before that."
+   },
+   {
+    "id": "iss-next",
+    "kind": "note",
+    "title": "No visible ISS pass tonight",
+    "detail": "Next one you can see: Tue 6 Oct 18:10, 20° up in the WSW.",
+    "target": {
+     "kind": "sat",
+     "idx": 53
+    },
+    "sky": {
+     "alt": 20.455660795186922,
+     "az": 237.1457110635518
+    },
+    "atTime": "2026-10-06T18:10:45.000Z"
+   }
+  ],
+  "highlights": [
+   {
+    "id": "train-25197-1791259165000",
+    "kind": "train",
+    "tag": "TRAIN",
+    "title": "Starlink string of 26",
+    "time": "2026-10-06T04:01:25.000Z",
+    "start": "2026-10-06T03:59:25.000Z",
+    "end": "2026-10-06T04:03:25.000Z",
+    "detail": "Up to 8 satellites at once, seen from the NNE to the NNE, highest 12° in the NNE around 04:01. Launched Mon 28 Sept, already stretched into a long string.",
+    "interest": 86,
+    "cloud": null,
+    "track": [
+     {
+      "time": "2026-10-06T03:59:25.000Z",
+      "el": 11.603539668384604,
+      "az": 26.271321397455495,
+      "count": 3
+     },
+     {
+      "time": "2026-10-06T04:00:25.000Z",
+      "el": 11.976515227084215,
+      "az": 30.661856481441134,
+      "count": 6
+     },
+     {
+      "time": "2026-10-06T04:01:25.000Z",
+      "el": 12.06845496964156,
+      "az": 33.58876353192869,
+      "count": 8
+     },
+     {
+      "time": "2026-10-06T04:02:25.000Z",
+      "el": 11.885037715467313,
+      "az": 27.179840719310448,
+      "count": 8
+     },
+     {
+      "time": "2026-10-06T04:03:25.000Z",
+      "el": 12.08126822017695,
+      "az": 23.574988746602855,
+      "count": 3
+     }
+    ],
+    "target": {
+     "kind": "sat",
+     "idx": 16613
+    },
+    "sky": {
+     "alt": 12.06845496964156,
+     "az": 33.58876353192869
+    },
+    "maxEl": 12.06845496964156,
+    "count": 8,
+    "remind": {
+     "title": "Look up: Starlink string over Test",
+     "start": "2026-10-06T03:54:25.000Z",
+     "end": "2026-10-06T04:04:25.000Z",
+     "details": "Up to 8 Starlink satellites in a line, NNE to NNE. Times from Radar Around You (approximate).",
+     "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Test&dates=20261006T035425Z%2F20261006T040425Z&details=Up+to+8+Starlink+satellites+in+a+line%2C+NNE+to+NNE.+Times+from+Radar+Around+You+%28approximate%29.&location=Test"
+    }
+   },
+   {
+    "id": "train-25197-1791223885000",
+    "kind": "train",
+    "tag": "TRAIN",
+    "title": "Starlink string of 26",
+    "time": "2026-10-05T18:20:25.000Z",
+    "start": "2026-10-05T18:11:25.000Z",
+    "end": "2026-10-05T18:22:25.000Z",
+    "detail": "Up to 6 satellites at once, seen from the NNW to the NNW, highest 18° in the NNW around 18:20. Launched Mon 28 Sept, already stretched into a long string.",
+    "interest": 82,
+    "cloud": null,
+    "track": [
+     {
+      "time": "2026-10-05T18:11:25.000Z",
+      "el": 20.77308979026167,
+      "az": 342.4938352944554,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:12:25.000Z",
+      "el": 19.313704778708153,
+      "az": 350.6612900741647,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:13:25.000Z",
+      "el": 20.230474355816725,
+      "az": 338.241561146193,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:14:25.000Z",
+      "el": 19.592716955512508,
+      "az": 341.0804637684959,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:15:25.000Z",
+      "el": 19.042660537281353,
+      "az": 342.3521757225943,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:16:25.000Z",
+      "el": 18.646101038121163,
+      "az": 317.3927432513936,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:17:25.000Z",
+      "el": 18.611179054270945,
+      "az": 323.0976671156328,
+      "count": 4
+     },
+     {
+      "time": "2026-10-05T18:18:25.000Z",
+      "el": 18.337930816887432,
+      "az": 325.0884300943482,
+      "count": 3
+     },
+     {
+      "time": "2026-10-05T18:19:25.000Z",
+      "el": 17.963934923338314,
+      "az": 332.7894888263147,
+      "count": 5
+     },
+     {
+      "time": "2026-10-05T18:20:25.000Z",
+      "el": 17.500593121495985,
+      "az": 328.54315642150584,
+      "count": 6
+     },
+     {
+      "time": "2026-10-05T18:21:25.000Z",
+      "el": 16.902478062676934,
+      "az": 331.4435155190361,
+      "count": 5
+     },
+     {
+      "time": "2026-10-05T18:22:25.000Z",
+      "el": 16.320560545327908,
+      "az": 335.14475343950096,
+      "count": 4
+     }
+    ],
+    "target": {
+     "kind": "sat",
+     "idx": 16613
+    },
+    "sky": {
+     "alt": 17.500593121495985,
+     "az": 328.54315642150584
+    },
+    "maxEl": 17.500593121495985,
+    "count": 6,
+    "remind": {
+     "title": "Look up: Starlink string over Test",
+     "start": "2026-10-05T18:06:25.000Z",
+     "end": "2026-10-05T18:23:25.000Z",
+     "details": "Up to 6 Starlink satellites in a line, NNW to NNW. Times from Radar Around You (approximate).",
+     "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Test&dates=20261005T180625Z%2F20261005T182325Z&details=Up+to+6+Starlink+satellites+in+a+line%2C+NNW+to+NNW.+Times+from+Radar+Around+You+%28approximate%29.&location=Test"
+    }
+   },
+   {
+    "id": "planet-Jupiter",
+    "kind": "planet",
+    "tag": "PLANET",
+    "title": "Jupiter",
+    "time": "2026-10-06T04:39:25.000Z",
+    "detail": "Magnitude -1.9. Above 5° from 02:19 to 04:39, highest 40° in the ENE at 04:39.",
+    "interest": 45,
+    "target": {
+     "kind": "planet",
+     "name": "Jupiter"
+    },
+    "sky": {
+     "alt": 39.872349776449475,
+     "az": 69.98478283558195
+    }
+   }
+  ]
+ },
+ "panel": [
+  {
+   "id": "train-25197-1791295045000",
+   "kind": "train",
+   "tag": "TRAIN",
+   "title": "Starlink string of 26",
+   "time": "2026-10-06T13:57:25.000Z",
+   "start": "2026-10-06T13:57:25.000Z",
+   "end": "2026-10-06T13:58:25.000Z",
+   "detail": "Up to 5 satellites at once, seen from the S to the S, highest 14° in the S around 19:27. Launched Mon 28 Sept, already stretched into a long string.",
+   "interest": 80,
+   "cloud": null,
+   "track": [
+    {
+     "time": "2026-10-06T13:57:25.000Z",
+     "el": 13.526884641155906,
+     "az": 183.7032026536931,
+     "count": 5
+    },
+    {
+     "time": "2026-10-06T13:58:25.000Z",
+     "el": 15.264766255901872,
+     "az": 180.00514522848982,
+     "count": 3
+    }
+   ],
+   "target": {
+    "kind": "sat",
+    "idx": 16613
+   },
+   "sky": {
+    "alt": 13.526884641155906,
+    "az": 183.7032026536931
+   },
+   "maxEl": 13.526884641155906,
+   "count": 5,
+   "remind": {
+    "title": "Look up: Starlink string over Pune",
+    "start": "2026-10-06T13:52:25.000Z",
+    "end": "2026-10-06T13:59:25.000Z",
+    "details": "Up to 5 Starlink satellites in a line, S to S. Times from Radar Around You (approximate).",
+    "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Pune&dates=20261006T135225Z%2F20261006T135925Z&details=Up+to+5+Starlink+satellites+in+a+line%2C+S+to+S.+Times+from+Radar+Around+You+%28approximate%29.&location=Pune"
+   }
+  },
+  {
+   "id": "train-25197-1791380605000",
+   "kind": "train",
+   "tag": "TRAIN",
+   "title": "Starlink string of 26",
+   "time": "2026-10-07T13:44:25.000Z",
+   "start": "2026-10-07T13:43:25.000Z",
+   "end": "2026-10-07T13:44:25.000Z",
+   "detail": "Up to 3 satellites at once, seen from the S to the SSE, highest 27° in the SSE around 19:14. Launched Mon 28 Sept, already stretched into a long string.",
+   "interest": 76,
+   "cloud": null,
+   "track": [
+    {
+     "time": "2026-10-07T13:43:25.000Z",
+     "el": 23.09521721492898,
+     "az": 182.72839045577342,
+     "count": 3
+    },
+    {
+     "time": "2026-10-07T13:44:25.000Z",
+     "el": 27.379431884571602,
+     "az": 164.26925657498577,
+     "count": 3
+    }
+   ],
+   "target": {
+    "kind": "sat",
+    "idx": 16613
+   },
+   "sky": {
+    "alt": 27.379431884571602,
+    "az": 164.26925657498577
+   },
+   "maxEl": 27.379431884571602,
+   "count": 3,
+   "remind": {
+    "title": "Look up: Starlink string over Pune",
+    "start": "2026-10-07T13:38:25.000Z",
+    "end": "2026-10-07T13:45:25.000Z",
+    "details": "Up to 3 Starlink satellites in a line, S to SSE. Times from Radar Around You (approximate).",
+    "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Pune&dates=20261007T133825Z%2F20261007T134525Z&details=Up+to+3+Starlink+satellites+in+a+line%2C+S+to+SSE.+Times+from+Radar+Around+You+%28approximate%29.&location=Pune"
+   }
+  },
+  {
+   "id": "train-25197-1791381805000",
+   "kind": "train",
+   "tag": "TRAIN",
+   "title": "Starlink string of 26",
+   "time": "2026-10-07T14:04:25.000Z",
+   "start": "2026-10-07T14:03:25.000Z",
+   "end": "2026-10-07T14:09:25.000Z",
+   "detail": "Up to 6 satellites at once, seen from the SW to the SW, highest 30° in the SSW around 19:34. Launched Mon 28 Sept, already stretched into a long string.",
+   "interest": 82,
+   "cloud": null,
+   "track": [
+    {
+     "time": "2026-10-07T14:03:25.000Z",
+     "el": 18.212971901843833,
+     "az": 221.8712006455812,
+     "count": 5
+    },
+    {
+     "time": "2026-10-07T14:04:25.000Z",
+     "el": 30.35682753194091,
+     "az": 207.54722835550396,
+     "count": 6
+    },
+    {
+     "time": "2026-10-07T14:05:25.000Z",
+     "el": 29.45487479982598,
+     "az": 210.62767230318806,
+     "count": 4
+    },
+    {
+     "time": "2026-10-07T14:06:25.000Z",
+     "el": 27.99358929017494,
+     "az": 215.3337729952838,
+     "count": 3
+    },
+    {
+     "time": "2026-10-07T14:07:25.000Z",
+     "el": 30.35493048309853,
+     "az": 214.21908915302495,
+     "count": 3
+    },
+    {
+     "time": "2026-10-07T14:08:25.000Z",
+     "el": 22.951877621922822,
+     "az": 223.12572905609343,
+     "count": 4
+    },
+    {
+     "time": "2026-10-07T14:09:25.000Z",
+     "el": 24.50773393587119,
+     "az": 222.95966200589098,
+     "count": 4
+    }
+   ],
+   "target": {
+    "kind": "sat",
+    "idx": 16613
+   },
+   "sky": {
+    "alt": 30.35682753194091,
+    "az": 207.54722835550396
+   },
+   "maxEl": 30.35682753194091,
+   "count": 6,
+   "remind": {
+    "title": "Look up: Starlink string over Pune",
+    "start": "2026-10-07T13:58:25.000Z",
+    "end": "2026-10-07T14:10:25.000Z",
+    "details": "Up to 6 Starlink satellites in a line, SW to SW. Times from Radar Around You (approximate).",
+    "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Look+up%3A+Starlink+string+over+Pune&dates=20261007T135825Z%2F20261007T141025Z&details=Up+to+6+Starlink+satellites+in+a+line%2C+SW+to+SW.+Times+from+Radar+Around+You+%28approximate%29.&location=Pune"
+   }
+  }
+ ]
+}
