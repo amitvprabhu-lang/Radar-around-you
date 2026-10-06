@@ -563,15 +563,18 @@ test("every link in the home text section resolves to a built page or an anchor 
     assert.ok(pageFiles.includes(target) || LIVE_FILES.includes(target), `${link} -> ${target} is neither a built page nor a registered live page`);
     if (frag && pageFiles.includes(target)) assert.ok(ids(read(target)).has(frag), `anchor #${frag} missing in ${target}`);
   }
-  // the row of links at the end: guides, About, the count page, the methods page, and the country hub when the build has it
+  // the row of links at the end: guides, About and the methods page; the count page and the country hub are not repeated there, because the
+  // row of live pages links them (review round, 2026-10-06)
   const row = sectionOf(home).match(/<nav class="home-links"[\s\S]*?<\/nav>/)[0];
-  for (const want of ["guides/", "about/", "how-many-satellites-in-orbit/", "methods/"]) assert.ok(row.includes(`href="${want}"`), want);
+  for (const want of ["guides/", "about/", "methods/"]) assert.ok(row.includes(`href="${want}"`), want);
+  for (const not of ["how-many-satellites-in-orbit/", "satellites-by-country/"]) assert.ok(!row.includes(`href="${not}"`), `${not} is not repeated in the last row`);
+  assert.equal(countOf(sectionOf(home), 'href="how-many-satellites-in-orbit/"'), 2, "the count page: once in the live row, once in the count answer");
   // outside the live block (which names every registered live page), the answers and the row link the hub only when the build has it
   const hubBuilt = pageFiles.includes(COUNTRY_HUB_FILE);
   const noLive = (h) => h.replace(homeLiveHtml(), "");
   assert.equal(noLive(home).includes('href="satellites-by-country/"'), hubBuilt, "the country hub is linked exactly when the build has its page");
   const withHub = homeTextHtml({ countryHub: true });
-  assert.equal(countOf(noLive(withHub), 'href="satellites-by-country/"'), 2, "with the hub: once in the count answer and once in the row");
+  assert.equal(countOf(noLive(withHub), 'href="satellites-by-country/"'), 1, "with the hub: once in the count answer (the live row lists it too)");
   assert.ok(!noLive(homeTextHtml()).includes("satellites-by-country"));
   assert.equal(countOf(homeLiveHtml(), 'href="satellites-by-country/"'), 1, "the live block lists the hub once, as a registered live page");
   assert.ok(wrapApp(APP, { countryHub: true }).includes('href="satellites-by-country/"'));
@@ -845,7 +848,7 @@ test("the strip is in the HTML with its labels, a dash for every value, where th
   const home = homePage(), sec = sectionOf(home);
   const strip = sec.match(/<div id="home-strip" class="home-strip">[\s\S]*?<\/div>\n<p>/)[0];
   for (const [k, label] of STRIP_FIGURES) assert.ok(strip.includes(`<dt>${label}</dt><dd data-fig="${k}">-</dd>`), k);
-  assert.ok(textOf(strip).replace(/\s+/g, " ").includes("These figures load from the site's live data in your browser; the same numbers, except the next launch, are on /right-now/ as plain HTML."));
+  assert.ok(textOf(strip).replace(/\s+/g, " ").includes("These figures load from the site's live data in your browser; the same numbers are on /right-now/ as plain HTML."));
   assert.ok(strip.includes('<a href="right-now/">/right-now/</a>'));
   assert.ok(strip.includes('<p class="home-strip-status" aria-live="polite"></p>'), "the status line is empty until the script fills it");
   // the strip sits above the live pages row, inside the section

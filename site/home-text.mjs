@@ -53,10 +53,10 @@ export function homeLiveHtml(pages = LIVE_PAGES) {
 <dl>
 ${figures}
 </dl>
-<p class="home-strip-note">These figures load from the site's live data in your browser; the same numbers, except the next launch, are on ${a(RIGHT_NOW_FILE, "/right-now/")} as plain HTML.</p>
+<p class="home-strip-note">These figures load from the site's live data in your browser; the same numbers are on ${a(RIGHT_NOW_FILE, "/right-now/")} as plain HTML.</p>
 <p class="home-strip-status" aria-live="polite"></p>
 </div>
-<p>Each page below is rebuilt from the same feeds after every data collection and states the time of its own data. When a feed is too old or fails a check, the page keeps its previous copy.</p>
+<p>Each page below is rebuilt when its own feed has new data and states the time of its own data. When a feed is too old or fails a check, the page keeps its previous copy.</p>
 <nav class="home-live-links" aria-label="Live pages">
 <ul>
 ${liveLinks(pages).map((p) => `<li>${a(p.file, p.name)}</li>`).join("\n")}
@@ -84,14 +84,14 @@ ${homeLiveHtml()}
 <h2>${around}</h2>
 <p>The Under view slices the Earth open from an earthquake to you, through crust, mantle and core, and sends the P and S waves on their way to you: a teaching model fed by earthquakes from the U.S. Geological Survey. The Around you list ranks what is near your place by how serious it is, from storms and fires to quakes, disaster alerts and aurora, and every entry names where it came from and when that was current. Hurricanes carry the National Hurricane Center's track and cone; aurora carries NOAA's Kp index and your chance of seeing it. Fire points are heat signals picked up from orbit, not confirmed wildfires. Aircraft appear over six cities only (Pune, Tokyo, Sydney, London, New York and Tromso), drawn in the sky as 3D airliners. Before you rely on any of this, read ${a("about/index.html#limits", "what the app does not do")}.</p>
 <h2>${count}</h2>
-<p>The page ${a(SATCOUNT_FILE, "How many satellites are in orbit?")} counts only the active satellites in our feed and is rebuilt after each data collection${hub}. The "tracked objects" tile in the app gives a larger number, because it counts everything the feed holds, rocket bodies and debris included.</p>
+<p>The page ${a(SATCOUNT_FILE, "How many satellites are in orbit?")} counts only the active satellites in our feed and is rebuilt when new satellite data arrives${hub}. The "tracked objects" tile in the app gives a larger number, because it counts everything the feed holds, rocket bodies and debris included.</p>
 <h2>${free}</h2>
 <p>Using the app costs nothing, and its code is published on GitHub for anyone to read and reuse, under the MIT licence. The data comes from public agencies and projects: CelesTrak for orbits, the U.S. Geological Survey for earthquakes, NOAA for space weather and hurricanes, NASA FIRMS for fires, GDACS for floods and volcanoes, MET Norway for cloud forecasts, adsb.lol for aircraft and The Space Devs for launches. Every card names its source, and the Data status screen tells you how recently each feed was confirmed current. The ${a("about/index.html", "About page")} lists every source, and ${a("methods/index.html", "How we know")} sets out the checks behind the reference pages.</p>
+<!-- the count page and the country hub are not repeated here: the row of live pages above links them -->
 <nav class="home-links" aria-label="More pages">
 <ul>
 <li>${a("guides/index.html", "Guides to the data")}</li>
 <li>${a("about/index.html", "About Radar Around You")}</li>
-<li>${a(SATCOUNT_FILE, "How many satellites are in orbit")}</li>${countryHub ? `\n<li>${a(COUNTRY_HUB_FILE, "Satellites by country")}</li>` : ""}
 <li>${a("methods/index.html", "How we know")}</li>
 </ul>
 </nav>

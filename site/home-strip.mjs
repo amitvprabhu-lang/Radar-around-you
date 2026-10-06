@@ -6,10 +6,12 @@
 // the script, so they must not use imports or anything outside their own parameters except each other. Definitions mirror the live
 // pages (site/hazard.mjs, site/pages-hazard.mjs hubRows) and are recorded in docs/home-sources.md.
 import { MAX_AGE_HOURS } from "./hazard.mjs";
+import { EVENT_MAX_AGE_HOURS } from "./events.mjs";
+import { launchWhenText } from "./live-pages-js.mjs";
 
-// OURS: the launch list has no live page and so no limit in MAX_AGE_HOURS; 6 hours is the owner's value (2026-10-06), measured from the
-// list's own `generated` time.
-export const LAUNCH_MAX_AGE_HOURS = 6;
+// The launches page's own limit (site/events.mjs, EVENT_MAX_AGE_HOURS.launches, 6 hours from the list's own `generated` time), imported so
+// the strip and the page cannot disagree.
+export const LAUNCH_MAX_AGE_HOURS = EVENT_MAX_AGE_HOURS.launches;
 // The oldest each feed may be before the strip adds a note, from the live pages' own limits (site/hazard.mjs).
 export const STRIP_LIMITS = { quakes: MAX_AGE_HOURS.quakes, kp: MAX_AGE_HOURS.kp, storms: MAX_AGE_HOURS.storms, fires: MAX_AGE_HOURS.fires, launches: LAUNCH_MAX_AGE_HOURS };
 // The six figures, in order, with their visible labels. The key is the data-fig attribute of the value.
@@ -36,12 +38,6 @@ export function stripNum(n) { return n.toLocaleString("en-GB"); }
 export function stripUtc(ms, hour) {
   var s = new Date(ms).toISOString();
   return hour === false ? s.slice(0, 10) : s.slice(0, 10) + " " + s.slice(11, 16) + " UTC";
-}
-// a launch time worded to match how exact the source says it is (src/launches.js: SEC, MIN and HR are exact to the second, minute and
-// hour; anything else, a month or a quarter included, is not an exact date), in UTC
-export function stripWhen(l, t) {
-  var p = l.precision;
-  return p === "SEC" || p === "MIN" ? stripUtc(t) : p === "HR" ? stripUtc(t) + ", to the hour" : stripUtc(t, false) + ", not an exact date";
 }
 // earthquakes: the events in the 24 hours up to the feed's own generated time, and the largest magnitude among them (summariseQuakes)
 export function stripQuakes(q) {
@@ -74,16 +70,19 @@ export function stripFires(f) {
   var t = stripTime(f.newest);
   return t > 0 && Number.isInteger(f.detections) && f.detections >= 0 && f.cells > 0 ? { t: t, v: { fires: stripNum(f.detections) } } : null;
 }
-// the next launch: the earliest planned time (net) after the manifest's time; the list's generated time is its age
-export function stripLaunch(d, ref) {
+// the next launch, as the launches page defines it (summariseLaunches in site/events.mjs): the earliest planned time (net) at or after the
+// list's own generated time, earlier name first on a tie, worded by launchWhenText (site/live-pages-js.mjs) as the page and the right-now
+// hub print it; the list's generated time is its age
+export function stripLaunch(d) {
   var g = stripTime(d.generated), best = null;
-  if (!(g > 0) || !(ref > 0)) return null;
+  if (!(g > 0)) return null;
   for (var l of d.launches) {
     var t = stripTime(l.net);
     if (!(t > 0) || !String(l.name || "").trim()) return null;
-    if (t > ref && (!best || t < best.t)) best = { t: t, l: l };
+    var name = String(l.name).trim();
+    if (t >= g && (!best || t < best.t || (t === best.t && name < best.name))) best = { t: t, l: l, name: name };
   }
-  return { t: g, v: { launch: best ? best.l.name.trim() + ", " + stripWhen(best.l, best.t) : "none listed" } };
+  return { t: g, v: { launch: best ? best.name + ", " + launchWhenText({ net: new Date(best.t).toISOString(), precision: best.l.precision, precisionName: best.l.precisionName }) : "none listed" } };
 }
 // manifest: the live folder's manifest.json; docs: the parsed feed files by feed id (missing when not loaded); now: the visitor's clock
 // (ms); lim: STRIP_LIMITS. Returns the figure texts, the feeds older than their limit and the manifest time as text. A feed that is
@@ -122,7 +121,7 @@ export function stripApply(root, r, lim) {
   if (st) st.textContent = stripStatus(r, lim);
 }
 
-const FUNCTIONS = [stripTime, stripNum, stripUtc, stripWhen, stripQuakes, stripKp, stripStorms, stripFires, stripLaunch, stripFigures, stripStatus, stripLoad, stripApply];
+const FUNCTIONS = [stripTime, stripNum, stripUtc, launchWhenText, stripQuakes, stripKp, stripStorms, stripFires, stripLaunch, stripFigures, stripStatus, stripLoad, stripApply];
 // The inline script: the functions above, copied by their source text, and two lines that run them. It sits after the section, so the
 // strip is already parsed when it runs (an external copy loaded with defer would also run after parsing; anywhere earlier it finds no
 // strip and does nothing). It reads the site's live folder relative to the page ("live/", as the app does), and on any failure leaves

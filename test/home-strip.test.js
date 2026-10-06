@@ -7,11 +7,13 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import {
-  STRIP_LIMITS, STRIP_FIGURES, STRIP_FILES, STRIP_SCRIPT, LAUNCH_MAX_AGE_HOURS, stripTime, stripUtc, stripWhen, stripQuakes, stripKp, stripStorms,
+  STRIP_LIMITS, STRIP_FIGURES, STRIP_FILES, STRIP_SCRIPT, LAUNCH_MAX_AGE_HOURS, stripTime, stripUtc, stripQuakes, stripKp, stripStorms,
   stripFires, stripLaunch, stripFigures, stripStatus, stripLoad, stripApply,
 } from "../site/home-strip.mjs";
 import { MAX_AGE_HOURS, summariseQuakes, summariseKp, summariseStorms, summariseFires } from "../site/hazard.mjs";
 import { num } from "../site/pages-satcount.mjs";
+import { summariseLaunches, EVENT_MAX_AGE_HOURS } from "../site/events.mjs";
+import { realLaunches, EVENTS_NOW } from "./helpers/eventsfixture.mjs";
 import { quakesDoc, kpRows, stormsDoc, fireFiles, GEN, REAL_DIR, REAL_NOW, realJson, realFile, realPlaces } from "./helpers/hazardfixture.mjs";
 
 const H = 3600e3;
@@ -23,6 +25,7 @@ const docs = () => ({ quakes: quakesDoc(), kp: kpRows(), storms: stormsDoc(), fi
 test("the limits mirror the live pages' own limits, with launches at 6 hours", () => {
   assert.deepEqual(STRIP_LIMITS, { quakes: MAX_AGE_HOURS.quakes, kp: MAX_AGE_HOURS.kp, storms: MAX_AGE_HOURS.storms, fires: MAX_AGE_HOURS.fires, launches: 6 });
   assert.equal(LAUNCH_MAX_AGE_HOURS, 6);
+  assert.equal(LAUNCH_MAX_AGE_HOURS, EVENT_MAX_AGE_HOURS.launches, "the launches page's own limit");
   assert.deepEqual(STRIP_FIGURES.map(([k]) => k), ["quakes", "largest", "kp", "storms", "fires", "launch"]);
   for (const [k, f] of Object.entries(STRIP_FILES)) assert.equal(f, `${k}.json`, "the loader reads each feed's file as its id plus .json");
 });
@@ -73,21 +76,24 @@ test("storms, fires and the next launch", () => {
   assert.equal(stripFires({ ...f.summary, detections: 242515 }).v.fires, "242,515");
   assert.equal(stripFires({ ...f.summary, cells: 0 }), null);
   assert.equal(stripFires({ ...f.summary, detections: -1 }), null);
-  // launches: the earliest planned time after the manifest's time, worded by how exact the source says it is
+  // launches: the launches page's definition, the earliest planned time at or after the list's own generated time, worded as the page words it
   const L = launchesDoc();
-  assert.deepEqual(stripLaunch(L, Date.parse("2026-10-05T09:00:00Z")).v, { launch: "Nuri | NeonSat-2 to 6, 2026-10-07 03:23 UTC" });
-  assert.equal(stripLaunch(L, Date.parse("2026-10-07T04:00:00Z")).v.launch, "Long March 12 | Unknown Payload, 2026-10-09 19:25 UTC, to the hour");
-  assert.equal(stripLaunch(L, Date.parse("2026-10-05T08:00:00Z")).v.launch, "Falcon 9 Block 5 | SDA Tranche 1 Transport Layer A, 2026-10-05 08:17 UTC");
-  assert.equal(stripWhen({ precision: "M" }, Date.parse("2026-11-01T00:00:00Z")), "2026-11-01, not an exact date");
-  assert.equal(stripWhen({ precision: "Q4" }, Date.parse("2026-10-01T00:00:00Z")), "2026-10-01, not an exact date");
-  assert.equal(stripLaunch({ generated: GEN, launches: [] }, NOW).v.launch, "none listed");
-  assert.equal(stripLaunch({ ...L, launches: L.launches.map((l) => ({ ...l, net: "2026-01-01T00:00:00Z" })) }, NOW).v.launch, "none listed");
-  assert.equal(stripLaunch(L, NaN), null, "no manifest time, no next launch");
+  const page = summariseLaunches(L, { now: new Date(L.generated), allowStale: true });
+  assert.equal(stripLaunch(L).v.launch, `${page.next.name}, ${page.next.when}`);
+  assert.equal(stripLaunch(L).t, Date.parse(L.generated));
+  // a launch planned exactly at the list's time counts (>=), as on the page
+  const atGen = { ...L, launches: [{ ...L.launches[0], net: L.generated, precision: "MIN" }, ...L.launches.slice(1)] };
+  assert.equal(stripLaunch(atGen).v.launch.split(", ")[0], L.launches[0].name.trim());
+  assert.match(stripLaunch({ ...L, launches: [{ ...L.launches[0], net: "2026-11-01T00:00:00Z", precision: "M" }] }).v.launch, /, November 2026, day not set$/);
+  assert.match(stripLaunch({ ...L, launches: [{ ...L.launches[0], net: "2026-10-01T00:00:00Z", precision: "Q4" }], generated: "2026-09-30T00:00:00Z" }).v.launch, /, the fourth quarter of 2026, day not set$/);
+  assert.equal(stripLaunch({ generated: GEN, launches: [] }).v.launch, "none listed");
+  assert.equal(stripLaunch({ ...L, launches: L.launches.map((l) => ({ ...l, net: "2026-01-01T00:00:00Z" })) }).v.launch, "none listed");
+  assert.equal(stripLaunch({ ...L, generated: "soon" }), null, "no list time, no next launch");
 });
 
 test("the strip's figures from fresh feeds, with the manifest time and no notes", () => {
   const r = stripFigures(manifest(), docs(), NOW, STRIP_LIMITS);
-  assert.deepEqual(r.values, { quakes: "8", largest: "6.4", kp: "2.67", storms: "2", fires: "72", launch: "Nuri | NeonSat-2 to 6, 2026-10-07 03:23 UTC" });
+  assert.deepEqual(r.values, { quakes: "8", largest: "6.4", kp: "2.67", storms: "2", fires: "72", launch: "Nuri | NeonSat-2 to 6, 7 October 2026, 03:23 UTC" });
   assert.deepEqual(r.old, []);
   assert.equal(r.time, "2026-10-05 18:00 UTC");
   assert.equal(stripStatus(r, STRIP_LIMITS), "Live data published 2026-10-05 18:00 UTC.");
@@ -109,7 +115,7 @@ test("missing, empty, broken and future feeds give no figure and no note; the re
   const d = docs();
   delete d.kp; d.storms = "not json"; d.fires = null; d.quakes = { generated: GEN, events: [] };
   const r = stripFigures(manifest(), d, NOW, STRIP_LIMITS);
-  assert.deepEqual(r.values, { launch: "Nuri | NeonSat-2 to 6, 2026-10-07 03:23 UTC" });
+  assert.deepEqual(r.values, { launch: "Nuri | NeonSat-2 to 6, 7 October 2026, 03:23 UTC" });
   assert.deepEqual(r.old, []);
   const future = stripFigures(manifest(), { ...docs(), quakes: quakesDoc({ generated: "2026-10-05T21:00:00Z" }) }, NOW, STRIP_LIMITS);
   assert.ok(!("quakes" in future.values), "a feed more than an hour in the future is ignored");
@@ -176,7 +182,10 @@ async function runScript(files, now = NOW) {
 }
 
 test("the inline script is small, loads nothing but the live folder, and carries the tested functions' own source", () => {
-  assert.ok(Buffer.byteLength(STRIP_SCRIPT) < 4096, `${Buffer.byteLength(STRIP_SCRIPT)} bytes`);
+  // OURS: 5 KB since the review round of 2026-10-06 (was 4 KB): the strip now carries the launches page's own wording function
+  // (launchWhenText, about 1 KB) so the two print the same next launch
+  assert.ok(Buffer.byteLength(STRIP_SCRIPT) < 5120, `${Buffer.byteLength(STRIP_SCRIPT)} bytes`);
+  assert.ok(STRIP_SCRIPT.includes("function launchWhenText("));
   assert.match(STRIP_SCRIPT, /^<script id="home-strip-js">\(function \(\) \{\n/);
   assert.ok(STRIP_SCRIPT.endsWith("})();</script>\n"));
   assert.ok(!/\beval\b|new Function|import\(|src=|innerHTML|insertAdjacentHTML|document\.write/.test(STRIP_SCRIPT), "no eval, no HTML from data, nothing loaded");
@@ -191,7 +200,7 @@ test("the inline script is small, loads nothing but the live folder, and carries
 test("the inline script fills the strip from a pretend live folder, and leaves the dashes when the folder is missing or broken", async () => {
   const files = new Map([["live/manifest.json", manifest()], ...Object.entries(docs()).map(([k, v]) => [`live/${k}/v1/${k}.json`, v])]);
   const ok = await runScript(files);
-  assert.deepEqual(ok.values, ["8", "6.4", "2.67", "2", "72", "Nuri | NeonSat-2 to 6, 2026-10-07 03:23 UTC"]);
+  assert.deepEqual(ok.values, ["8", "6.4", "2.67", "2", "72", "Nuri | NeonSat-2 to 6, 7 October 2026, 03:23 UTC"]);
   assert.equal(ok.status, "Live data published 2026-10-05 18:00 UTC.");
   assert.equal(JSON.stringify(ok.fetched[0]), JSON.stringify(["live/manifest.json", { cache: "no-store" }]), "the manifest first, never from a cache");
   assert.ok(ok.fetched.every(([u]) => u.startsWith("live/")), "only the site's own live folder");
@@ -202,4 +211,14 @@ test("the inline script fills the strip from a pretend live folder, and leaves t
   assert.deepEqual(broken.values, ["-", "-", "-", "-", "-", "-"]);
   const stale = await runScript(files, Date.parse(GEN) + 10 * H);
   assert.match(stale.status, /Some feeds are behind: earthquakes \(more than 3 hours old\)/);
+});
+
+test("review: the strip's next launch and the launches page agree on the same data (the saved launch list of 6 October)", () => {
+  const doc = realLaunches();
+  const page = summariseLaunches(doc, { now: EVENTS_NOW });
+  const strip = stripLaunch(doc);
+  assert.equal(strip.v.launch, `${page.next.name}, ${page.next.when}`);
+  assert.equal(strip.t, Date.parse(page.dataTime));
+  // and the right-now hub prints the same next launch
+  assert.ok(`Next: ${strip.v.launch}`.startsWith("Next: ") && page.next.when.length > 5);
 });
