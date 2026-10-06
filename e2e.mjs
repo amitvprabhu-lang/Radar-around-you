@@ -98,7 +98,7 @@ async function suite(label, viewport, mobile) {
       await new Promise((res) => setTimeout(res, 7000));
       return { awake0, draws: r.lowPower().draws - d0, ticks: r.S.ticks - f0 };
     });
-    check(L("with no input the loop goes idle: at most 3 draws in 7 s, and the clock text still ticks"), !idle.awake0 && idle.draws <= 3 && idle.ticks >= 4, JSON.stringify(idle));
+    check(L("with no input the loop goes idle: at most 3 draws in 7 s, and the clock text still ticks"), !idle.awake0 && idle.draws <= 3 && idle.ticks >= 4 && idle.ticks > idle.draws, JSON.stringify(idle));
     const box = await p.locator("#gl").boundingBox();
     const d1 = await R(p, () => window.__radar.lowPower().draws);
     await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -663,14 +663,16 @@ async function suite(label, viewport, mobile) {
   await p.waitForFunction(() => !document.getElementById("loader"), null, { timeout: 60000 });
   await p.waitForTimeout(6000);  // past the 4 s of continuous drawing that also low power gives at the start
   const fs = await p.evaluate(async () => {
-    const r = window.__radar, lp = r.lowPower(), d0 = r.S.frames, t0 = performance.now();
-    await new Promise((res) => setTimeout(res, 6000));
-    return { lp, drawn: r.S.frames - d0, secs: (performance.now() - t0) / 1000, dpr: window.devicePixelRatio };
+    const r = window.__radar, lp = r.lowPower(), d0 = r.S.frames, k0 = r.S.ticks, t0 = performance.now();
+    await new Promise((res) => setTimeout(res, 8000));
+    return { lp, drawn: r.S.frames - d0, ticks: r.S.ticks - k0, secs: (performance.now() - t0) / 1000, dpr: window.devicePixelRatio };
   });
   check("full speed: a graphics card's name keeps low-power drawing off", !fs.lp.on && /graphics card/.test(fs.lp.reason), JSON.stringify(fs.lp));
   check("full speed: the pixel ratio is the tier's, not the low-power 1", fs.lp.pixelRatio > 1 && fs.lp.pixelRatio <= fs.dpr, `${fs.lp.pixelRatio} at devicePixelRatio ${fs.dpr}`);
-  // low power with no input would draw at most 2 frames in 6 s; the software renderer manages about 2 or more a second at full speed
-  check("full speed: frames keep being drawn with no input", fs.drawn >= 6, `${fs.drawn} frames in ${fs.secs.toFixed(1)} s`);
+  // At full speed every turn of the loop draws, so with no input turns and drawn frames are equal; low power has turns that only
+  // update the text (the low-power page above shows more turns than drawn frames). The count of frames is not checked: at this
+  // pixel ratio the software renderer takes seconds per frame (2 frames in 8 s at a load average of about 10 when first run).
+  check("full speed: every turn of the loop draws a frame, with no input", fs.drawn >= 1 && fs.drawn === fs.ticks, `${fs.drawn} drawn of ${fs.ticks} turns in ${fs.secs.toFixed(1)} s`);
   await p.context().close();
 }
 await suite("phone", { width: 390, height: 780 }, true);
