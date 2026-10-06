@@ -193,7 +193,7 @@ ${scopedTable({ caption: "Launches still to come, by status", head: ["Status (th
 
 <h2 id="passed">Launches whose planned time has passed</h2>
 ${s.passed.length ? `<p>These are in the list with a planned time before the data time. The list does not say whether they launched; the status is the source's.</p>
-${scopedTable({ caption: "Launches in the list planned before the data time", head: ["Planned time (UTC)", "Launch", "Status"], rows: s.passed.map((l) => [launchTimeEl(l), esc(l.name), esc(l.statusName || l.status || "Not given")]) })}` : "<p>None. Our collector asks Launch Library 2 for its upcoming list with recent launches hidden, so this page has no history of past launches.</p>"}
+${scopedTable({ caption: "Launches in the list planned before the data time", head: ["Planned time (UTC)", "Launch", "Status"], rows: s.passed.map((l) => [launchTimeEl(l), esc(l.name), esc(l.statusName || l.status || "Not given")]) })}` : "<p>None. Our collector asks Launch Library 2 for its upcoming list with recent launches left out, so this page has no history of past launches.</p>"}
 
 <h2 id="how">How this page is made</h2>
 <ul>
@@ -261,7 +261,7 @@ ${map || "<p>There is no event to map.</p>"}
 
 <h2 id="green">Events with a Green alert, by type</h2>
 ${s.greenByType.length ? s.greenByType.map((g) => `<h3 id="green-${g.type.toLowerCase()}">${esc(cap(GDACS_PLURAL[g.type]))}: ${num(g.events.length)}</h3>\n${scopedTable({ caption: `${GDACS_TYPES[g.type]} events with a Green alert`, head: EVENT_HEAD, rows: eventRows(g.events) })}`).join("\n") : "<p>No event on this page has a Green alert.</p>"}
-${s.noCountry ? `<p>GDACS gives no country for ${num(s.noCountry)} of these ${v(s.noCountry, "event", "events")} (for example a storm at sea); the table says Not given.</p>` : ""}
+${s.noCountry ? `<p>GDACS gives no country for ${num(s.noCountry)} ${v(s.noCountry, "event", "events")} on this page; the tables say Not given.</p>` : ""}
 
 <h2 id="levels">What the alert levels mean</h2>
 <p>Green, Orange and Red are GDACS's alert levels, which GDACS works out with its own models for each kind of event. Our records hold GDACS's definition only for earthquakes, which are not on this page, so we show each level as GDACS gives it and do not explain it further. GDACS's own pages explain them: <a href="${esc(EVENT_SRC.gdacsAlerts.url)}" rel="noopener">GDACS alerts</a>. For a tropical cyclone, GDACS gives one wind figure for the whole storm, so its strength now can be lower.</p>
@@ -363,7 +363,7 @@ const row = (key, label, s, value, said, timeText, extra) => {
 };
 export const EVENT_HUB_ROWS = {
   starlink: (s, { missing = {} } = {}) => ({ ...row("starlink", "Starlink tracker", s, s && `${num(s.starlink)} active Starlink satellites`, s && `${num(s.starlink)} active Starlink satellites`, s && `${dayHour(s.dataTime)} (satellite data)`,
-    { limit: `satellite data for the Starlink page ${EVENT_MAX_AGE_HOURS.satellites} hours`, timeNote: "", source: EVENT_SRC.celestrak, notableRule: null, notable: null }), reason: s ? null : missing.starlink || "not available in this build" }),
+    { limit: `satellite data for the Starlink page ${EVENT_MAX_AGE_HOURS.satellites} hours`, timeNote: "", source: null, notableRule: null, notable: null }), reason: s ? null : missing.starlink || "not available in this build" }),
   disasters: (s, { missing = {} } = {}) => ({ ...row("disasters", "Natural disasters now", s, s && `${num(s.currentOrange)} Orange and ${num(s.currentRed)} Red alerts among ${num(s.current)} current GDACS events`, s && `${num(s.currentOrange + s.currentRed)} current GDACS ${v(s.currentOrange + s.currentRed, "event", "events")} with an Orange or Red alert`,
     s && `${dayHour(s.dataTime)} (GDACS's newest update)`,
     { limit: `GDACS events ${EVENT_MAX_AGE_HOURS.events} hours`, timeNote: "For GDACS events it is the time of GDACS's newest update.", source: EVENT_SRC.gdacs, notableRule: "a current GDACS event with an Orange or Red alert",
