@@ -110,6 +110,7 @@ td.num{text-align:right;white-space:nowrap}
 .tz{margin:10px 0}.tz button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
 .tz button[aria-pressed=true]{border-color:var(--ion);color:var(--ion)}
 .sources li{margin:.4em 0}
+figure{margin:16px 0}figcaption{color:var(--muted);font-size:14px;margin-top:6px;max-width:70ch}
 footer{border-top:1px solid var(--line);background:var(--ink2);color:var(--dim);font-size:14px}
 footer .bar{display:block}footer p{margin:.5em 0;max-width:80ch}
 @media (max-width:600px){body{font-size:16px}th,td{padding:8px 10px}}
@@ -153,7 +154,7 @@ const SCRIPT = `
 `;
 
 export function table({ caption, head, rows, numeric = [] }) {
-  const cell = (c, i, tag = "td") => `<${tag}${numeric.includes(i) ? ' class="num"' : ""}>${c}</${tag}>`;
+  const cell = (c, i, tag = "td") => `<${tag}${tag === "th" ? ' scope="col"' : ""}${numeric.includes(i) ? ' class="num"' : ""}>${c}</${tag}>`;
   return `<div class="tablewrap" role="region" tabindex="0" aria-label="${esc(caption)}"><table><caption>${esc(caption)}</caption><thead><tr>${head.map((h, i) => cell(esc(h), i, "th")).join("")}</tr></thead><tbody>${rows.map((r) => `<tr${r.attrs || ""}>${(r.cells || r).map((c, i) => cell(c, i)).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 

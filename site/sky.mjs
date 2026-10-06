@@ -182,12 +182,13 @@ export function skyChartData(city, at, { stars, constellations, starNames }, { m
     if (stars.mag[i] > magLimit) continue;
     const h = raDecToAltAz(stars.ra[i], stars.dec[i], city.lat, city.lon, d);
     if (h.alt <= 0) continue;
-    pts.push({ i, alt: h.alt, az: h.az, mag: stars.mag[i], name: stars.mag[i] <= CHART_LABEL_MAG ? names.get(i) || null : null });
+    pts.push({ i, alt: h.alt, az: h.az, mag: stars.mag[i], name: names.get(i) || null, label: stars.mag[i] <= CHART_LABEL_MAG && names.has(i) });
   }
   pts.sort((a, b) => a.mag - b.mag || a.i - b.i);
-  const figures = [];
+  const figures = [], up = [];
   for (const c of (constellations && constellations.constellations) || []) {
     const centre = raDecToAltAz(c.centre.ra, c.centre.dec, city.lat, city.lon, d);
+    if (centre.alt > 0) up.push({ abbr: c.abbr, name: c.name, alt: centre.alt, az: centre.az });
     const bright = c.stars && c.stars.brightest ? c.stars.brightest.mag : 99;
     if (centre.alt < FIGURE_MIN_ALT || bright > FIGURE_MAX_MAG) continue;
     const segments = [];
@@ -205,7 +206,7 @@ export function skyChartData(city, at, { stars, constellations, starNames }, { m
   const planets = PLANETS.map((name) => { const h = altOf(Astro.Body[name], obs, at); let mag = null; try { mag = Astro.Illumination(Astro.Body[name], d).mag; } catch { mag = null; } return { name, alt: h.alt, az: h.az, mag }; }).filter((p) => p.alt > 0);
   const m = altOf(Astro.Body.Moon, obs, at);
   const sun = altOf(Astro.Body.Sun, obs, at);
-  return { at, stars: pts, named: pts.filter((s) => s.name), figures: figures.slice(0, FIGURE_MAX), planets, moon: m.alt > 0 ? { alt: m.alt, az: m.az, illumPct: Math.round(Astro.Illumination(Astro.Body.Moon, d).phase_fraction * 100) } : null, sunAlt: sun.alt };
+  return { at, stars: pts, named: pts.filter((s) => s.name), constellationsUp: up.sort((a, b) => b.alt - a.alt || a.abbr.localeCompare(b.abbr)), figures: figures.slice(0, FIGURE_MAX), planets, moon: m.alt > 0 ? { alt: m.alt, az: m.az, illumPct: Math.round(Astro.Illumination(Astro.Body.Moon, d).phase_fraction * 100) } : null, sunAlt: sun.alt };
 }
 
 // ------------------------------------------------------------------ the cloud forecast for the night and the best window
@@ -321,7 +322,12 @@ export function summarySentence(s) {
 // Three to six findings for a city page (design section 8.2), each a sentence from the summary only.
 export function cityFindings(s) {
   const out = [], n = s.night, t = (ms) => placeTime(s, ms), m = s.moon;
-  if (n.kind === "midnightSun") out.push(`The Sun stays up all night here: it does not set in the 24 hours after the forecast time, so there are no dark hours tonight.`);
+  if (n.kind === "midnightSun") {
+    out.push(`The Sun stays up all night here: it does not set in the 24 hours after the forecast time, so there are no dark hours tonight.`);
+    const low = s.strip.hours.length ? s.strip.hours.reduce((a, h) => (h.sunAlt < a.sunAlt ? h : a)) : null;
+    if (low) out.push(`Even at its lowest in these hours, at ${t(low.t)}, the Sun is ${Math.round(low.sunAlt)} degrees above the horizon.`);
+    if (s.strip.cloudAvg !== null) out.push(`Cloud averages ${s.strip.cloudAvg} percent over the 12 hours around local midnight in MET Norway's forecast.`);
+  }
   else if (n.kind === "polarNight") out.push(`The Sun does not rise here in the 24 hours from ${t(n.start)}, so this page covers those 24 hours as one long night.`);
   else out.push(`The night lasts ${durationText(n.end - n.start)}, from ${n.startsAtData ? `${t(n.start)} (the Sun was already down at the forecast time)` : `sunset at ${t(n.start)}`} to sunrise at ${t(n.end)}.`);
   const b = s.strip.best;
@@ -340,6 +346,8 @@ export function cityFindings(s) {
   } else if (n.kind !== "midnightSun") {
     out.push(`No hour tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on the viewing score${s.strip.cloudAvg !== null ? `: cloud averages ${s.strip.cloudAvg} percent` : ""}${m.illumPct >= 50 && (m.upAtStart || moonRise) ? `, and the Moon is ${m.illumPct} percent lit` : ""}.`);
   }
+  const moonLine = m.upAtStart ? (moonSet ? `is up at the start and sets at ${t(moonSet.t)}` : "is up through the whole window") : moonRise ? `rises at ${t(moonRise.t)}` : "stays below the horizon";
+  out.push(`The Moon is ${moonPhrase(m.phaseName)}, ${m.illumPct} percent lit, and ${moonLine}.`);
   const placed = s.planets.filter((p) => p.wellPlaced).sort((a, b2) => a.mag - b2.mag);
   if (placed.length) {
     const p = placed[0];
