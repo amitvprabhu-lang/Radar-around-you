@@ -32,7 +32,7 @@ This is a standalone project.
 
 ```
 npm ci                  # install (three, astronomy-engine, satellite.js, esbuild)
-npm test                # 685 unit tests for the app and the content site, no browser needed
+npm test                # 708 unit tests for the app and the content site, no browser needed
 npm run test:pipeline   # 175 tests for the data pipeline, 3 skipped without raw downloads (Python, standard library only)
 npm run build           # bundles src/ into one page: dist/radar.html (live mode: it looks for a live/ folder)
 npm run build:snapshot  # the same page with live polling switched off: dist/radar-snapshot.html
@@ -40,7 +40,7 @@ npm run test:hosting    # 454 checks of the PHP hosting scripts (needs php)
 npm run site            # the content site into dist/site: 130 pages (129 static pages and the app as index.html, 2026-10-06), robots.txt, and the sitemaps and llms.txt when indexable (run npm run build first)
 npm run build:hosting   # what Hostinger runs: the app with its script as a separate cached file (build.mjs --external-script: dist/app.<hash>.js, copied to dist/site), the content site, then the build-time live snapshot (site/live-snapshot.mjs downloads the published live/ folder and live pages from the data branch; LIVE_SNAPSHOT=0 or -- --no-live-snapshot turns it off, see docs/hosting.md)
 npm run e2e             # 304 browser checks (last recorded run, 2026-10-07) on the snapshot build (the single-file page; only e2e:site loads the external app script), phone and desktop windows (needs Playwright, see below)
-npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first), including the external app script, a blocked script and a 404 for it; 108 checks, all passed (2026-10-07, branch feature/external-app-script, indexable and noindex builds, once each); 101 on 2026-10-06 (branch feature/fast-startup, indexable build, run once); 65 checks on branch feature/home-seo (2026-10-06, indexable build, run once: 63 passed, the 2 word-count failures were fixed in the check afterwards and not rerun); 56 before it
+npm run e2e:site        # browser checks of the built content site served raw, the way a web host serves it (builds it first), including the external app script and what happens when it is blocked, missing, broken or served as html; 111 checks, all passed (2026-10-07, branch feature/external-app-script after the review fixes, indexable build, once); 108 before them, indexable and noindex builds; 101 on 2026-10-06 (branch feature/fast-startup, indexable build, run once); 65 checks on branch feature/home-seo (2026-10-06, indexable build, run once: 63 passed, the 2 word-count failures were fixed in the check afterwards and not rerun); 56 before it
 npm run e2e:live        # 115 browser checks (last recorded run) of live mode: new publishes, stale, failing, paused and offline states, and the aurora, storm and fire screens
 npm run pipeline -- --data live --baseline public   # one collector run (needs CONTACT_EMAIL, see Live data)
 npm run data            # repacks raw/ and raw2/ into the bundled snapshot in public/ (needs python3)
