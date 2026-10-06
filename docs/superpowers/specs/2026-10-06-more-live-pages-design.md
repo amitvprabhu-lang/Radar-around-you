@@ -1,0 +1,56 @@
+# Design: more live pages (fleet and events, and the sky)
+
+Status: written on 2026-10-06 after the owner asked "What more pages can I have with live data and good graphics??" and then "build all the pages including Rocket launches". The page list comes from my answer to that question; the owner chose all of it, launches included, knowing that its data licence is NOT CONFIRMED. Anything marked NOT CONFIRMED has not been checked.
+
+Everything in `docs/superpowers/specs/2026-10-06-live-hazard-pages-design.md` (sections 2, 2a, 2b, 2c: rules for every live page, indexing, pings, Dataset markup) applies to these pages too: answer-first lead with the data's own time, per-feed staleness limits, a guard per feed, a stale or failing feed skips only its page and the previous copy stays, plain server-rendered HTML with SVG graphics and no JavaScript, one URL per question, canonical, `index,follow` (noindex build writes none), `lastmod` = data time, title under 60 and description under 160 characters, visible FAQ without FAQPage markup, sources section, every typed sentence traced in a sources record, no hidden text, no em dashes or emoji, page under 250 KB, deploy-time snapshot copies where `public/` has the data (and hub links only to pages that exist in the build), listed in `llms.txt`, the `/right-now/` hub, the nav and the sitemap, and the IndexNow pings (`hosting/lib.php` already allows every path below).
+
+## 1. Pages
+
+| URL | Feeds | Answers |
+| --- | --- | --- |
+| `/starlink-tracker/` | `satellites` | How many Starlink satellites are active, in which altitude shells, how many launched per month, where the fleet is now |
+| `/natural-disasters-now/` | `events` (GDACS) | Which floods, cyclones, wildfires, volcanoes and droughts GDACS lists now, with their alert levels |
+| `/rocket-launches/` | `launches` (The Space Devs, Launch Library 2) | The next launches, by provider, country and pad, with the status and the precision of each time |
+| `/tonights-sky/` and `/tonights-sky/<city>/` for `pune`, `newyork`, `london`, `tromso`, `tokyo`, `sydney` | `clouds` (MET Norway) plus computed astronomy plus `satellites` (`precise.json` for the ISS) | What is in the sky tonight at each place: Moon, planets, ISS passes, cloud cover, best viewing window |
+| `/iss-today/` | `satellites` | Where the ISS is at the data time, its ground track for the next 90 minutes, its orbit, its passes over the six cities |
+
+The six cities are the ones in the collector's cloud forecast feed (`pipeline/config.py`, `clouds`); names, coordinates and time zones come from `public/cities.json`. Not built: planes over a city (adsb.lol's ODbL share-alike terms and the six-city coverage, see `docs/launch-licences.md`).
+
+## 2. Content
+
+**Starlink tracker.** From the satellite files (kind 1 = name contains STARLINK, the rule `site/satcount.mjs` and `src/` already use; say so on the page): active Starlink count and share of all active satellites; a column chart of Starlink satellites by mean altitude band (computed from the mean motion exactly as `orbitClass` does, bands of 10 km, only where there are satellites, shells described by the bands that hold most satellites, no claim about what SpaceX plans); inclination groups (from the swarm eccentricity/inclination words); launches per month for the last 24 months (from the launch day in `details.bin`); the number launched in the last 30 days; a world map of where the fleet is at the data time (reuse `site/svgmap.mjs` and the propagation used for the country pages, points rounded and deduplicated); the largest single-day launch counts. Dataset markup: none (CelesTrak terms unconfirmed).
+
+**Natural disasters now.** From `events.json`: counts by type (TC tropical cyclone, FL flood, WF wildfire, DR drought, VO volcano; skip EQ, the earthquake page covers earthquakes from USGS) and by alert level (Green, Orange, Red) for current events (`current: true`) and for events that ended in the last 7 days (the app's own window, `GDACS_RECENT_DAYS`); a table of every Orange and Red event first, then the rest grouped by type, each with the country, dates, severity text as GDACS gives it and the GDACS link; a world map with one marker per event, colour by alert level AND shape by type (so colour is not the only cue); definitions of the alert levels only as GDACS states them in `docs/feature-sources.md` (otherwise link GDACS). GDACS's licence, attribution and rate limits are NOT CONFIRMED (`docs/launch-licences.md`): credit GDACS visibly, link its pages, no Dataset markup. A storm that the NHC feed also lists is not shown twice: reuse `withoutDuplicateStorms` or the same rule.
+
+**Rocket launches.** From `launches.json` (`generated` is the data time): the next launch (name, provider, rocket, pad, location, NET time with the precision the feed states, status text, mission, orbit); a table of the next 15 launches; counts for the next 30 days by provider and by country (a column chart); a map of the launch sites with a launch in the next 30 days (pad coordinates from the feed); launches in the last 7 days if the feed carries them. The page is static, so it prints times in UTC and says so; it never shows a live countdown, it states that times change and links the provider and Launch Library. Credit: "Data: The Space Devs, Launch Library 2" with a link, visible near the top and in the sources section. The licence and the "add value" request in the Space Devs FAQ are NOT CONFIRMED (`docs/launch-licences.md`): the page adds value by context (counts, map, history), says that clearly, and the owner has accepted the risk. No Dataset markup. Respect the free tier (the collector asks once an hour; the page only reads the collector's file).
+
+**Tonight's sky (hub and six city pages).** Everything is computed at build time for the city's tonight: the night starts at the first sunset at or after the data time (or now, if the sun is already down) and ends at the next sunrise, in the city's time zone; the page says "tonight" with the date and the data time. Content per city: Moon phase name and illuminated percent, rise and set, with the night's darkness (the Moon's altitude through the night as a small chart); the five naked-eye planets with rise, set and the best time and altitude tonight (`astronomy-engine`, as `site/pages-data.mjs` does for the planets page); the brightest stars and constellations up at local midnight on a polar sky chart (the projection code in `src/core.js`, `projectSky`, with the star data in `public/`), as an SVG with labels; ISS passes tonight with start, peak, end, maximum altitude and whether the ISS is sunlit while the observer is in darkness (the app's pass code: `findPasses` and `swarm`/SGP4 with the ISS elements from `precise.json`; omit the section with a stated reason when the ISS elements are older than 7 days or missing); the cloud forecast for the night hours from the cloud feed as a bar strip (cloud cover percent per hour, values printed) with the best window from the app's own scoring (`scoreHour`, `bestWindow` in `src/core.js`); a one-sentence summary that is computed ("The best window tonight is 22:00 to 01:00, with 8 percent cloud") and never a promise of visibility. The hub lists the six cities with their best window and cloud cover, and links to `/iss-today/`, the aurora page and the Moon, planets and meteor shower guides that already exist. MET Norway is credited visibly: "The Norwegian Meteorological Institute, shortened MET Norway" (the credit the source asks for, `docs/launch-licences.md`), licences NLOD 2.0 and CC BY 4.0 as recorded; say that the forecast is MET Norway's, not ours. Accuracy of rise, set and pass times is NOT CONFIRMED against an independent source unless the tests in the repository cover it: reuse the checked functions (the Moon, equinox and eclipse functions are checked against the USNO tables in `test/`), and add checks against values the repository already documents; record in `docs/sky-pages-sources.md` exactly which numbers were checked against what, and which were not.
+
+**ISS today.** From `precise.json` (the ISS element set and its age): the ISS position at the data time (latitude, longitude, altitude in km), the ground track from 45 minutes before to 90 minutes after as an SVG world map (break the line at the antimeridian), the orbit facts computed from the elements (inclination, period, mean altitude), the age of the element set shown plainly, and the passes over the six cities for the next 24 hours (the same function as the city pages). The real-time view is the globe; say so and link it. No claim of precision beyond what the repository has tested.
+
+## 3. Registry and build
+
+- Generalise the live page registry so a new page needs entries, not code edits at fixed positions: `site/hazard.mjs` and `site/build-live.mjs` currently refer to pages by array position; the work in section 4 starts by making those lookups key-based. Keep behaviour and every existing test.
+- New modules: `site/events.mjs` (summaries and guards for `launches`, `events`, `starlink`), `site/pages-events.mjs` (the three pages), `site/sky.mjs` (night window, Moon, planets, passes, cloud window), `site/pages-sky.mjs` (hub, city pages, ISS page). `site/livepages.mjs` lists them; the `/right-now/` hub gains rows (next launch time, Orange or Red disaster count, Starlink count, tonight's best window in Pune).
+- Per-page staleness limits (hours): launches 6, events 6, clouds 6, satellites feed 30 (it is paused for hours by CelesTrak's rules; the page shows its data time), ISS elements 7 days. State the limits in the sources record and the reason.
+- Pages rebuild when their own feed versions change, plus one daily rebuild of the sky pages (the night changes with the date): include the UTC date in the sky pages' rebuild key.
+- The deploy-time snapshot builder writes whichever of these pages the bundled `public/` data supports; the others appear after the next pull (about a minute to ten after a redeploy).
+
+## 4. Order of work (two families, built in parallel worktrees)
+
+1. Fleet and events: the registry generalisation first, then Starlink, disasters, launches.
+2. The sky: city pages and the ISS page, which need `src/core.js` functions and the astronomy library inside `site/`; merge the first family's registry change before wiring in.
+
+## 5. Not in scope
+
+Planes over a city; per-country launch pages; any change to the 3D app; countdown timers; email or push alerts.
+
+## 6. Risks
+
+| Risk | Handling |
+| --- | --- |
+| Launch Library terms | NOT CONFIRMED; credit and link, add value, no Dataset markup, recorded in `docs/launch-licences.md`, owner accepted the risk |
+| GDACS terms | NOT CONFIRMED; credit and link, no Dataset markup |
+| Wrong sky or pass times | Reuse the app's checked functions, add tests against documented values, list what was and was not verified; never claim visibility |
+| The sky pages change every night, many pages | Six data-backed cities, each with its own cloud forecast; daily rebuild; each page differs in substance (own weather, own planets' positions, own passes) |
+| The satellite feed is paused for hours by CelesTrak | Pages show their own data time and the staleness limit is 30 hours |

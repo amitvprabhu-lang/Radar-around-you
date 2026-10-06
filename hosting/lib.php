@@ -222,7 +222,7 @@ const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the largest live page (
 
 function radar_safe_page_path(string $p): bool
 {
-    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/(?:united-states|china|united-kingdom|cis-former-ussr|japan)/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now)/index\.html)\z#', $p);
+    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/(?:united-states|china|united-kingdom|cis-former-ussr|japan)/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now|starlink-tracker|natural-disasters-now|rocket-launches|iss-today|tonights-sky)/index\.html|tonights-sky/(?:pune|newyork|london|tromso|tokyo|sydney)/index\.html)\z#', $p);
 }
 
 // Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist; the folders inside it,
