@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeYield, afterFirstPaint, runSteps, runStepsAsync, forEachChunked, whenIdle, createIdleQueue } from "../src/schedule.js";
+import { makeYield, afterFirstPaint, runSteps, runStepsAsync, whenIdle, createIdleQueue, SLICE_MS } from "../src/schedule.js";
 
 // A pretend browser: timers and frames only run when the test says so, so the order of events is exact.
 function fakeEnv({ hidden = false, raf = true, idle = false } = {}) {
@@ -96,6 +96,14 @@ test("runStepsAsync gives the same result and yields only when a stretch used up
   assert.equal(yields, 3);
 });
 
+test("the default slice is short enough to stay a short task even under Lighthouse's fourfold slowdown", async () => {
+  assert.ok(SLICE_MS * 4 <= 50, String(SLICE_MS));
+  let t = 0, yields = 0;
+  const gen = (function* () { for (let i = 0; i < 6; i++) { t += SLICE_MS / 2; yield; } })();
+  await runStepsAsync(gen, { yieldFn: async () => { yields++; }, now: () => t });
+  assert.equal(yields, 3, "with no budget given, a yield after every two half-slice steps");
+});
+
 test("runStepsAsync matches runSteps on the same generator", async () => {
   const a = runSteps(counter(100, []));
   const b = await runStepsAsync(counter(100, []), { yieldFn: () => Promise.resolve(), budgetMs: 0 });
@@ -105,19 +113,6 @@ test("runStepsAsync matches runSteps on the same generator", async () => {
 test("runStepsAsync passes on an error from the generator", async () => {
   const gen = (function* () { yield; throw new Error("boom"); })();
   await assert.rejects(runStepsAsync(gen, { yieldFn: () => Promise.resolve(), budgetMs: 0 }), /boom/);
-});
-
-test("forEachChunked visits every index once, in order, and yields between stretches", async () => {
-  let t = 0, yields = 0;
-  const seen = [];
-  await forEachChunked(1000, (i) => { seen.push(i); t += 1; }, { yieldFn: async () => { yields++; }, now: () => t, budgetMs: 100, every: 50 });
-  assert.equal(seen.length, 1000);
-  assert.ok(seen.every((v, i) => v === i));
-  // checked every 50 items, so a 100 ms budget at 1 ms each yields every 100 items, and never after the last
-  assert.equal(yields, 9);
-  let none = 0;
-  await forEachChunked(0, () => { none++; }, { yieldFn: async () => {} });
-  assert.equal(none, 0);
 });
 
 test("whenIdle uses requestIdleCallback with the timeout, or a short timer without it", async () => {

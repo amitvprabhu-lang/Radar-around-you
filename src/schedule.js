@@ -31,23 +31,19 @@ export function runSteps(gen) {
   for (;;) { const r = gen.next(); if (r.done) return r.value; }
 }
 
+// How long a slice of sliced work may run before it yields. Well under the 50 ms that counts as a long task, and small because
+// Lighthouse's simulated throttling multiplies what it measures on a fast machine by four (a 40 ms slice there becomes 160 ms).
+// A yield costs well under a millisecond, so the extra slices are cheap.
+export const SLICE_MS = 12;
+
 // Runs a generator, yielding to the main thread whenever a stretch of steps has taken budgetMs or more.
 // The result is the same as runSteps gives; only the timing differs.
-export async function runStepsAsync(gen, { yieldFn, now = () => performance.now(), budgetMs = 40 } = {}) {
+export async function runStepsAsync(gen, { yieldFn, now = () => performance.now(), budgetMs = SLICE_MS } = {}) {
   let t0 = now();
   for (;;) {
     const r = gen.next();
     if (r.done) return r.value;
     if (now() - t0 >= budgetMs) { await yieldFn(); t0 = now(); }
-  }
-}
-
-// Calls fn(i) for i from 0 to n - 1, yielding whenever a stretch has taken budgetMs or more (checked every `every` items).
-export async function forEachChunked(n, fn, { yieldFn, now = () => performance.now(), budgetMs = 40, every = 256 } = {}) {
-  let t0 = now();
-  for (let i = 0; i < n; i++) {
-    fn(i);
-    if ((i + 1) % every === 0 && i + 1 < n && now() - t0 >= budgetMs) { await yieldFn(); t0 = now(); }
   }
 }
 
