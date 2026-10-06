@@ -1,21 +1,24 @@
 // Builds the content site into dist/site: every page, the app itself as index.html with search metadata, sitemap.xml (and sitemap-live.xml for the live pages) and robots.txt,
+// live-pages.js (the live pages' shared script, site/live-pages-js.mjs),
 // the IndexNow key file <key>.txt (only when the site is indexable and site/indexnow.key exists), and the app's data files next to it. Run `npm run build` first (it makes dist/radar.html), then `npm run site`.
 // The build stops if a comparison against the US Naval Observatory tables fails, so a page can never print a claim that was not true.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { allChecks } from "./verify.mjs";
-import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
+import { renderPage, SITE, NAV, urlPath, esc, robotsMeta, OG_IMAGE, ogImageTags } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
 import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
-import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
-import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { isoZ, parseTime } from "./hazard.mjs";
+import { hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { LIVE_FAMILY } from "./liveregistry.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
 import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
+import { LIVE_SCRIPT_FILE, liveScriptSource } from "./live-pages-js.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -74,28 +77,27 @@ export function loadHazards(dir = path.join(root, "public")) {
   };
 }
 
-// The deploy-time copies of the hazard pages and the right-now hub, from the bundled data. Old data is allowed here (the page then says it
-// is the copy bundled at deploy time); a feed that fails its guard is left out with a message. satellites: { active, dataTime }.
+// The deploy-time copies of the family pages (site/livepages.mjs) and the right-now hub, from the bundled data. Old data is allowed here
+// (the page then says it is the copy bundled at deploy time); a feed that fails its guard, or a page with nothing to show, is left out
+// with a message. h: loadHazards() plus `satellites` (loadSatellites()); satellites: { active, dataTime } for the hub's count row.
 export function hazardSnapshotPages(h, { now, coast, satellites, satelliteFiles = SATELLITE_FILES }) {
   const o = { now, allowStale: true };
-  const make = {
-    quakes: () => h.quakes && summariseQuakes(h.quakes, o),
-    aurora: () => h.kp && summariseSpace({ kp: h.kp, spaceweather: h.spaceweather, aurora: h.aurora }, o),
-    asteroids: () => h.closeapproaches && summariseApproaches(h.closeapproaches, o),
-    storms: () => h.storms && summariseStorms(h.storms, o),
-    fires: () => h.fires && h.places && summariseFires(h.fires, { ...o, places: h.places }),
-  };
   const summaries = {}, skipped = [];
-  for (const p of HAZARD_PAGES) {
-    try { const s = make[p.key](); if (s) summaries[p.key] = s; } catch (e) { skipped.push({ file: p.file, reason: e.message }); }
+  for (const p of LIVE_FAMILY) {
+    try { const s = p.snapshot(h, o); if (s) summaries[p.key] = s; } catch (e) { skipped.push({ file: p.file, reason: e.message }); }
   }
-  const built = [...satelliteFiles, ...HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => p.file), RIGHT_NOW_FILE];
-  const pages = HAZARD_PAGES.filter((p) => summaries[p.key]).map((p) => ({ ...HAZARD_PAGE_FUNCTIONS[p.key](summaries[p.key], { built, coast }), dataTime: summaries[p.key].dataTime }));
-  const hub = rightNowPage(hubRows({ satellites, quakes: summaries.quakes, space: summaries.aurora, approaches: summaries.asteroids, storms: summaries.storms, fires: summaries.fires }), { available: built });
+  const made = LIVE_FAMILY.filter((p) => summaries[p.key]);
+  const built = [...satelliteFiles, ...made.map((p) => p.file), RIGHT_NOW_FILE];
+  const pages = made.map((p) => ({ ...p.render(summaries[p.key], { built, coast }), dataTime: summaries[p.key].dataTime }));
+  const hub = rightNowPage(hubRows({ satellites, quakes: summaries.quakes, space: summaries.aurora, approaches: summaries.asteroids, storms: summaries.storms, fires: summaries.fires,
+    more: LIVE_FAMILY.filter((p) => p.hubRow).map((p) => p.hubRow(summaries[p.key] || null, { missing: {} })) }), { available: built });
   return { pages: [...pages, hub], skipped };
 }
+export const liveSnapshotPages = hazardSnapshotPages;
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
+// The noscript block names the site in a paragraph, not an h1: the page's h1 is the text section's (site/home-text.mjs), which is in the
+// HTML with or without JavaScript, and the loader's h1 belongs to the template.
 // homeText adds the text section below the first screen (site/home-text.mjs): its style block goes just before the noscript block, so
 // asDocument moves it into <head> after the template's own styles; the top focus target and the read-more link go between the noscript
 // block and the app, first in the tab order; the section and its script go at the end of the page. countryHub says
@@ -119,12 +121,12 @@ ${robotsMeta(noindex)}
 <meta property="og:title" content="${esc(APP_TITLE)}">
 <meta property="og:description" content="${esc(APP_DESCRIPTION)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta name="twitter:card" content="summary">
+${ogImageTags()}
 <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
 <script type="application/ld+json">${JSON.stringify(ldSite).replace(/</g, "\\u003c")}</script>`;
   const nav = NAV.filter(([f]) => f !== "").map(([f, label]) => `<li><a href="${f}">${esc(label)}</a></li>`).join("");
   const features = APP_FEATURES.map((f) => `<li>${esc(f)}</li>`).join("");
-  const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><h1>${esc(SITE.name)}</h1><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
+  const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><p style="margin:0 0 12px;font-size:28px;font-weight:700;line-height:1.2">${esc(SITE.name)}</p><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
   const wrapped = appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => (homeText ? HOME_STYLE : "") + noscript + (homeText ? HOME_PRE_APP : "") + '<div id="app"');
   return homeText ? wrapped + homeBodyHtml({ countryHub }) : wrapped;
 }
@@ -170,9 +172,13 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
+// The committed share image (drawn by tools/make-og-image.mjs, run by hand; the build only copies it).
+export const OG_IMAGE_SOURCE = path.join(root, "site/assets/og-image.png");
+
 export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast(), hazards = loadHazards(), indexnowKey = readIndexNowKey() } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("site: the IndexNow key must be 8 to 128 letters, digits and dashes");
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
+  if (!fs.existsSync(OG_IMAGE_SOURCE)) throw new Error(`site: ${OG_IMAGE_SOURCE} not found; run node tools/make-og-image.mjs`);
   const cities = loadCities();
   const checks = allChecks(cities);
   assertChecks(checks, allowUnchecked);
@@ -184,7 +190,7 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   const country = countryPageSet(satellites, { coast, updated: now });
   for (const sk of country.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
   const taken = isoZ(parseTime(satcount.taken));
-  const live = hazardSnapshotPages(hazards, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
+  const live = hazardSnapshotPages({ ...hazards, satellites }, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
   for (const sk of live.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
   const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages, livePages: live.pages });
   const seen = new Set();
@@ -198,6 +204,9 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   }
   const countryHub = pages.some((p) => p.file === COUNTRY_HUB_FILE);
   fs.writeFileSync(path.join(outDir, "index.html"), asDocument(wrapApp(fs.readFileSync(appFile, "utf8"), { noindex, countryHub })));
+  // the shared script of the live pages (site/live-pages-js.mjs): written by every deploy, so the live pages copied in by hosting/pull.php
+  // find it, and cached like any other file
+  fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
     // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out
@@ -211,6 +220,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     if (indexnowKey) fs.writeFileSync(path.join(outDir, `${indexnowKey}.txt`), indexnowKey, "utf8");
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
+  // the share image every page names in og:image (written for a noindex build too: harmless, and the tags stay the same)
+  fs.copyFileSync(OG_IMAGE_SOURCE, path.join(outDir, OG_IMAGE.file));
   return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };
 }
 

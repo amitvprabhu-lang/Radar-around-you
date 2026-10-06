@@ -9,11 +9,11 @@ import { fileURLToPath } from "node:url";
 import { buildLive, GENERATOR_FILES, generatorHash } from "../site/build-live.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { HUB_FILE, COUNTRY_FILES } from "../site/pages-country.mjs";
-import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE } from "../site/livepages.mjs";
+import { LIVE_FILES, SATELLITE_FILES, RIGHT_NOW_FILE, EVENT_FILES, FAMILY_PAGES } from "../site/livepages.mjs";
 import { HAZARD_PAGES } from "../site/hazard.mjs";
 import { HAZARD_PAGE_FUNCTIONS } from "../site/pages-hazard.mjs";
 import { COUNTRY_PAGES } from "../site/satcountry.mjs";
-import { SITE, urlPath } from "../site/layout.mjs";
+import { SITE, urlPath, NAV } from "../site/layout.mjs";
 import { buildFixture, STANDARD, countryFixture } from "./helpers/satfixture.mjs";
 import { REAL_DIR } from "./helpers/hazardfixture.mjs";
 import { readIndexNowKey } from "../site/indexnow.mjs";
@@ -200,6 +200,8 @@ test("with owners that have pages, the hub and all five country pages are writte
     for (const m of fs.readFileSync(path.join(out, f), "utf8").matchAll(/ href="([^"#]+)"/g)) {
       if (/^https?:/.test(m[1])) continue;
       const target = path.posix.normalize(path.posix.join(path.posix.dirname(f), m[1])).replace(/\/$/, "/index.html");
+      // the nav's live pages (right now, tonight's sky) are written at deploy time by site/build.mjs as well, so they exist on the site
+      if (NAV.some(([n]) => n && `${n}index.html` === target && target !== RIGHT_NOW_FILE)) continue;
       if (LIVE_FILES.some((x) => x.split("/")[0] === target.split("/")[0])) assert.ok(fs.existsSync(path.join(out, target)), `${f}: ${m[1]}`);
     }
   }
@@ -284,13 +286,19 @@ function newVersion(m, dir, feed, file, version, edit = (t) => t) {
   fs.writeFileSync(path.join(dir, rel), edit(fs.readFileSync(path.join(dir, m.feeds[feed].files[file]), "utf8")));
   m.feeds[feed] = { ...m.feeds[feed], version, files: { ...m.feeds[feed].files, [file]: rel } };
 }
+// the sky pages (site/sky.mjs) need the clouds feed and precise.json, which the hazard data of 5 October does not have, so these tests
+// leave them out of their lists; test/build-live-sky.test.js covers them
+const SKY_FILES = new Set(FAMILY_PAGES.filter((p) => p.family === "sky").map((p) => p.file));
+const noSky = (list) => list.filter((x) => !SKY_FILES.has(x.file));
 const readIndex = (out) => JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
 
 test("with every feed present all thirteen live pages are written, each with its feed versions and its data time in the index and the sitemap", () => {
   const out = mk();
   const r = buildLive({ dataDir: fullDataDir(), outDir: out, now: REAL_TIME, noindex: false, bounds });
   assert.deepEqual(r.failed, []);
-  assert.deepEqual(r.stale, []);
+  // the fleet and events pages have no feed in this folder (the hazard feeds of 5 October) and the small satellite fixture is under the
+  // Starlink page's minimum; they are built in test/pages-events.test.js
+  assert.deepEqual(noSky(r.stale).map((s) => s.file), EVENT_FILES);
   const index = readIndex(out);
   assert.equal(index.siteUrl, SITE.url);
   assert.equal(index.indexnowKey, readIndexNowKey(), "the IndexNow key sits beside the hazard fields");
@@ -341,11 +349,11 @@ test("a stale feed skips only its page with the reason; the previous copy and it
   // 7.75 hours before) is still within its 8 hours, and the other pages are current too
   const dir = fullDataDir((m, d) => newVersion(m, d, "quakes", "quakes.json", "20261005T224012Z"));
   const r = buildLive({ dataDir: dir, outDir: out, now: new Date("2026-10-05T22:45:00Z"), noindex: false, bounds });
-  assert.deepEqual(r.stale.map((s) => s.file), ["earthquakes-today/index.html"]);
+  assert.deepEqual(noSky(r.stale).map((s) => s.file).filter((f) => !EVENT_FILES.includes(f)), ["earthquakes-today/index.html"]);
   // an hour later the Kp data is past its 8 hours as well
   const r2 = buildLive({ dataDir: fullDataDir((m, d) => newVersion(m, d, "kp", "kp.json", "20261005T234012Z")), outDir: mk(), now: new Date("2026-10-05T23:45:00Z"), noindex: false, bounds });
   assert.ok(r2.stale.some((s) => s.file === "aurora-tonight/index.html" && /kp data from 2026-10-05T15:00:00Z is more than 8 hours old/.test(s.reason)), JSON.stringify(r2.stale));
-  assert.match(r.stale[0].reason, /quakes data from 2026-10-05T18:40:02Z is more than 3 hours old/);
+  assert.match(noSky(r.stale)[0].reason, /quakes data from 2026-10-05T18:40:02Z is more than 3 hours old/);
   assert.deepEqual(r.failed, []);
   assert.equal(fs.readFileSync(path.join(out, "earthquakes-today/index.html"), "utf8"), quakeBefore);
   const after = readIndex(out);
@@ -386,7 +394,7 @@ test("a feed missing from the manifest leaves its page out with a reason, and a 
   const out = mk();
   const dir = fullDataDir((m) => { delete m.feeds.fires; });
   const r = buildLive({ dataDir: dir, outDir: out, now: REAL_TIME, noindex: true, bounds });
-  assert.deepEqual(r.stale, [{ file: "wildfires-today/index.html", reason: "the manifest has no fires feed", kept: false }]);
+  assert.deepEqual(noSky(r.stale).filter((x) => !EVENT_FILES.includes(x.file)), [{ file: "wildfires-today/index.html", reason: "the manifest has no fires feed", kept: false }]);
   assert.ok(!fs.existsSync(path.join(out, "sitemap-live.xml")));
   assert.ok(!("sitemap-live.xml" in readIndex(out).files));
   for (const f of Object.keys(readIndex(out).files)) assert.ok(fs.readFileSync(path.join(out, f), "utf8").includes('<meta name="robots" content="noindex,nofollow">'), f);

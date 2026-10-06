@@ -38,6 +38,21 @@ export const SITE = {
   noindex: noindexFromEnv(process.env.SITE_NOINDEX),
 };
 
+// The one share image for every page (tools/make-og-image.mjs draws it; site/build.mjs copies it to the site root). The alt text says what
+// the picture shows.
+export const OG_IMAGE = {
+  file: "og-image.png", width: 1200, height: 630,
+  alt: "A dark blue globe crossed by thin orbit lines with small dots, beside the name Radar Around You and the line: A free live feed of what is above, around and under you.",
+};
+export const ogImageTags = (url = SITE.url) => `<meta property="og:image" content="${esc(`${url}/${OG_IMAGE.file}`)}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="${OG_IMAGE.width}">
+<meta property="og:image:height" content="${OG_IMAGE.height}">
+<meta property="og:image:alt" content="${esc(OG_IMAGE.alt)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${esc(`${url}/${OG_IMAGE.file}`)}">
+<meta name="twitter:image:alt" content="${esc(OG_IMAGE.alt)}">`;
+
 export const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // "moon-phases/index.html" -> "moon-phases/"; "index.html" -> ""
@@ -66,6 +81,7 @@ export const NAV = [
   ["how-many-satellites-in-orbit/", "Satellite count"],
   ["satellites-by-country/", "By country"],
   ["right-now/", "Right now"],
+  ["tonights-sky/", "Tonight's sky"],
   ["sky/", "Sky by city"],
   ["guides/", "Guides"],
   ["methods/", "How we know"],
@@ -110,6 +126,7 @@ td.num{text-align:right;white-space:nowrap}
 .tz{margin:10px 0}.tz button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
 .tz button[aria-pressed=true]{border-color:var(--ion);color:var(--ion)}
 .sources li{margin:.4em 0}
+figure{margin:16px 0}figcaption{color:var(--muted);font-size:14px;margin-top:6px;max-width:70ch}
 footer{border-top:1px solid var(--line);background:var(--ink2);color:var(--dim);font-size:14px}
 footer .bar{display:block}footer p{margin:.5em 0;max-width:80ch}
 @media (max-width:600px){body{font-size:16px}th,td{padding:8px 10px}}
@@ -153,7 +170,7 @@ const SCRIPT = `
 `;
 
 export function table({ caption, head, rows, numeric = [] }) {
-  const cell = (c, i, tag = "td") => `<${tag}${numeric.includes(i) ? ' class="num"' : ""}>${c}</${tag}>`;
+  const cell = (c, i, tag = "td") => `<${tag}${tag === "th" ? ' scope="col"' : ""}${numeric.includes(i) ? ' class="num"' : ""}>${c}</${tag}>`;
   return `<div class="tablewrap" role="region" tabindex="0" aria-label="${esc(caption)}"><table><caption>${esc(caption)}</caption><thead><tr>${head.map((h, i) => cell(esc(h), i, "th")).join("")}</tr></thead><tbody>${rows.map((r) => `<tr${r.attrs || ""}>${(r.cells || r).map((c, i) => cell(c, i)).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
@@ -168,7 +185,9 @@ export function sources(list) {
   return `<h2 id="sources">Sources</h2><ul class="sources">${list.map((s) => `<li><a href="${esc(s.url)}" rel="noopener">${esc(s.title)}</a>${s.note ? `. ${esc(s.note)}` : ""}</li>`).join("")}</ul>`;
 }
 
-// page: { file, title, description, h1, kicker, lead, body, type, updated, crumbs, jsonld, cta }
+// page: { file, title, description, h1, kicker, lead, body, type, updated, crumbs, jsonld, cta, bodyAttrs, scriptSrc }
+// bodyAttrs: attributes for <body> as { name: value } (the live pages' data-live-* contract, site/live-pages-js.mjs); scriptSrc: a
+// script loaded with defer after the page's own. A page without them is rendered exactly as before.
 export function renderPage(page, { noindex = SITE.noindex } = {}) {
   const here = page.file;
   const canonical = `${SITE.url}/${urlPath(here)}`;
@@ -197,12 +216,12 @@ ${robotsMeta(noindex)}
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta name="twitter:card" content="summary">
+${ogImageTags()}
 <meta name="theme-color" content="#04060c">
 ${ld.map((o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`).join("\n")}
 <style>${CSS}</style>
 </head>
-<body>
+<body${page.bodyAttrs ? Object.entries(page.bodyAttrs).map(([k, v]) => ` ${k}="${esc(v)}"`).join("") : ""}>
 <a class="skip" href="#main">Skip to the content</a>
 <header class="top"><div class="bar"><a class="brand" href="${href(here, "index.html")}"><i></i>${esc(SITE.name)}</a><nav aria-label="Main"><ul>${navHtml}</ul></nav></div></header>
 <main id="main"><article class="${page.wide ? "wide" : ""}">
@@ -216,7 +235,7 @@ ${page.body}
 </article></main>
 <footer><div class="bar"><p>${esc(SITE.name)} is a free tool for looking up: what is overhead, what is in tonight's sky and what the ground has just done. Satellite and quake data come from CelesTrak and the USGS. Positions of the Moon, Sun and planets are computed with the astronomy-engine library. Every number on these pages links to how it was found on <a href="${href(here, "methods/index.html")}">How we know</a>.</p><p><a href="${esc(SITE.repo)}" rel="noopener">Source code and data notes on GitHub</a>. Code under the MIT licence; data keeps its sources' terms.</p></div></footer>
 <script>${SCRIPT}</script>
-</body>
+${page.scriptSrc ? `<script src="${esc(page.scriptSrc)}" defer></script>\n` : ""}</body>
 </html>
 `;
 }

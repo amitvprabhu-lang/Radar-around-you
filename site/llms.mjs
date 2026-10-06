@@ -4,7 +4,8 @@
 import { urlPath } from "./layout.mjs";
 import { SATCOUNT_FILE } from "./pages-satcount.mjs";
 import { HUB_FILE } from "./satcountry.mjs";
-import { HAZARD_PAGES, RIGHT_NOW_FILE } from "./hazard.mjs";
+import { RIGHT_NOW_FILE } from "./hazard.mjs";
+import { FAMILY_PAGES } from "./livepages.mjs";
 
 const clean = (s) => String(s).replace(/\s+/g, " ").trim();
 // OURS: the live pages' descriptions hold today's numbers, so this file uses fixed notes instead.
@@ -21,7 +22,9 @@ export const HAZARD_NOTES = {
   "tropical-storms-now/index.html": "Active tropical storms and hurricanes in the US National Hurricane Center's basins, with wind, pressure and forecast tracks.",
   "wildfires-today/index.html": "Satellite fire detections in NASA FIRMS's 24 hour files, by satellite and densest place, with a map. Detections, not confirmed fires.",
 };
-const LIVE_HAZARD_LIST = [[RIGHT_NOW_FILE, "Right now"], ...HAZARD_PAGES.map((p) => [p.file, p.name])];
+// every family page of site/livepages.mjs, with its fixed note (HAZARD_NOTES for the hazard pages, the page's own `note` for the others)
+const LIVE_HAZARD_LIST = [[RIGHT_NOW_FILE, "Right now"], ...FAMILY_PAGES.map((p) => [p.file, p.name])];
+const noteOf = (file) => HAZARD_NOTES[file] || (FAMILY_PAGES.find((p) => p.file === file) || {}).note;
 const REFERENCE = ["moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html"];
 
 export function buildLlmsTxt({ pages, url, name, summary }) {
@@ -41,7 +44,7 @@ export function buildLlmsTxt({ pages, url, name, summary }) {
     "## Sky reference", ...REFERENCE.map((f) => entry(f)), "",
     "## Guides", ...guides.map((f) => entry(f)), "",
     "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE),
-    ...LIVE_HAZARD_LIST.map(([f, title]) => `- [${title}](${url}/${urlPath(f)}): ${HAZARD_NOTES[f]}`), "",
+    ...LIVE_HAZARD_LIST.map(([f, title]) => `- [${title}](${url}/${urlPath(f)}): ${noteOf(f)}`), "",
   ];
   return lines.join("\n");
 }

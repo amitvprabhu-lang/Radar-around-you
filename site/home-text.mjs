@@ -2,9 +2,13 @@
 // and over the fixed 3D app, so the first screen stays exactly as it is. Only the content-site build adds it (wrapApp in build.mjs);
 // the app bundle and template.html do not change. Every statement is traced in docs/home-sources.md. No hidden text, no counts that
 // go stale (the count page has them), no FAQ markup. test/site.test.js keeps any run of words shared with the About page or the count
-// page under 8 words and keeps the headings different from theirs.
+// page under 8 words and keeps the headings different from every other page's. The section starts with the page's h1 (the only one
+// once the app has loaded) and a live block: six figures that the browser fills from the live folder (site/home-strip.mjs; the HTML
+// carries dashes) and a row of links to every registered live page (site/livepages.mjs).
 import { esc, href } from "./layout.mjs";
 import { SATCOUNT_FILE } from "./pages-satcount.mjs";
+import { LIVE_PAGES, RIGHT_NOW_FILE } from "./livepages.mjs";
+import { STRIP_FIGURES, STRIP_DASH, STRIP_SCRIPT } from "./home-strip.mjs";
 
 export const HOME_ID = "about-home";
 // The section links the satellites by country hub only when the build has that page.
@@ -23,14 +27,54 @@ export const HOME_QUESTIONS = [
   "Who supplies the data, and does the app cost anything?",
 ];
 
+// The page's one visible h1 once the app has loaded (the loader's h1 goes with the loader). It names the site and what it is, differs
+// from the title tag and from every other page's h1 and h2 (test/site.test.js).
+export const HOME_H1 = "Radar Around You: a live feed of satellites, the ISS, earthquakes, aurora and storms";
+// The heading over the live figures and the row of live pages, distinct from every other heading on the site.
+export const HOME_LIVE_HEADING = "Live figures from the data feeds";
+
+// Every registered live page (site/livepages.mjs), the right-now hub first, each with its registry name as the link text. The pages
+// reach the site with the server's pull job, not with the deploy, so every registered page is listed whether or not this build wrote a
+// copy. A page added to the registry appears here by itself; one without a name falls back to its address in words.
+export function liveLinks(pages = LIVE_PAGES) {
+  const words = (file) => file.replace(/\/index\.html$/, "").split("/").pop().replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+  const first = pages.filter((p) => p.file === RIGHT_NOW_FILE);
+  return [...first, ...pages.filter((p) => p.file !== RIGHT_NOW_FILE)].map((p) => ({ file: p.file, name: p.name || words(p.file) }));
+}
+
+// The live block: the strip of six figures (dashes in the HTML; the inline script in site/home-strip.mjs fills them in the browser from
+// the site's live folder) and the row of live pages. The labels and the explanation are in the HTML; only the values and the status line
+// come from the script.
+export function homeLiveHtml(pages = LIVE_PAGES) {
+  const figures = STRIP_FIGURES.map(([key, label]) => `<div><dt>${esc(label)}</dt><dd data-fig="${key}">${STRIP_DASH}</dd></div>`).join("\n");
+  return `<div class="home-live">
+<h2 id="home-live">${esc(HOME_LIVE_HEADING)}</h2>
+<div id="home-strip" class="home-strip">
+<dl>
+${figures}
+</dl>
+<p class="home-strip-note">These figures load from the site's live data in your browser; the same numbers are on ${a(RIGHT_NOW_FILE, "/right-now/")} as plain HTML.</p>
+<p class="home-strip-status" aria-live="polite"></p>
+</div>
+<p>Each page below is rebuilt when its own feed has new data and states the time of its own data. When a feed is too old or fails a check, the page keeps its previous copy.</p>
+<nav class="home-live-links" aria-label="Live pages">
+<ul>
+${liveLinks(pages).map((p) => `<li>${a(p.file, p.name)}</li>`).join("\n")}
+</ul>
+</nav>
+</div>`;
+}
+
 export function homeTextHtml({ countryHub = false } = {}) {
   const [iss, above, tonight, around, count, free] = HOME_QUESTIONS.map(esc);
   // the hub ranks owners by their active satellites, so its clause sits in the sentence about active satellites
   const hub = countryHub ? `, and ${a(COUNTRY_HUB_FILE, "satellites by country")} ranks the owners of those active satellites as the catalogue records them` : "";
-  return `<section id="${HOME_ID}" class="home-text" tabindex="-1" aria-label="About this app">
+  return `<section id="${HOME_ID}" class="home-text" tabindex="-1" aria-labelledby="home-h1">
 <div class="home-inner">
 <p class="home-back"><a href="#top">Back to the globe</a></p>
-<p class="home-lead">The globe above is Radar Around You, a free 3D view of what is over, under and around a place you choose.</p>
+<h1 id="home-h1">${esc(HOME_H1)}</h1>
+<p class="home-lead">The globe above is a free 3D view of what is over, under and around a place you choose.</p>
+${homeLiveHtml()}
 <h2>${iss}</h2>
 <p>Search for ISS and the globe turns to the station, drawing its orbit and the patch of Earth it can see. Its card gives its height, speed and the age of the orbit data, which comes from CelesTrak; positions are worked out on your device. Pass predictions for the station, the brightest objects and anything launched within the past 30 days use SGP4, the model built for this kind of orbit data. Everything else uses a quicker, rougher model.</p>
 <h2>${above}</h2>
@@ -40,14 +84,14 @@ export function homeTextHtml({ countryHub = false } = {}) {
 <h2>${around}</h2>
 <p>The Under view slices the Earth open from an earthquake to you, through crust, mantle and core, and sends the P and S waves on their way to you: a teaching model fed by earthquakes from the U.S. Geological Survey. The Around you list ranks what is near your place by how serious it is, from storms and fires to quakes, disaster alerts and aurora, and every entry names where it came from and when that was current. Hurricanes carry the National Hurricane Center's track and cone; aurora carries NOAA's Kp index and your chance of seeing it. Fire points are heat signals picked up from orbit, not confirmed wildfires. Aircraft appear over six cities only (Pune, Tokyo, Sydney, London, New York and Tromso), drawn in the sky as 3D airliners. Before you rely on any of this, read ${a("about/index.html#limits", "what the app does not do")}.</p>
 <h2>${count}</h2>
-<p>The page ${a(SATCOUNT_FILE, "How many satellites are in orbit?")} counts only the active satellites in our feed and is rebuilt after each data collection${hub}. The "tracked objects" tile in the app gives a larger number, because it counts everything the feed holds, rocket bodies and debris included.</p>
+<p>The page ${a(SATCOUNT_FILE, "How many satellites are in orbit?")} counts only the active satellites in our feed and is rebuilt when new satellite data arrives${hub}. The "tracked objects" tile in the app gives a larger number, because it counts everything the feed holds, rocket bodies and debris included.</p>
 <h2>${free}</h2>
 <p>Using the app costs nothing, and its code is published on GitHub for anyone to read and reuse, under the MIT licence. The data comes from public agencies and projects: CelesTrak for orbits, the U.S. Geological Survey for earthquakes, NOAA for space weather and hurricanes, NASA FIRMS for fires, GDACS for floods and volcanoes, MET Norway for cloud forecasts, adsb.lol for aircraft and The Space Devs for launches. Every card names its source, and the Data status screen tells you how recently each feed was confirmed current. The ${a("about/index.html", "About page")} lists every source, and ${a("methods/index.html", "How we know")} sets out the checks behind the reference pages.</p>
+<!-- the count page and the country hub are not repeated here: the row of live pages above links them -->
 <nav class="home-links" aria-label="More pages">
 <ul>
 <li>${a("guides/index.html", "Guides to the data")}</li>
 <li>${a("about/index.html", "About Radar Around You")}</li>
-<li>${a(SATCOUNT_FILE, "How many satellites are in orbit")}</li>${countryHub ? `\n<li>${a(COUNTRY_HUB_FILE, "Satellites by country")}</li>` : ""}
 <li>${a("methods/index.html", "How we know")}</li>
 </ul>
 </nav>
@@ -79,7 +123,15 @@ export const HOME_TEXT_CSS = `
   .home-text { position: relative; z-index: 2; background: var(--ink-2); border-top: 1px solid var(--line-2); color: var(--text); font: 400 17px/1.65 var(--f-body);
     padding: 28px max(16px, env(safe-area-inset-right, 0px)) calc(56px + var(--safe-b)) max(16px, env(safe-area-inset-left, 0px)); user-select: text; -webkit-user-select: text; }
   .home-inner { max-width: 70ch; margin: 0 auto; }
+  .home-text h1 { margin: 0 0 14px; font: 700 clamp(26px, 5vw, 34px)/1.15 var(--f-display); letter-spacing: -.015em; text-wrap: balance; }
   .home-text h2 { margin: 36px 0 10px; font: 700 24px/1.25 var(--f-display); letter-spacing: -.01em; }
+  .home-strip dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 10px; margin: 0 0 12px; }
+  .home-strip dl > div { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  .home-strip dl > div:last-child { grid-column: 1 / -1; }
+  .home-strip dt { font: 500 13px/1.35 var(--f-body); color: var(--muted); }
+  .home-strip dd { margin: 4px 0 0; font: 600 20px/1.3 var(--f-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .home-strip-note, .home-strip-status { font-size: 14px; color: var(--muted); }
+  .home-live-links ul { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; font-size: 15px; }
   .home-text p { margin: 0 0 14px; }
   .home-text a { color: var(--ion); text-underline-offset: 3px; }
   .home-lead { font-size: 18px; color: var(--text); }
@@ -124,5 +176,6 @@ export const HOME_SCRIPT = `<script id="home-wheel">(function () {
     e.preventDefault();
   }, { passive: false });
 })();</script>\n`;
+// The strip's script (site/home-strip.mjs) follows the wheel script, after the section, so the strip exists when it runs.
 export const homeBodyHtml = ({ countryHub = false } = {}) =>
-  `<div class="home-spacer" aria-hidden="true"></div>\n${homeTextHtml({ countryHub })}\n${HOME_SCRIPT}`;
+  `<div class="home-spacer" aria-hidden="true"></div>\n${homeTextHtml({ countryHub })}\n${HOME_SCRIPT}${STRIP_SCRIPT}`;

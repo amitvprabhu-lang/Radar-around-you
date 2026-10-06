@@ -9,10 +9,11 @@
 // site/indexnow.key; it is left out when there is no key file or the site is noindex, and then hosting/pull.php sends no IndexNow pings.
 // feeds holds every feed version in the manifest; pages holds, for each live page that exists, the versions of its own feeds and its data
 // time (the feed's own time, which is also its lastmod in sitemap-live.xml). Readers take only the fields they need, so a reader older
-// than a field ignores it.
+// than a field ignores it. Beside index.json, history.json keeps the headline numbers of the last 48 builds of each page that has them
+// (site/insight.mjs); it is not listed in index.json, so hosting/pull.php never copies it to the site.
 // generator is a sha256 over the source files that shape the pages (GENERATOR_FILES). Each group of pages is built on its own and only
 // when one of its own feeds has a new version, or the site address, the noindex mode, the IndexNow key or the generator changed: the satellite pages
-// (all or nothing, as before) when the satellites feed changes, each hazard page when its feeds change. The right-now hub is worked out
+// (all or nothing, as before) when the satellites feed changes, each family page (site/livepages.mjs) when its feeds change. The right-now hub is worked out
 // every run and written only when its text changes. A file's `changed` time moves only when its bytes change, and the live sitemap gives
 // each page its data time (the feed's own time) as lastmod.
 // A hazard page whose feed is older than its limit (site/hazard.mjs, MAX_AGE_HOURS) or missing is skipped with a printed reason; a page
@@ -26,10 +27,12 @@ import { SITE, renderPage } from "./layout.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { satelliteCountPage, sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
-import { LIVE_PAGES, LIVE_FILES, SATCOUNT_FILE, SATELLITE_FILES, RIGHT_NOW_FILE } from "./livepages.mjs";
-import { HAZARD_PAGES, summariseQuakes, summariseSpace, summariseApproaches, summariseStorms, summariseFires, isoZ, parseTime } from "./hazard.mjs";
-import { HAZARD_PAGE_FUNCTIONS, hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { LIVE_PAGES, LIVE_FILES, SATCOUNT_FILE, SATELLITE_FILES, RIGHT_NOW_FILE, FAMILY_PAGES, familyPage } from "./livepages.mjs";
+import { isoZ, parseTime } from "./hazard.mjs";
+import { hubRows, rightNowPage } from "./pages-hazard.mjs";
+import { LIVE_FAMILY, FAMILY_RENDERERS } from "./liveregistry.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
+import { HISTORY_FILE, readHistory, historyAdd, previousEntry } from "./insight.mjs";
 
 const NEED = ["details.bin", "satmeta.json", "swarm.bin"];
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
@@ -38,8 +41,10 @@ const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 // imports (the orbit model, the decoders, the scales and the asteroid helpers in src/), the coastlines and the place list are named with
 // "../". A change to any of them rebuilds every page on the next run. Everything is read from the repository (the workflow checks it out).
 export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mjs", "build-live.mjs", "satcountry.mjs", "svgmap.mjs", "pages-country.mjs",
-  "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "indexnow.mjs",
-  "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json"];
+  "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "liveregistry.mjs", "indexnow.mjs", "events.mjs", "pages-events.mjs", "liveseo.mjs", "insight.mjs", "live-pages-js.mjs", "../src/dedupe.js",
+  "sky.mjs", "pages-sky.mjs", "sky-family.mjs", "sky-data.mjs", "../src/plan.js", "../src/sgp4.js", "../src/tonight.js", "../src/trains.js",
+  "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json",
+  "../public/cities.json", "../public/stars.bin", "../public/constellations.json", "../public/starnames.json"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
 export const PLACES_FILE = fileURLToPath(new URL("../public/places.json", import.meta.url));
 export function generatorHash(files = GENERATOR_FILES) {
@@ -48,21 +53,9 @@ export function generatorHash(files = GENERATOR_FILES) {
   return h.digest("hex");
 }
 
-// How each hazard page reads its feeds. Every function gets read(feed, file) and returns the summary for its page function.
-const HAZARD_READERS = {
-  quakes: (rd, o) => summariseQuakes(rd.json("quakes", "quakes.json"), o),
-  aurora: (rd, o) => summariseSpace({
-    kp: rd.json("kp", "kp.json"),
-    spaceweather: rd.has("spaceweather") ? rd.json("spaceweather", "spaceweather.json") : null,
-    aurora: rd.has("aurora") ? { meta: rd.json("aurora", "aurora.json"), grid: rd.bytes("aurora", "aurora.bin") } : null,
-  }, o),
-  asteroids: (rd, o) => summariseApproaches(rd.json("closeapproaches", "closeapproaches.json"), o),
-  storms: (rd, o) => summariseStorms(rd.json("storms", "storms.json"), { ...o, events: rd.has("events") ? { list: rd.json("events", "events.json"), dataTime: rd.time("events") } : null }),
-  fires: (rd, o) => summariseFires({ summary: rd.json("fires", "fires.json"), bin: rd.bytes("fires", "fires.bin") }, o),
-};
-
-// pageFunctions and hubPage can be replaced in tests, to show that a page that fails to render is skipped on its own.
-export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = HAZARD_PAGE_FUNCTIONS, hubPage = rightNowPage } = {}) {
+// pageFunctions and hubPage can be replaced in tests, to show that a page that fails to render is skipped on its own. starlinkMin replaces
+// the Starlink page's minimum (site/events.mjs, STARLINK_MIN) for the small test fleets.
+export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = FAMILY_RENDERERS, hubPage = rightNowPage, starlinkMin } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("build-live: the IndexNow key must be 8 to 128 letters, digits and dashes");
   const key = noindex ? null : indexnowKey || null;  // a noindex site is never pinged, so its index names no key
   const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, "manifest.json"), "utf8"));
@@ -92,6 +85,9 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const same = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
   // a page is kept as it is when it was built from the same versions of its feeds, in the same mode, by the same generator, and is still there
   const keepable = (file, names) => sameShell && prev.pages[file] && same(prev.pages[file].feeds, versionsOf(names)) && prev.files[file] && exists(file);
+  // the versions a family page was built from: its feeds' versions, plus the UTC date for a page that changes with the date (the sky pages)
+  const pageVersions = (hp) => ({ ...versionsOf(hp.feeds), ...(hp.daily ? { utcDate: now.toISOString().slice(0, 10) } : {}) });
+  const keepablePage = (hp) => sameShell && prev.pages[hp.file] && same(prev.pages[hp.file].feeds, pageVersions(hp)) && prev.files[hp.file] && exists(hp.file);
 
   const texts = new Map();   // file -> html, built in this run
   const pages = {};          // file -> { feeds, dataTime } for every page that exists after this run
@@ -134,9 +130,16 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     satSummary = null;
   }
 
-  // ---- the hazard pages, each on its own
+  // ---- the family pages (the hazard pages and the later families of site/livepages.mjs), each on its own
   const summaries = {}, missing = satSummary ? {} : { satellites: "data that failed its checks" };
-  for (const hp of HAZARD_PAGES) {
+  // the place list is read only by a page that asks for it (the fire page), and at most once
+  const ctx = { now, bounds, starlinkMin, get places() { return getPlaces(); } };
+  // the headline numbers of earlier builds (history.json beside index.json), for the "change since the previous build" findings
+  const historyPath = path.join(outDir, HISTORY_FILE);
+  let historyText = "";
+  try { historyText = fs.readFileSync(historyPath, "utf8"); } catch { /* no history yet */ }
+  let history = readHistory(historyText);
+  for (const hp of LIVE_FAMILY) {
     const names = hp.feeds;
     if (!rd.has(names[0])) {
       missing[hp.key] = "not in the collector's data";
@@ -144,48 +147,55 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
       continue;
     }
     try {
-      const s = HAZARD_READERS[hp.key](rd, { now, places: hp.key === "fires" ? getPlaces() : undefined });
+      const s = hp.read(rd, ctx);
       summaries[hp.key] = s;
       for (const w of s.warnings || []) warnings.push({ file: hp.file, reason: w });
-      if (keepable(hp.file, names)) { carry(hp.file); continue; }
-      pages[hp.file] = { feeds: versionsOf(names), dataTime: s.dataTime };
+      if (keepablePage(hp)) { carry(hp.file); continue; }
+      pages[hp.file] = { feeds: pageVersions(hp), dataTime: s.dataTime };
     } catch (e) {
       if (e && e.code === "ENOENT" && (e.path === coastFile || e.path === placesFile)) throw e;
       if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }
-      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `hazard page ${hp.slug}`, files: [hp.file], reason: e.message, kept: carry(hp.file) }); }
+      else if (e && e.skip) { missing[hp.key] = e.message; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }
+      else { missing[hp.key] = "data that failed its checks"; failed.push({ step: `${hp.family} page ${hp.slug}`, files: [hp.file], reason: e.message, kept: carry(hp.file) }); }
     }
   }
-  // Render each hazard page on its own: a page that fails to render is skipped (its previous copy stays) and reported as a failure. The
+  // Render each family page on its own: a page that fails to render is skipped (its previous copy stays) and reported as a failure. The
   // pages that exist after this run (built or kept) are linked from each other, so a failure is followed by another pass without it.
   let available = [];
-  for (let pass = 0; pass < HAZARD_PAGES.length + 1; pass++) {
+  for (let pass = 0; pass < LIVE_FAMILY.length + 1; pass++) {
     available = LIVE_FILES.filter((f) => f === RIGHT_NOW_FILE || pages[f]);
     let broke = false;
-    for (const hp of HAZARD_PAGES) {
+    for (const hp of LIVE_FAMILY) {
       if (!summaries[hp.key] || kept.has(hp.file) || !pages[hp.file]) continue;
       try {
-        texts.set(hp.file, renderPage(pageFunctions[hp.key](summaries[hp.key], { built: available, coast: getCoast() }), { noindex }));
+        const previous = previousEntry(history, hp.key, summaries[hp.key].dataTime);
+        texts.set(hp.file, renderPage((pageFunctions[hp.key] || hp.render)(summaries[hp.key], { built: available, coast: getCoast(), previous }), { noindex }));
       } catch (e) {
         texts.delete(hp.file);
         delete pages[hp.file];
         delete summaries[hp.key];
         missing[hp.key] = "a page that could not be built";
-        failed.push({ step: `hazard page ${hp.slug} (rendering)`, files: [hp.file], reason: e.message, kept: carry(hp.file) });
+        failed.push({ step: `${hp.family} page ${hp.slug} (rendering)`, files: [hp.file], reason: e.message, kept: carry(hp.file) });
         broke = true;
       }
     }
     if (!broke) break;
   }
 
+  // the numbers of each page built this run go into the history, under the page's data time
+  for (const hp of LIVE_FAMILY) if (hp.history && texts.has(hp.file) && summaries[hp.key]) history = historyAdd(history, hp.key, { dataTime: summaries[hp.key].dataTime, values: hp.history(summaries[hp.key]) });
+  const newHistory = JSON.stringify(history, null, 1) + "\n";
+  const writeHistory = () => { if (Object.keys(history.pages).length && newHistory !== historyText) { fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(historyPath, newHistory); } };
+
   // ---- the right-now hub: worked out every run from the same summaries; a page that is not live this run gets no number and no link
-  const shown = (key, file) => (pages[file] && summaries[key] ? summaries[key] : null);
+  const shown = (key) => { const p = familyPage(key); return p && pages[p.file] && summaries[key] ? summaries[key] : null; };
   const rows = hubRows({
     satellites: pages[SATCOUNT_FILE] && satSummary ? satSummary : null,
-    quakes: shown("quakes", HAZARD_PAGES[0].file), space: shown("aurora", HAZARD_PAGES[1].file), approaches: shown("asteroids", HAZARD_PAGES[2].file),
-    storms: shown("storms", HAZARD_PAGES[3].file), fires: shown("fires", HAZARD_PAGES[4].file), missing,
+    quakes: shown("quakes"), space: shown("aurora"), approaches: shown("asteroids"), storms: shown("storms"), fires: shown("fires"), missing,
+    more: LIVE_FAMILY.filter((p) => p.hubRow).map((p) => p.hubRow(shown(p.key), { missing })),
   });
-  // a hazard page kept from an earlier run whose feed is now stale is still on the site, but the hub shows it as not updated
-  const hubAvailable = available.filter((f) => f === RIGHT_NOW_FILE || SATELLITE_FILES.includes(f) || HAZARD_PAGES.some((p) => p.file === f && summaries[p.key]));
+  // a family page kept from an earlier run whose feed is now stale is still on the site, but the hub shows it as not updated
+  const hubAvailable = available.filter((f) => f === RIGHT_NOW_FILE || SATELLITE_FILES.includes(f) || FAMILY_PAGES.some((p) => p.file === f && summaries[p.key]));
   let hub = null;
   try {
     hub = hubPage(rows, { available: hubAvailable });
@@ -218,7 +228,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const index = { schema: 1, satellitesVersion: satBuilt || null, siteUrl: SITE.url, ...(key ? { indexnowKey: key } : {}), noindex, generator, built: iso, feeds: feedVersions, pages: Object.fromEntries(ordered.map((f) => [f, pages[f]])), files: sortedFiles };
   const unchanged = prev && writes.length === 0 && !(noindex && exists("sitemap-live.xml")) &&
     same({ ...prev, built: null }, { ...index, built: null });
-  if (unchanged) return { changed: false, version: satVersion, skipped, stale, failed, warnings, built: [] };
+  if (unchanged) { writeHistory(); return { changed: false, version: satVersion, skipped, stale, failed, warnings, built: [] }; }
   for (const [rel, buf] of writes) {
     const file = path.join(outDir, rel);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -227,6 +237,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   if (noindex) fs.rmSync(path.join(outDir, "sitemap-live.xml"), { force: true });
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 1) + "\n");
+  writeHistory();
   return { changed: true, version: satVersion, skipped, stale, failed, warnings, built: writes.map(([rel]) => rel).filter((r) => r !== "sitemap-live.xml") };
 }
 

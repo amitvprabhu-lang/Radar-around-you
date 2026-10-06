@@ -6,7 +6,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./harness.mjs";
-import { LIVE_FILES, HAZARD_FILES, RIGHT_NOW_FILE } from "./site/livepages.mjs";
+import os from "node:os";
+import { LIVE_FILES, LIVE_PAGES, HAZARD_FILES, RIGHT_NOW_FILE, EVENT_FILES } from "./site/livepages.mjs";
+import { SKY_PAGES } from "./site/sky.mjs";
+import { HOME_H1 } from "./site/home-text.mjs";
+import { STRIP_FIGURES, STRIP_LIMITS, stripFigures } from "./site/home-strip.mjs";
+import { livePack } from "./test/livepack.js";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
@@ -21,11 +26,16 @@ const problems = [], notFound = [];
 p.on("console", (m) => { if (m.type() === "error" && !/Service Worker registration blocked|status of 404/.test(m.text())) problems.push("console.error: " + m.text().slice(0, 200)); });
 p.on("pageerror", (e) => problems.push("pageerror: " + e.message.slice(0, 200)));
 p.on("requestfailed", (r) => problems.push(`request failed: ${r.url().slice(0, 100)} ${r.failure()?.errorText}`));
-// home: another body for the home page (the comparison build without the text section below); missing files go to `missing`
-const serve = (c, { home = null, missing = notFound } = {}) => c.route("https://radar.test/**", (route) => {
+// home: another body for the home page (the comparison build without the text section below); missing files go to `missing`;
+// live: an optional pretend live folder (a Map of "live/..." paths to objects or Buffers), served instead of the empty one
+const serve = (c, { home = null, missing = notFound, live = null } = {}) => c.route("https://radar.test/**", (route) => {
   const u = new URL(route.request().url());
   let rel = decodeURIComponent(u.pathname.slice(1));
   if (rel === "" && home) return route.fulfill({ status: 200, headers: { "content-type": "text/html" }, body: home });
+  if (live && live.has(rel)) {
+    const v = live.get(rel);
+    return route.fulfill({ status: 200, headers: { "content-type": MIME[path.extname(rel)] || "application/octet-stream", "cache-control": "no-store" }, body: Buffer.isBuffer(v) ? v : Buffer.from(JSON.stringify(v)) });
+  }
   if (rel === "" || rel.endsWith("/")) rel += "index.html";
   const f = path.join(site, rel);
   if (!f.startsWith(site) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) {
@@ -52,6 +62,18 @@ const want = process.env.SITE_NOINDEX === "1" ? "noindex,nofollow" : "index,foll
 check(`the page's robots tag matches SITE_NOINDEX (${want})`, robots === want, String(robots));
 check("no page errors, no failed requests and no console errors on the home page", problems.length === 0, problems.join(" | "));
 check("only the not-yet-connected live folder was missing", notFound.every((u) => u.startsWith("/live/")), notFound.join(" "));
+// the home page's row of live pages: every registered live page, the right-now hub first; each one this build wrote answers 200 raw
+const liveRow = await p.evaluate(() => [...document.querySelectorAll(".home-live-links a")].map((a) => [a.getAttribute("href"), a.textContent]));
+check("the home page lists every registered live page, the right-now hub first, each by its name", liveRow.length === LIVE_PAGES.length && liveRow[0][0] === "right-now/" && LIVE_PAGES.every((pg) => liveRow.some(([h, t]) => h + "index.html" === pg.file && t === pg.name)), JSON.stringify(liveRow));
+const rowStatus = [];
+for (const [h] of liveRow) {
+  if (!fs.existsSync(site + h + "index.html")) continue;  // arrives with the server's pull job, not with the deploy
+  rowStatus.push([h, await p.evaluate(async (u) => (await fetch(u)).status, "https://radar.test/" + h)]);
+}
+check(`each live page this build wrote answers 200 (${rowStatus.length} of ${liveRow.length}; the others arrive with the pull job)`, rowStatus.length >= 2 && rowStatus.every(([, st]) => st === 200), JSON.stringify(rowStatus));
+// the share image is served at the address every page names
+const og = await p.evaluate(async () => { const r = await fetch("/og-image.png"); const b = new Uint8Array(await r.arrayBuffer()); const v = new DataView(b.buffer); return { status: r.status, w: v.getUint32(16), h: v.getUint32(20), bytes: b.length }; });
+check("the share image answers 200 as a 1200 by 630 PNG under 250 KB", og.status === 200 && og.w === 1200 && og.h === 630 && og.bytes < 250000, JSON.stringify(og));
 
 // a content page and the crawler files, fetched as a web host would serve them
 const page = await ctx.newPage();
@@ -116,6 +138,138 @@ for (const f of [...HAZARD_FILES, RIGHT_NOW_FILE]) {
   }
 }
 
+// the sky pages (tonight's sky hub, six cities, ISS today), fetched raw: written at deploy time from the forecast and precise.json bundled
+// in public/, each answers 200 with its canonical address, a robots tag matching SITE_NOINDEX, the data time in the lead, the "What this
+// means" findings first, its figures as inline SVG, MET Norway's credit where the cloud forecast is shown, and the shared script
+for (const f of SKY_PAGES.map((x) => x.file)) {
+  const path1 = "/" + f.replace(/index\.html$/, "");
+  const r = await rawGet("https://radar.test" + path1);
+  const h = r.text;
+  const canonical = (h.match(/<link rel="canonical" href="([^"]+)">/) || [])[1] || "";
+  const robots = (h.match(/<meta name="robots" content="([^"]+)">/) || [])[1];
+  const lead = (h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "";
+  const firstH2 = (h.match(/<main[\s\S]*?<h2[^>]*>([^<]*)<\/h2>/) || [])[1];
+  check(`${path1} answers 200 raw, with its canonical address, a robots tag matching SITE_NOINDEX, the data time in the lead and the findings first`,
+    r.status === 200 && canonical.endsWith(path1) && robots === want && /^As of <time datetime="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ">/.test(lead) && firstH2 === "What this means",
+    JSON.stringify({ status: r.status, canonical, robots, lead: lead.slice(0, 120), firstH2 }));
+  check(`${path1} carries its figures as inline SVG with captions and loads only the site's own live-pages.js`,
+    /<figure>\s*<svg[^>]+role="img"/.test(h) && /<figcaption>/.test(h) && /<script src="(\.\.\/)+live-pages\.js" defer><\/script>/.test(h) && /<body data-live-v="1"/.test(h), path1);
+  if (f !== "iss-today/index.html") check(`${path1} credits MET Norway visibly`, h.includes("The Norwegian Meteorological Institute, shortened MET Norway"), path1);
+}
+const js = await rawGet("https://radar.test/live-pages.js");
+check("the shared live-pages.js is served", js.status === 200 && js.text.includes("function liveMain(d, w)") && !js.text.includes("liveZones"), String(js.status));
+// ---- the fleet and events pages (site/pages-events.mjs). The Starlink tracker is written at deploy time from the bundled satellites;
+// the launch and GDACS pages need data that public/ does not carry with a data time, so they are built here from the saved feeds of
+// 6 October (test/fixtures/events) with the live build itself and served beside dist/site, as hosting/pull.php would copy them in.
+const { buildLive } = await import("./site/build-live.mjs");
+const { countryFixture } = await import("./test/helpers/satfixture.mjs");
+const { EVENTS_DIR, EVENTS_NOW } = await import("./test/helpers/eventsfixture.mjs");
+const overlay = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-events-"));
+{
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-events-data-")), fx = countryFixture(), base = "satellites/S1";
+  fs.mkdirSync(path.join(data, base), { recursive: true });
+  for (const [n, b] of [["details.bin", fx.details], ["swarm.bin", fx.swarm], ["satmeta.json", JSON.stringify(fx.meta)]]) fs.writeFileSync(path.join(data, base, n), b);
+  fs.cpSync(EVENTS_DIR, data, { recursive: true, filter: (src) => !src.endsWith("manifest.json") });
+  const m = JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, "manifest.json"), "utf8"));
+  m.feeds.satellites = { version: "S1", files: { "details.bin": `${base}/details.bin`, "swarm.bin": `${base}/swarm.bin`, "satmeta.json": `${base}/satmeta.json` } };
+  fs.writeFileSync(path.join(data, "manifest.json"), JSON.stringify(m));
+  const r = buildLive({ dataDir: data, outDir: overlay, now: EVENTS_NOW, noindex: process.env.SITE_NOINDEX === "1", bounds: { min: 5, max: 1000 }, starlinkMin: 50 });
+  check("the launch and GDACS pages build from the saved feeds", r.failed.length === 0 && ["rocket-launches/index.html", "natural-disasters-now/index.html"].every((f) => fs.existsSync(path.join(overlay, f))), JSON.stringify(r.failed));
+  fs.rmSync(data, { recursive: true, force: true });
+}
+// live: an optional mocked live folder { "manifest.json": object, "<path>": object }, served at /live/
+const serveEvents = (c, live = null) => c.route("https://radar.test/**", (route) => {
+  const u = new URL(route.request().url());
+  const rel = decodeURIComponent(u.pathname.slice(1)).replace(/(^|\/)$/, "$1index.html");
+  if (live && rel.startsWith("live/")) {
+    const body = live[rel.slice(5)];
+    return body ? route.fulfill({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) : route.fulfill({ status: 404, body: "" });
+  }
+  const f = ["rocket-launches/index.html", "natural-disasters-now/index.html"].includes(rel) ? path.join(overlay, rel) : path.join(site, rel);
+  if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return route.fulfill({ status: 404, headers: { "content-type": "text/html" }, body: "<html><body>Not found</body></html>" });
+  return route.fulfill({ status: 200, headers: { "content-type": MIME[path.extname(f)] || "application/octet-stream" }, body: fs.readFileSync(f) });
+});
+check("the site carries the live pages' shared script, under 20 KB", fs.existsSync(site + "live-pages.js") && fs.statSync(site + "live-pages.js").size < 20 * 1024);
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serveEvents(c);
+  const pg = await c.newPage();
+  for (const f of EVENT_FILES) {
+    const path1 = "/" + f.replace(/index\.html$/, "");
+    const r = await pg.evaluate(async (u) => { const x = await fetch(u); return { status: x.status, text: await x.text() }; }, "https://radar.test" + path1);
+    const h = r.text;
+    const canonical = (h.match(/<link rel="canonical" href="([^"]+)">/) || [])[1] || "";
+    const robots = (h.match(/<meta name="robots" content="([^"]+)">/) || [])[1];
+    const lead = (h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "";
+    check(`${path1} answers 200 raw, with its canonical address, a robots tag matching SITE_NOINDEX, a number in the lead and the data time`,
+      r.status === 200 && canonical.endsWith(path1) && robots === want && /^As of <time datetime="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ">/.test(lead) && /<strong>[^<]*(<span[^>]*>)?[\d,]+/.test(lead) && /<figure/.test(h),
+      JSON.stringify({ status: r.status, canonical, robots, lead: lead.slice(0, 160) }));
+  }
+  await pg.close();
+  await c.close();
+}
+// with JavaScript: no console errors, sorting, local times and the in-place refresh from a mocked live folder; without it: the same content
+{
+  const errs = [];
+  const nowIso = new Date(Date.now() - 60e3).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const launches = JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, "manifest.json"), "utf8")).feeds.launches.files["launches.json"]), "utf8"));
+  launches.generated = nowIso;
+  launches.launches = [{ ...launches.launches[0], name: "Test Rocket | Mocked refresh", net: new Date(Date.now() + 5 * 86400e3).toISOString().replace(/\.\d{3}Z$/, "Z"), precision: "MIN" }];
+  const live = { "manifest.json": { feeds: { launches: { version: "MOCK", sourceTime: nowIso, files: { "launches.json": "launches/MOCK/launches.json" } } } }, "launches/MOCK/launches.json": launches };
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block", timezoneId: "Asia/Kolkata" });
+  await serveEvents(c, live);
+  const pg = await c.newPage();
+  pg.on("console", (m) => { if (m.type() === "error") errs.push(m.text().slice(0, 200)); });
+  pg.on("pageerror", (e) => errs.push(e.message.slice(0, 200)));
+  await pg.goto("https://radar.test/rocket-launches/", { waitUntil: "load", timeout: 60000 });
+  const refreshed = await pg.waitForFunction(() => { const e = document.querySelector('[data-live-key="next-name"]'); return e && e.textContent === "Test Rocket | Mocked refresh" && e.classList.contains("live-new"); }, null, { timeout: 20000 }).then(() => true, () => false);
+  const st = await pg.evaluate(() => ({ status: (document.querySelector("[data-live-status]") || {}).textContent, n30: (document.querySelector('[data-live-key="launches-30"]') || {}).textContent, local: document.querySelectorAll("main .lt").length }));
+  check("rocket launches: the live refresh reads the mocked live folder and updates the next launch and the 30 day count in place, marked", refreshed && st.n30 === "1" && /Updated in place/.test(st.status || ""), JSON.stringify(st));
+  check("rocket launches: times outside tables are also shown in the reader's time zone", st.local > 0, JSON.stringify(st));
+  const sorted = await pg.evaluate(() => {
+    // the first table of more than 8 rows with a plain-text column that has a sort button (no data-sort values, not all numbers): its third column
+    // used to be assumed, but a two-column table can come first
+    for (const t of document.querySelectorAll("main .tablewrap table")) {
+      const body = t.tBodies[0];
+      if (!body || body.rows.length <= 8 || !t.tHead) continue;
+      const cols = t.tHead.rows[0].cells.length;
+      for (let j = 0; j < cols; j++) {
+        const head = t.tHead.rows[0].cells[j];
+        const rows = [...body.rows];
+        if (!head.querySelector("button")) continue;
+        if (rows.some((r) => !r.cells[j] || r.cells[j].hasAttribute("data-sort") || /^[\d.,\s%+-]*$/.test(r.cells[j].textContent.trim()))) continue;
+        const firstCol = () => [...t.tBodies[0].rows].map((r) => r.cells[j].textContent);
+        const before = firstCol();
+        head.querySelector("button").click();
+        const asc = firstCol();
+        head.querySelector("button").click();
+        return { col: j, before, asc, desc: firstCol(), aria: head.getAttribute("aria-sort"), filter: !!t.parentNode.previousElementSibling && t.parentNode.previousElementSibling.type === "search" };
+      }
+    }
+    return null;
+  });
+  const sortedOk = sorted && JSON.stringify(sorted.asc) === JSON.stringify([...sorted.before].sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0))) && JSON.stringify(sorted.desc) === JSON.stringify([...sorted.asc].reverse()) && sorted.aria === "descending" && sorted.filter;
+  check("rocket launches: a table of more than 8 rows sorts both ways by a header button, sets aria-sort and has a filter box", !!sortedOk, JSON.stringify(sorted).slice(0, 300));
+  await pg.goto("https://radar.test/natural-disasters-now/", { waitUntil: "load", timeout: 60000 });
+  await pg.waitForTimeout(500);
+  await pg.goto("https://radar.test/starlink-tracker/", { waitUntil: "load", timeout: 60000 });
+  await pg.waitForTimeout(500);
+  check("the three pages run the shared script with no console errors", errs.length === 0, errs.join(" | "));
+  await c.close();
+  // JavaScript off: the same numbers, tables and figures are there
+  const off = await browser.newContext({ viewport: { width: 1280, height: 800 }, javaScriptEnabled: false, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serveEvents(off);
+  const p2 = await off.newPage();
+  for (const f of EVENT_FILES) {
+    await p2.goto("https://radar.test/" + f.replace(/index\.html$/, ""), { waitUntil: "load", timeout: 60000 });
+    const raw = fs.readFileSync(f === "starlink-tracker/index.html" ? site + f : path.join(overlay, f), "utf8");
+    const seen = await p2.evaluate(() => ({ rows: document.querySelectorAll("main tbody tr").length, figures: document.querySelectorAll("main figure svg").length, lead: document.querySelector(".lead").innerText }));
+    check(`${f}: with JavaScript off the page shows every table row, figure and the lead's numbers`, seen.rows === (raw.match(/<tbody>[\s\S]*?<\/tbody>/g) || []).reduce((n, b) => n + (b.match(/<tr/g) || []).length, 0) && seen.figures === (raw.match(/<figure/g) || []).length && /\d/.test(seen.lead), JSON.stringify(seen).slice(0, 200));
+  }
+  await off.close();
+}
+fs.rmSync(overlay, { recursive: true, force: true });
+
 const about = await ctx.newPage();
 await about.goto("https://radar.test/about/", { waitUntil: "load", timeout: 60000 });
 const aboutInfo = await about.evaluate(() => ({
@@ -171,6 +325,9 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   check(`${label}: the home page with the text section starts`, up && plain.up, errs.join(" | "));
   if (!up) { await c.close(); continue; }
   const after = await firstScreen(pg);
+  // once the app has loaded, the loader's h1 is gone and the text section's h1 is the page's one rendered h1
+  const h1s = await pg.evaluate(() => [...document.querySelectorAll("h1")].filter((e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden").map((e) => e.textContent));
+  check(`${label}: after load there is exactly one rendered h1, the text section's`, h1s.length === 1 && h1s[0] === HOME_H1, JSON.stringify(h1s));
   check(`${label}: the first screen is laid out exactly as without the text section (stats strip, tab bar, canvas, top bar, layer chips, no scrollbar)`, JSON.stringify(before) === JSON.stringify(after), `${JSON.stringify(before)} against ${JSON.stringify(after)}`);
   const s0 = await textState(pg);
   check(`${label}: the section is in the page below the first screen and not in view at load`, s0.top !== null && s0.y === 0 && s0.top >= s0.vh, JSON.stringify(s0));
@@ -249,8 +406,12 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
       check(`${label}: "Back to the globe" returns the page to the top`, s5.y === 0, JSON.stringify(s5));
     }
   }
-  const words = await pg.evaluate(() => (document.getElementById("about-home").innerText.match(/\b[\w'-]+\b/g) || []).length);
-  check(`${label}: the section shows its text (500 to 700 words) with no page errors`, words >= 500 && words <= 700 && errs.length === 0, `${words} words; ${errs.join(" | ")}`);
+  // the answers keep the design's 500 to 700 words; the live block (strip labels, one explanation, the row of live pages) is counted on
+  // its own, as in test/site.test.js
+  const count = (t) => (t.match(/\b[\w'-]+\b/g) || []).length;
+  const { all, live } = await pg.evaluate(() => ({ all: document.getElementById("about-home").innerText, live: document.querySelector("#about-home .home-live").innerText }));
+  const words = count(all) - count(live), liveWords = count(live);
+  check(`${label}: the section shows its text (500 to 700 words of answers, 60 to 200 in the live block) with no page errors`, words >= 500 && words <= 700 && liveWords >= 60 && liveWords <= 200 && errs.length === 0, `${words} words of answers, ${liveWords} in the live block; ${errs.join(" | ")}`);
   await c.close();
 }
 
@@ -264,6 +425,34 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   await pg.click(".home-more"); await pg.waitForTimeout(500);
   const st = await pg.evaluate(() => ({ y: Math.round(scrollY), top: Math.round(document.getElementById("about-home").getBoundingClientRect().top), vh: innerHeight }));
   check("with JavaScript off, the read-more link is shown on a phone and brings the text into view", shown && st.y > 0 && st.top >= 0 && st.top < st.vh, JSON.stringify({ shown, st }));
+  const strip = await pg.evaluate(() => ({ labels: [...document.querySelectorAll("#home-strip dt")].map((e) => e.textContent), values: [...document.querySelectorAll("#home-strip dd")].map((e) => e.textContent), status: document.querySelector(".home-strip-status").textContent, note: document.querySelector(".home-strip-note").textContent, h1: [...document.querySelectorAll("#about-home h1")].length }));
+  check("with JavaScript off, the strip shows its labels, a dash for every value and where the figures come from", JSON.stringify(strip.labels) === JSON.stringify(STRIP_FIGURES.map(([, l]) => l)) && strip.values.every((v) => v === "-") && strip.values.length === 6 && strip.status === "" && /These figures load from the site's live data in your browser/.test(strip.note) && strip.h1 === 1, JSON.stringify(strip));
+  await c.close();
+}
+
+// with a pretend live folder (the test pack the live suite uses, with a dated earthquake list), the strip fills its six values from it,
+// worked out the same way as the unit-tested functions, and the page logs no errors
+{
+  const taken = new Date(Date.now() - 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const pack = livePack({ taken });
+  const ago = (min) => new Date(Date.parse(taken) - min * 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  pack.files["live/quakes/v1/quakes.json"] = { generated: taken, events: [5.5, 4.1, 2.7].map((mag, i) => ({ id: `t${i}`, mag, place: "Test place", time: ago(30 + i * 60), lat: 1 + i, lon: 2, depth: 10, status: "reviewed", felt: 0, url: "" })) };
+  const live = new Map(Object.entries(pack.files));
+  const docs = Object.fromEntries(["quakes", "kp", "storms", "fires", "launches"].map((k) => [k, pack.files[`live/${pack.manifest.feeds[k].files[k + ".json"]}`]]));
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serve(c, { missing: [], live });
+  const pg = await c.newPage();
+  const errs = [];
+  pg.on("console", (m) => { if (m.type() === "error" && !/Service Worker registration blocked|status of 404/.test(m.text())) errs.push("console.error: " + m.text().slice(0, 200)); });
+  pg.on("pageerror", (e) => errs.push("pageerror: " + e.message.slice(0, 200)));
+  await pg.goto("https://radar.test/", { waitUntil: "commit", timeout: 60000 });
+  const up = await pg.waitForFunction(() => !document.getElementById("loader") && !!window.__radar, null, { timeout: 120000 }).then(() => true, () => false);
+  const filled = await pg.waitForFunction(() => [...document.querySelectorAll("#home-strip dd")].every((e) => e.textContent !== "-"), null, { timeout: 30000 }).then(() => true, () => false);
+  const shown = await pg.evaluate(() => ({ values: Object.fromEntries([...document.querySelectorAll("#home-strip dd")].map((e) => [e.getAttribute("data-fig"), e.textContent])), status: document.querySelector(".home-strip-status").textContent }));
+  const want = stripFigures(pack.manifest, docs, Date.now(), STRIP_LIMITS);
+  check("with a mocked live folder, the strip shows its six values, the same as the unit-tested functions give", up && filled && JSON.stringify(shown.values) === JSON.stringify(Object.fromEntries(STRIP_FIGURES.map(([k]) => [k, want.values[k]]))) && shown.values.quakes === "3" && shown.values.largest === "5.5", JSON.stringify({ up, filled, shown, want: want.values }));
+  check("with a mocked live folder, the strip gives the data time in UTC and calmly names a feed older than its limit", /^Live data published \d{4}-\d\d-\d\d \d\d:\d\d UTC\./.test(shown.status) && /Kp \(more than 8 hours old\)/.test(shown.status), shown.status);
+  check("with a mocked live folder, no page errors and no console errors", errs.length === 0, errs.join(" | "));
   await c.close();
 }
 

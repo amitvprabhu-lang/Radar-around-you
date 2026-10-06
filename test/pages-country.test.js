@@ -178,7 +178,7 @@ test("name families count the unnamed, and the largest-family answer appears onl
   const clear = namedFleet([...fam(30, "QPS"), ...fam(5, "STRIX"), ...fam(5, "GRUS"), ...fam(4, "AA"), ...fam(4, "BB"), ...fam(3, "CC"), { name: "2026-150A" }], []);
   assert.ok(textOf(clear.h).includes("Which name family is largest among satellites the catalogue records for Japan? QPS, with 30, ahead of GRUS and STRIX with 5 each; 1 has no name family, too few to change that order."), textOf(clear.h));
   // the group column: named "Most common CelesTrak group", explained under the table, and blank of a label below 5 satellites
-  assert.ok(close.h.includes("<th>Most common CelesTrak group</th>") && !close.h.includes("Main recorded purpose"));
+  assert.ok(close.h.includes('<th scope="col">Most common CelesTrak group</th>') && !close.h.includes("Main recorded purpose"));
   assert.ok(tc.includes("The group is the CelesTrak list a satellite is in, as the collector maps those lists to purposes; a satellite in several lists gets only one of them"));
   const famRows = tableCells(clear.h, "Largest name families").map((r) => r.map(textOf));
   assert.deepEqual(famRows.find((r) => r[0] === "QPS")[4], "Earth observation");
