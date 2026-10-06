@@ -227,14 +227,26 @@ check("the site carries the live pages' shared script, under 20 KB", fs.existsSy
   check("rocket launches: the live refresh reads the mocked live folder and updates the next launch and the 30 day count in place, marked", refreshed && st.n30 === "1" && /Updated in place/.test(st.status || ""), JSON.stringify(st));
   check("rocket launches: times outside tables are also shown in the reader's time zone", st.local > 0, JSON.stringify(st));
   const sorted = await pg.evaluate(() => {
-    const t = [...document.querySelectorAll("main .tablewrap table")].find((x) => x.tBodies[0].rows.length > 8);
-    if (!t) return null;
-    const firstCol = () => [...t.tBodies[0].rows].map((r) => r.cells[2].textContent);
-    const before = firstCol();
-    t.tHead.rows[0].cells[2].querySelector("button").click();
-    const asc = firstCol();
-    t.tHead.rows[0].cells[2].querySelector("button").click();
-    return { before, asc, desc: firstCol(), aria: t.tHead.rows[0].cells[2].getAttribute("aria-sort"), filter: !!t.parentNode.previousElementSibling && t.parentNode.previousElementSibling.type === "search" };
+    // the first table of more than 8 rows with a plain-text column that has a sort button (no data-sort values, not all numbers): its third column
+    // used to be assumed, but a two-column table can come first
+    for (const t of document.querySelectorAll("main .tablewrap table")) {
+      const body = t.tBodies[0];
+      if (!body || body.rows.length <= 8 || !t.tHead) continue;
+      const cols = t.tHead.rows[0].cells.length;
+      for (let j = 0; j < cols; j++) {
+        const head = t.tHead.rows[0].cells[j];
+        const rows = [...body.rows];
+        if (!head.querySelector("button")) continue;
+        if (rows.some((r) => !r.cells[j] || r.cells[j].hasAttribute("data-sort") || /^[\d.,\s%+-]*$/.test(r.cells[j].textContent.trim()))) continue;
+        const firstCol = () => [...t.tBodies[0].rows].map((r) => r.cells[j].textContent);
+        const before = firstCol();
+        head.querySelector("button").click();
+        const asc = firstCol();
+        head.querySelector("button").click();
+        return { col: j, before, asc, desc: firstCol(), aria: head.getAttribute("aria-sort"), filter: !!t.parentNode.previousElementSibling && t.parentNode.previousElementSibling.type === "search" };
+      }
+    }
+    return null;
   });
   const sortedOk = sorted && JSON.stringify(sorted.asc) === JSON.stringify([...sorted.before].sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0))) && JSON.stringify(sorted.desc) === JSON.stringify([...sorted.asc].reverse()) && sorted.aria === "descending" && sorted.filter;
   check("rocket launches: a table of more than 8 rows sorts both ways by a header button, sets aria-sort and has a filter box", !!sortedOk, JSON.stringify(sorted).slice(0, 300));
