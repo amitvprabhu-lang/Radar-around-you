@@ -301,7 +301,9 @@ test("hub findings: the clearest city, the cities with no window, the longest an
   const f = S.hubFindings(REAL);
   assert.match(f[0], /^New York has the clearest best window of the 6 cities: 0 percent cloud/);
   assert.ok(f.some((x) => /^Tromsø has no best window tonight/.test(x)));
-  assert.ok(f.some((x) => /^The longest night is in Tokyo/.test(x)));
+  // on 6 October New York and London were already dark at the forecast time: they are not ranked against the whole nights
+  assert.ok(f.some((x) => /^Of the 3 nights measured from sunset to sunrise, the longest is in Tokyo \(12 h 22 min\) and the shortest in Sydney \(11 h 23 min\)\.$/.test(x)), f.join(" | "));
+  assert.ok(f.some((x) => /^In New York, London and Tromsø the nights were already under way at the forecast time/.test(x)), f.join(" | "));
   assert.ok(f.length >= 3 && f.length <= 6);
   const june = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: "2026-06-21T12:00:00Z", from: "2026-06-21T12:00:00Z" }), sky: skyData(), now: new Date("2026-06-21T13:00:00Z") });
   assert.ok(S.hubFindings([june]).some((x) => /In Tromsø the Sun does not set tonight/.test(x)));
@@ -319,4 +321,98 @@ test("time words: local times carry the weekday only on another day, zones give 
   assert.equal(S.compassWords(112.5), "east-southeast");
   assert.equal(S.moonPhrase("Full Moon"), "full");
   assert.equal(S.moonPhrase("Waning crescent"), "a waning crescent");
+});
+
+// ------------------------------------------------------------------ review fix round (2026-10-06)
+test("review: the hub ranks only whole nights; nights already under way are given as remaining darkness, never ranked", () => {
+  const at = (id, iso) => S.summariseCity(cityOf(id), { clouds: cloudsDoc([id], { updated: iso, from: iso }), sky: skyData(), now: new Date(Date.parse(iso) + H) });
+  // 21:00 UTC: Pune (02:30 local) and London (22:00 local) are dark already; Tokyo (06:00) and Sydney (08:00) start at sunset
+  const mix = [at("pune", "2026-10-06T21:00:00Z"), at("london", "2026-10-06T21:00:00Z"), at("tokyo", "2026-10-06T21:00:00Z"), at("sydney", "2026-10-06T21:00:00Z")];
+  assert.deepEqual(mix.map((x) => x.night.startsAtData), [true, true, false, false]);
+  const f = S.hubFindings(mix);
+  const rank = f.find((x) => /^Of the 2 nights measured from sunset to sunrise/.test(x));
+  assert.ok(rank && /longest is in (Tokyo|Sydney)/.test(rank) && /shortest in (Tokyo|Sydney)/.test(rank) && !/Pune|London/.test(rank), rank);
+  assert.ok(f.some((x) => /^In Pune and London the nights were already under way at the forecast time, so their pages give the remaining darkness: \d+ h \d\d min until sunrise in Pune and \d+ h \d\d min until sunrise in London\.$/.test(x)), f.join(" | "));
+  // one whole night only: nothing to rank
+  assert.ok(!S.hubFindings([mix[0], mix[2]]).some((x) => /measured from sunset to sunrise/.test(x)));
+  assert.ok(S.hubFindings([mix[0]]).some((x) => /^In Pune the night was already under way/.test(x)));
+});
+
+test("review: the hub's Moon is one figure at one stated UTC moment, with the range the city pages show", () => {
+  const f = S.hubFindings(REAL, { at: Date.parse("2026-10-06T01:17:49Z") });
+  const m = S.moonAt(Date.parse("2026-10-06T01:17:49Z"));
+  const pcts = REAL.map((x) => x.moon.illumPct), lo = Math.min(...pcts), hi = Math.max(...pcts);
+  assert.ok(lo < hi, "the cities' own chart times give different figures");
+  const line = f.find((x) => x.startsWith("At 01:17 UTC on 6 October 2026 the Moon is"));
+  assert.equal(line, `At 01:17 UTC on 6 October 2026 the Moon is a ${m.phaseName.toLowerCase()}, ${m.illumPct} percent lit, as seen from anywhere; the city pages give it at each city's own chart time, from ${lo} to ${hi} percent.`);
+  assert.ok(!f.some((x) => /the same phase for every city/.test(x)));
+});
+
+test("review: a night whose Sun never gets 6 degrees down (Tromsø, 10 May and 5 August 2026) says twilight, not cloud", () => {
+  for (const iso of ["2026-05-10T12:00:00Z", "2026-08-05T12:00:00Z"]) {
+    const s = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: iso, from: iso, cloud: 5 }), sky: skyData(), now: new Date(Date.parse(iso) + H) });
+    assert.equal(s.night.kind, "night");
+    assert.equal(s.twilightOnly, true);
+    assert.equal(s.strip.best, null);
+    assert.ok(s.dark.lowestSunAlt > S.DARK_SUN_ALT && s.dark.lowestSunAlt < 0);
+    assert.equal(s.summary, "The Sun sets in Tromsø tonight but never gets 6 degrees below the horizon, so the sky stays in twilight and no hour gets a viewing score.");
+    assert.ok(s.findings.some((x) => /stays in twilight; that, not the cloud, is why there is no best window\.$/.test(x)), s.findings.join(" | "));
+    assert.ok(!s.findings.some((x) => /^No hour tonight reaches/.test(x)), "cloud is not given as the cause");
+    assert.ok(S.hubFindings([s]).some((x) => /^In Tromsø the Sun sets but stays less than 6 degrees below the horizon/.test(x)));
+    assert.ok(!S.hubFindings([s]).some((x) => /no best window tonight on the viewing score/.test(x)));
+  }
+  // polar day and polar night keep their own words
+  const day = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: "2026-06-21T12:00:00Z", from: "2026-06-21T12:00:00Z", cloud: 5 }), sky: skyData(), now: new Date("2026-06-21T13:00:00Z") });
+  assert.equal(day.twilightOnly, false);
+  assert.match(day.summary, /^The Sun does not set in Tromsø/);
+  const night = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: "2026-12-21T12:00:00Z", from: "2026-12-21T12:00:00Z", cloud: 5 }), sky: skyData(), now: new Date("2026-12-21T13:00:00Z") });
+  assert.equal(night.twilightOnly, false);
+  assert.ok(night.dark.any);
+  assert.match(night.findings[0], /^The Sun does not rise here in the 24 hours/);
+  // a normal night is not twilight
+  for (const x of REAL) assert.equal(x.twilightOnly, false);
+});
+
+test("review: every rise and set in the night is given in order, and 'highest in the dark' falls inside a time the body is up", () => {
+  const t = (ms) => new Date(ms).toISOString().slice(11, 16);
+  const start = Date.parse("2026-10-04T15:53:00Z"), end = Date.parse("2026-10-05T05:14:00Z");
+  // a Jupiter-like track in Tromsø: up at nightfall, sets 16:42, rises again 22:00, still up at sunrise
+  const events = [{ kind: "set", t: Date.parse("2026-10-04T16:42:00Z") }, { kind: "rise", t: Date.parse("2026-10-04T22:00:00Z") }];
+  assert.equal(S.eventsPhrase(events, true, t, "nightfall"), "up at nightfall, sets at 16:42, rises again at 22:00");
+  assert.deepEqual(S.upSpans(events, true, start, end), [{ from: start, to: events[0].t }, { from: events[1].t, to: end }]);
+  assert.equal(S.eventsPhrase([{ kind: "rise", t: start + H }, { kind: "set", t: start + 5 * H }, { kind: "rise", t: start + 12 * H }], false, t), "rises at 16:53, sets at 20:53, rises again at 03:53");
+  assert.equal(S.eventsPhrase([], true, t), "up all night");
+  assert.equal(S.eventsPhrase([], false, t), "below the horizon all night");
+  // the real pages: every planet's and the Moon's best time lies in one of its up spans, and every event is in the window
+  for (const s of REAL) {
+    for (const p of s.planets) {
+      for (const e of p.events) assert.ok(e.t >= s.night.start && e.t <= s.night.end);
+      if (p.best) assert.ok(S.upSpans(p.events, p.upAtStart, s.night.start, s.night.end).some((u) => p.best.t >= u.from - 10 * MIN && p.best.t <= u.to + 10 * MIN), `${s.city.id} ${p.name}`);
+    }
+    const f = s.findings.find((x) => x.startsWith("The Moon is"));
+    for (const e of s.moon.events) assert.ok(f.includes(S.localText(e.t, s.night.start, s.tz)), `${s.city.id}: ${f}`);
+  }
+});
+
+test("review: the best window ends when darkness ends, not at sunrise (Pune, 6 October)", () => {
+  const pune = REAL.find((x) => x.city.id === "pune");
+  const b = pune.strip.best;
+  assert.ok(b.end < pune.night.end, "before sunrise");
+  assert.ok(C.sunAltAz(pune.city.lat, pune.city.lon, new Date(b.end - MIN)).alt < S.DARK_SUN_ALT, "dark the minute before the end");
+  assert.ok(C.sunAltAz(pune.city.lat, pune.city.lon, new Date(b.end)).alt >= S.DARK_SUN_ALT, "twilight at the end");
+  assert.equal(S.hm(b.end, "Asia/Kolkata"), S.hm(pune.dark.last + MIN, "Asia/Kolkata"));
+  for (const s of REAL) if (s.strip.best) assert.ok(s.strip.best.end <= s.dark.last + MIN, s.city.id);
+});
+
+test("review: a clock change in the night is found, and the repeated hour carries its offset (London 25 October, Sydney 4 October 2026)", () => {
+  const lon = S.summariseCity(cityOf("london"), { clouds: cloudsDoc(["london"], { updated: "2026-10-24T18:00:00Z", from: "2026-10-24T18:00:00Z" }), sky: skyData(), now: new Date("2026-10-24T19:00:00Z") });
+  assert.deepEqual({ ...lon.clock, at: new Date(lon.clock.at).toISOString() }, { at: "2026-10-25T01:00:00.000Z", before: "UTC+01:00", after: "UTC+00:00" });
+  assert.equal(S.localText(Date.parse("2026-10-25T00:30:00Z"), lon.night.start, "Europe/London"), "Sun 25 Oct 01:30 (UTC+01:00)");
+  assert.equal(S.localText(Date.parse("2026-10-25T01:30:00Z"), lon.night.start, "Europe/London"), "Sun 25 Oct 01:30 (UTC+00:00)");
+  assert.equal(S.localText(Date.parse("2026-10-25T04:00:00Z"), lon.night.start, "Europe/London"), "Sun 25 Oct 04:00", "an unambiguous time has no offset");
+  const hours = lon.strip.hours.map((h) => S.localText(h.t, lon.night.start, "Europe/London"));
+  assert.equal(new Set(hours).size, hours.length, "every hour of the table reads differently");
+  const syd = S.summariseCity(cityOf("sydney"), { clouds: cloudsDoc(["sydney"], { updated: "2026-10-03T06:00:00Z", from: "2026-10-03T06:00:00Z" }), sky: skyData(), now: new Date("2026-10-03T07:00:00Z") });
+  assert.deepEqual([syd.clock.before, syd.clock.after, new Date(syd.clock.at).toISOString()], ["UTC+10:00", "UTC+11:00", "2026-10-03T16:00:00.000Z"]);
+  assert.equal(REAL.find((x) => x.city.id === "pune").clock, null);
 });

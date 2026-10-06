@@ -172,25 +172,6 @@ export function mergeRefresh(current, fresh) {
   return { values: values, changed: changed };
 }
 
-// The sky pages' time zone switch (design section 8.1 f): a time as a clock time in a zone, "21:47", with the weekday and date in front
-// when its local day differs from the reference time's ("Wed 7 Oct 01:30"), the same form the pages print. null for a value that is not
-// a time, or a zone the browser does not know.
-export function zoneTimeText(iso, timeZone, refIso) {
-  var d = new Date(iso);
-  if (typeof iso !== "string" || isNaN(d.getTime())) return null;
-  try {
-    var tz = timeZone || undefined;
-    var dayOf = function (x) { return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(x); };
-    var hm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
-    var ref = refIso ? new Date(refIso) : null;
-    if (!ref || isNaN(ref.getTime()) || dayOf(ref) === dayOf(d)) return hm;
-    var p = {};
-    new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short", day: "numeric", month: "short" }).formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
-    return p.weekday + " " + p.day + " " + p.month + " " + hm;
-  } catch (e) {
-    return null;
-  }
-}
 
 // ------------------------------------------------------------------ browser parts (each wrapped so a failure stays silent)
 
@@ -206,7 +187,8 @@ function liveTimes(d) {
   var tz = "";
   try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { tz = ""; }
   if (!tz || tz === "UTC" || tz === "Etc/UTC") return;
-  // a sky page's local times (data-tz) get the zone switch instead (liveZones)
+  // a sky page's city-local times (data-tz) are left as they are: the sky pages are worked out for the city's own night, so their
+  // sentences, chart and headings stay in that zone (design section 8.1 f was dropped for them after review, see docs/sky-pages-sources.md)
   Array.prototype.forEach.call(d.querySelectorAll("main time[datetime]:not([data-tz])"), function (t) {
     if (t.closest && t.closest("table")) return;  // tables keep one time per cell
     var txt = localTimeText(t.getAttribute("datetime"), tz);
@@ -330,40 +312,15 @@ function liveRefresh(d, w) {
   w.setInterval(check, 300000);
 }
 
-// The sky pages: a button that switches every city-local time (time[data-tz]) between the city's zone and the reader's, and back.
-function liveZones(d) {
-  var times = Array.prototype.slice.call(d.querySelectorAll("main time[datetime][data-tz]"));
-  if (!times.length) return;
-  var mine = "";
-  try { mine = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { mine = ""; }
-  if (!mine || times.every(function (t) { return t.getAttribute("data-tz") === mine; })) return;
-  var shown = times.map(function (t) { return t.textContent; });
-  var mineText = times.map(function (t) { return zoneTimeText(t.getAttribute("datetime"), mine, t.getAttribute("data-ref")); });
-  if (mineText.some(function (x) { return x === null; })) return;
-  var b = d.createElement("button");
-  b.type = "button";
-  b.className = "live-filter";
-  b.setAttribute("aria-pressed", "false");
-  b.textContent = "Show these times in your time zone (" + mine + ")";
-  b.addEventListener("click", function () {
-    var on = b.getAttribute("aria-pressed") !== "true";
-    b.setAttribute("aria-pressed", String(on));
-    b.textContent = on ? "Showing your time zone (" + mine + "). Show the city's local time" : "Show these times in your time zone (" + mine + ")";
-    times.forEach(function (t, i) { t.textContent = on ? mineText[i] : shown[i]; });
-  });
-  var at = d.querySelector("main .meta") || d.querySelector("main h1");
-  if (at && at.parentNode) at.parentNode.insertBefore(b, at.nextSibling);
-}
-
 function liveMain(d, w) {
   var b = d.body;
   if (!b || b.getAttribute("data-live-v") !== "1") return;
-  [liveStyle, liveTimes, liveZones, liveTables, liveTips, liveCountdown, liveRefresh].forEach(function (f) { try { f(d, w); } catch (e) { /* each part fails silently */ } });
+  [liveStyle, liveTimes, liveTables, liveTips, liveCountdown, liveRefresh].forEach(function (f) { try { f(d, w); } catch (e) { /* each part fails silently */ } });
 }
 
 // The pure functions the browser parts use, in the order they are written into the script.
-const PURE = [cellSortValue, compareSortValues, sortOrder, filterMatch, localTimeText, countdownText, minutesAgoText, launchWhenText, launchesHeadline, stormNameToken, sameStormRule, disastersHeadline, feedState, mergeRefresh, zoneTimeText];
-const DOM = [liveStyle, liveTimes, liveZones, liveTables, liveTips, liveCountdown, liveRefresh, liveMain];
+const PURE = [cellSortValue, compareSortValues, sortOrder, filterMatch, localTimeText, countdownText, minutesAgoText, launchWhenText, launchesHeadline, stormNameToken, sameStormRule, disastersHeadline, feedState, mergeRefresh];
+const DOM = [liveStyle, liveTimes, liveTables, liveTips, liveCountdown, liveRefresh, liveMain];
 
 // The text of live-pages.js. Deterministic: the same code gives the same bytes.
 export function liveScriptSource() {

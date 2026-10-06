@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cityPage, skyHubPage, issPage, polarChartSvg, moonStripSvg, cloudStripSvg, issMapSvg, splitAtAntimeridian, webPageLd, MET_CREDIT } from "../site/pages-sky.mjs";
+import { cityPage, skyHubPage, issPage, polarChartSvg, moonStripSvg, cloudStripSvg, issMapSvg, splitAtAntimeridian, webPageLd, MET_CREDIT, SKY_SRC, chartSources, cloudWords, PHASE_NOTE } from "../site/pages-sky.mjs";
+import { liveScriptSource } from "../site/live-pages-js.mjs";
 import * as S from "../site/sky.mjs";
 import { renderPage, SITE, urlPath } from "../site/layout.mjs";
 import { xmlProblem } from "./helpers/xml.mjs";
@@ -156,7 +157,7 @@ test("method sections say what is computed with what, and that times are compute
     assert.ok(!bad, `${f}: ${bad && bad[0]}`);
   }
   const hub = textOf(mainOf(HTML.get(S.SKY_HUB_FILE)));
-  assert.ok(hub.includes("astronomy-engine") && hub.includes("SGP4") && hub.includes(`within ${S.RISE_SET_CHECK_MINUTES} minutes`));
+  assert.ok(hub.includes("astronomy-engine") && hub.includes("SGP4") && hub.includes("within 1 minute,") && !hub.includes("within 1 minutes"));
   assert.ok(hub.includes("The planet positions are not compared with a second source."));
   assert.ok(hub.includes("within 15 percent"));
   assert.ok(textOf(mainOf(HTML.get(S.ISS_FILE))).includes("The real-time view is the live globe"));
@@ -227,3 +228,85 @@ test("the WebPage helper gives the section 7 properties", () => {
   assert.deepEqual(Object.keys(w), ["@context", "@type", "name", "description", "url", "inLanguage", "dateModified", "isPartOf", "breadcrumb"]);
   assert.equal(w.breadcrumb.itemListElement.length, 2);
 });
+
+// ------------------------------------------------------------------ review fix round (2026-10-06)
+test("review: every star data source a page's chart draws is credited in its sources section, with its licence as recorded", () => {
+  const srcOf = (h) => h.slice(h.indexOf('<h2 id="sources">'), h.indexOf("</ul>", h.indexOf('<h2 id="sources">')));
+  for (const [f, h] of ALL) {
+    const chart = (h.match(/<svg[^>]*class="chart sky"[\s\S]*?<\/svg>/) || [])[0];
+    const src = srcOf(h);
+    if (!chart) { assert.ok(!src.includes(SKY_SRC.stars.url), `${f}: no chart, no star catalogue`); continue; }
+    if (/<circle cx="[^"]+" cy="[^"]+" r="[^"]+" fill="var\(--text\)"/.test(chart)) assert.ok(src.includes(SKY_SRC.stars.url) && src.includes("NOT CONFIRMED"), `${f}: the star catalogue`);
+    if (/stroke="var\(--violet\)"/.test(chart)) assert.ok(src.includes(SKY_SRC.figures.url) && src.includes("Its data licence is not stated: NOT CONFIRMED"), `${f}: d3-celestial`);
+    if (/font-size="11">[A-Z][^<]*<\/text>/.test(chart)) assert.ok(src.includes(SKY_SRC.csn.url) && src.includes("Creative Commons Attribution (CC BY)"), `${f}: IAU-CSN`);
+    if (/font-style="italic">/.test(chart)) assert.ok(src.includes(SKY_SRC.iau.url), `${f}: IAU constellation names`);
+  }
+  assert.ok(!srcOf(HTML.get(S.ISS_FILE)).includes(SKY_SRC.stars.url), "the ISS page draws no stars");
+  assert.deepEqual(chartSources({ stars: [], named: [], figures: [], constellationsUp: [] }), []);
+});
+
+test("review: the planet table gives every rise and set in order, and the Moon's path and phase convention are said in words", () => {
+  const s = structuredClone(SUMS.find((x) => x.city.id === "tromso"));
+  // a Jupiter-like body in Tromsø: up at nightfall, sets, rises again before midnight, highest in the dark later
+  const j = s.planets.find((p) => p.name === "Jupiter");
+  j.upAtStart = true; j.events = [{ kind: "set", t: s.night.start + 3600e3 }, { kind: "rise", t: s.night.start + 4 * 3600e3 }];
+  j.best = { t: s.night.start + 6 * 3600e3, alt: 29, az: 135 };
+  const t = (ms) => S.localText(ms, s.night.start, s.tz);
+  const h = renderPage(cityPage(s, { built, cities }));
+  const row = [...h.matchAll(/<tr><td>Jupiter<\/td>([\s\S]*?)<\/tr>/g)][0][1];
+  const tight = (x) => textOf(x).replace(/ ([,.;])/g, "$1");
+  assert.ok(tight(row).includes(`Up at the start, sets at ${t(j.events[0].t)}, rises again at ${t(j.events[1].t)}`), textOf(row));
+  assert.ok(tight(row).includes(`${t(j.best.t)}, 29° in the southeast`));
+  assert.ok(tight(mainOf(h)).includes(`Jupiter is up at the start, sets at ${t(j.events[0].t)}, rises again at ${t(j.events[1].t)}; while up in a dark sky it is highest at ${t(j.best.t)}, 29° in the southeast.`));
+  assert.ok(h.includes("<th scope=\"col\">Rises and sets tonight</th><th scope=\"col\">Highest while up in a dark sky</th>"));
+  for (const [f, hh] of HTML) if (f.startsWith("tonights-sky/") && f !== S.SKY_HUB_FILE) assert.ok(textOf(mainOf(hh)).includes(PHASE_NOTE.replace(/\\"/g, '"')), f);
+  const syd = textOf(mainOf(HTML.get(S.skyCityFile("sydney"))));
+  assert.ok(/Tonight it rises in the [a-z-]+ at Wed 7 Oct 04:20 ?\./.test(syd), syd.slice(0, 200));
+  assert.ok(!/\b(Mercury|Venus|Mars|Jupiter|Saturn) is rises\b/.test(syd));
+});
+
+test("review: the weather in words follows the hourly forecast", () => {
+  const t = (ms) => new Date(ms).toISOString().slice(11, 16);
+  const h0 = Date.parse("2026-10-06T18:00:00Z"), hr = (i, cloud) => ({ t: h0 + i * 3600e3, cloud });
+  assert.equal(cloudWords([hr(0, 0), hr(1, 10), hr(2, 50), hr(3, 90), hr(4, 95)], t), "The forecast is mostly clear from 18:00 to 19:00, then partly cloudy at 20:00, then mostly cloudy from 21:00 to 22:00.");
+  assert.equal(cloudWords([hr(0, 80), hr(1, 99)], t), "The forecast is mostly cloudy all night.");
+  assert.equal(cloudWords([{ t: h0, cloud: null }], t), "");
+});
+
+test("review: twilight-only nights, clock changes and the repeated hour read correctly on the page", () => {
+  const twi = S.summariseCity(cityOf("tromso"), { clouds: cloudsDoc(["tromso"], { updated: "2026-05-10T12:00:00Z", from: "2026-05-10T12:00:00Z", cloud: 5 }), sky: skyData(), now: new Date("2026-05-10T13:00:00Z") });
+  const th = renderPage(cityPage(twi, { built, cities }));
+  assert.ok(textOf(th.match(/<p class="lead">[\s\S]*?<\/p>/)[0]).includes("the Sun sets in Tromsø tonight but never gets 6° below the horizon, so the sky stays in twilight and no hour gets a viewing score"));
+  assert.ok(!/no stretch of tonight[^.]*cloud/i.test(textOf(th.match(/<p class="lead">[\s\S]*?<\/p>/)[0])));
+  const lon = S.summariseCity(cityOf("london"), { clouds: cloudsDoc(["london"], { updated: "2026-10-24T18:00:00Z", from: "2026-10-24T18:00:00Z" }), sky: skyData(), now: new Date("2026-10-24T19:00:00Z") });
+  const lh = renderPage(cityPage(lon, { built, cities }));
+  assert.ok(textOf(lh).includes("Local times are Europe/London: UTC+01:00 until the clocks change at 01:00 UTC, UTC+00:00 after; a time in the repeated or skipped hour carries its offset."));
+  const rows = [...lh.match(/<caption>Hour by hour tonight[\s\S]*?<\/tbody>/)[0].matchAll(/<tr><td><time[^>]*>([^<]*)<\/time>/g)].map((m) => m[1]);
+  assert.equal(new Set(rows).size, rows.length, rows.join(" | "));
+  assert.ok(rows.includes("Sun 25 Oct 01:00 (UTC+01:00)") && rows.includes("Sun 25 Oct 01:00 (UTC+00:00)"), rows.join(" | "));
+});
+
+test("review: the sky pages' times stay in the city's zone: the shared script has no zone switch and does not touch time[data-tz]", () => {
+  const src = liveScriptSource();
+  assert.ok(!/liveZones|zoneTimeText/.test(src));
+  assert.ok(src.includes('main time[datetime]:not([data-tz])'), "the reader's-time note skips the city's local times");
+  for (const [f, h] of HTML) if (f !== S.ISS_FILE) assert.ok(/<time datetime="[^"]+Z" data-tz="[^"]+">/.test(h), f);
+  assert.ok(textOf(mainOf(HTML.get(S.SKY_HUB_FILE))).includes("Times on the city pages are each city's local time and are not converted to yours"));
+});
+
+// The text outside the tables and figures, where most of the typed wording is: shared 8-word runs between city pages, after numbers become
+// "n" and the city name "city". OURS: the limit is the figure measured on 2026-10-06 after this round, rounded up to the next 5 points.
+test("review: the city pages' text outside tables and figures differs city by city", (t) => {
+  const prose = (h, name) => textOf(mainOf(h).replace(/<div class="tablewrap"[\s\S]*?<\/table><\/div>/g, " ").replace(/<figure>[\s\S]*?<\/figure>/g, " ").replace(/<h2 id="sources">[\s\S]*$/, " "))
+    .split(name).join(" city ").toLowerCase().replace(/\d[\d,.:]*/g, " n ").split(/[^a-zø']+/).filter(Boolean);
+  const sh = SUMS.map((s) => { const w = prose(HTML.get(S.skyCityFile(s.city.id)), s.city.name), set = new Set(); for (let i = 0; i + 8 <= w.length; i++) set.add(w.slice(i, i + 8).join(" ")); return [s.city.name, set]; });
+  let worst = { j: 0 };
+  for (let i = 0; i < sh.length; i++) for (let k = i + 1; k < sh.length; k++) {
+    let c = 0; for (const x of sh[i][1]) if (sh[k][1].has(x)) c++;
+    const j = c / (sh[i][1].size + sh[k][1].size - c);
+    if (j > worst.j) worst = { j, pair: `${sh[i][0]} / ${sh[k][0]}` };
+  }
+  t.diagnostic(`worst pair outside tables ${worst.pair}: ${(worst.j * 100).toFixed(1)} percent of 8-word sequences shared`);
+  assert.ok(worst.j < NON_TABLE_LIMIT, `${worst.pair}: ${(worst.j * 100).toFixed(1)} percent`);
+});
+const NON_TABLE_LIMIT = 0.70;  // measured 67.8 percent (Pune / Tokyo) on 2026-10-06, was 88.7 before the review round

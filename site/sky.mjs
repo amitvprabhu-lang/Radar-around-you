@@ -84,8 +84,23 @@ export function utcOffset(ms, tz) {
 }
 // the phase as words after "The Moon is": "a waning crescent", "full", "at first quarter"
 export const moonPhrase = (name) => ({ "New Moon": "new", "Full Moon": "full", "First quarter": "at first quarter", "Last quarter": "at last quarter" })[name] || `a ${name.toLowerCase()}`;
+// A local time that is shown twice when the clocks go back (the repeated hour) carries its offset, so the two can be told apart.
+export function ambiguousLocal(ms, tz) {
+  const t = hm(ms, tz), o = utcOffset(ms, tz);
+  return [ms - HOUR_MS, ms + HOUR_MS].some((x) => hm(x, tz) === t && utcOffset(x, tz) !== o);
+}
+export const localText = (ms, refMs, tz) => `${whenLocal(ms, refMs, tz)}${ambiguousLocal(ms, tz) ? ` (${utcOffset(ms, tz)})` : ""}`;
+// The moment the zone's offset from UTC changes between two times (a clock change), to the minute, or null.
+export function clockChange(fromMs, toMs, tz) {
+  const a = utcOffset(fromMs, tz), b = utcOffset(toMs, tz);
+  if (a === b) return null;
+  let lo = fromMs, hi = toMs;
+  while (hi - lo > MIN_MS) { const mid = Math.floor((lo + hi) / 2 / MIN_MS) * MIN_MS; if (utcOffset(mid, tz) === a) lo = mid; else hi = mid; }
+  return { at: hi, before: a, after: b };
+}
 export const durationText = (ms) => { const m = Math.round(ms / MIN_MS); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min` : `${m} min`; };
 const r1 = (x) => Math.round(x * 10) / 10;
+const and = (list) => (list.length < 2 ? list.join("") : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`);
 // The app's 16-point compass (compassPoint in src/core.js) in words, for sentences
 const WORDS = { N: "north", E: "east", S: "south", W: "west" };
 export const compassWords = (az) => compassPoint(az).split("").map((ch) => WORDS[ch]).reduce((acc, w, i, all) => (all.length === 3 && i === 1 ? `${acc}-${w}` : `${acc}${w}`), "");
@@ -139,6 +154,30 @@ export function riseSetBetween(body, obs, fromMs, toMs) {
   }
   return out.sort((a, b) => a.t - b.t);
 }
+// The stretches of a window in which a body is up, from its events in time order and whether it is up at the start: [{ from, to }].
+export function upSpans(events, upAtStart, start, end) {
+  const spans = [];
+  let from = upAtStart ? start : null;
+  for (const e of events) {
+    if (e.kind === "rise" && from === null) from = e.t;
+    else if (e.kind === "set" && from !== null) { spans.push({ from, to: e.t }); from = null; }
+  }
+  if (from !== null) spans.push({ from, to: end });
+  return spans;
+}
+// Every rise and set in the window, in order, as words: "up at nightfall, sets at 18:42, rises again at 00:00".
+// t: the time formatter; first: what the start of the window is called ("nightfall" or "the start").
+export function eventsPhrase(events, upAtStart, t, first = "the start") {
+  if (!events.length) return upAtStart ? "up all night" : "below the horizon all night";
+  const parts = upAtStart ? [`up at ${first}`] : [];
+  const seen = { rise: false, set: false };
+  for (const e of events) {
+    parts.push(`${e.kind === "rise" ? "rises" : "sets"}${seen[e.kind] || (e.kind === "rise" && upAtStart) ? " again" : ""} at ${t(e.t)}`);
+    seen[e.kind] = true;
+  }
+  return parts.join(", ");
+}
+
 // Whether a body is above the horizon at a time, by the same rise and set convention: the next event after it is a set.
 function upAt(body, obs, ms) {
   const r = riseSet(body, obs, +1, ms, 2), s = riseSet(body, obs, -1, ms, 2);
@@ -156,7 +195,7 @@ export function moonTonight(city, win, { stepMin = 15, at = chartTime(win, city.
   const peak = track.reduce((a, b) => (b.alt > a.alt ? b : a));
   return {
     at, phaseDeg, phaseName: moonPhaseName(phaseDeg), illumPct: Math.round(illum * 100), waxing: phaseDeg < 180,
-    events: riseSetBetween(moon, obs, win.start, win.end), upAtStart: upAt(moon, obs, win.start), upAtEnd: upAt(moon, obs, win.end),
+    events: riseSetBetween(moon, obs, win.start, win.end).map((e) => ({ ...e, az: altOf(moon, obs, e.t).az })), upAtStart: upAt(moon, obs, win.start), upAtEnd: upAt(moon, obs, win.end),
     track, max: { t: peak.t, alt: peak.alt, az: altOf(moon, obs, peak.t).az },
   };
 }
@@ -241,6 +280,19 @@ export function checkClouds(id, c) {
   return { updated, hours };
 }
 
+// Darkness by the app's rule (the Sun more than 6 degrees below the horizon, sunAltAz in src/core.js, the function the score uses), sampled
+// every minute: the first and last dark minute of the window, the Sun's lowest altitude, and whether any minute is dark at all.
+export function darkness(city, win) {
+  let first = null, last = null, low = Infinity;
+  for (let t = win.start; t <= win.end; t += MIN_MS) {
+    const a = sunAltAz(city.lat, city.lon, new Date(t)).alt;
+    low = Math.min(low, a);
+    if (a < DARK_SUN_ALT) { if (first === null) first = t; last = t; }
+  }
+  return { any: first !== null, first, last, lowestSunAlt: low };
+}
+const isDark = (city, t) => sunAltAz(city.lat, city.lon, new Date(t)).alt < DARK_SUN_ALT;
+
 export function cloudNight(city, win, clouds) {
   const place = { lat: city.lat, lon: city.lon, clouds: { hours: clouds.hours } };
   const obs = obsOf(city);
@@ -250,10 +302,13 @@ export function cloudNight(city, win, clouds) {
   const known = scored.filter((h) => h.cloudKnown);
   const avg = (list) => (list.length ? Math.round(list.reduce((s, h) => s + h.cloud, 0) / list.length) : null);
   const inBest = best ? known.filter((h) => h.t >= best.start && h.t < best.endExclusive) : [];
+  // the window is whole hours of the app's score; it ends when darkness ends (the Sun climbs past 6 degrees below the horizon) and never
+  // after sunrise, so it never promises dark minutes that are twilight
+  let endMs = best ? Math.min(win.end, best.endExclusive.getTime()) : null;
+  if (best) for (let t = best.end.getTime(); t < endMs; t += MIN_MS) if (!isDark(city, t)) { endMs = t; break; }
   return {
     hours: scored.map((h) => ({ t: h.t.getTime(), cloud: h.cloudKnown ? Math.round(h.cloud) : null, score: h.score, sunAlt: h.sunAlt, moonAlt: h.moonAlt })),
-    // the window is whole hours of the app's score; its ends are kept inside the night, so it never runs past sunrise
-    best: best ? { start: Math.max(win.start, best.start.getTime()), end: Math.min(win.end, best.endExclusive.getTime()), hours: best.n, avgScore: best.avg, cloud: avg(inBest) } : null,
+    best: best ? { start: Math.max(win.start, best.start.getTime()), end: endMs, hours: best.n, avgScore: best.avg, cloud: avg(inBest) } : null,
     cloudAvg: avg(known), cloudMin: known.length ? Math.round(Math.min(...known.map((h) => h.cloud))) : null, cloudMax: known.length ? Math.round(Math.max(...known.map((h) => h.cloud))) : null,
     knownHours: known.length,
   };
@@ -312,16 +367,21 @@ export function summariseCity(city, { clouds, precise = null, sky = {}, now, all
     iss = e.status === "ok" ? { status: "ok", epoch: e.epoch, ageHours: e.ageHours, passes: issPasses(e, city, win.start, (win.end - win.start) / HOUR_MS) } : { ...e, passes: [] };
     delete iss.sat;
   }
-  const s = { feed: "clouds", city, dataTime: isoZ(c.updated), stale, tz: city.tz, offset: utcOffset(win.start, city.tz), night: win, chartAt: at, strip, moon, planets, chart, iss };
+  const dark = darkness(city, win);
+  const s = { feed: "clouds", city, dataTime: isoZ(c.updated), stale, tz: city.tz, offset: utcOffset(win.start, city.tz), clock: clockChange(win.start, win.end, city.tz), night: win, dark,
+    twilightOnly: win.kind !== "midnightSun" && !dark.any, chartAt: at, strip, moon, planets, chart, iss };
   s.summary = summarySentence(s);
   s.findings = cityFindings(s);
   return s;
 }
 
-const placeTime = (s, ms) => whenLocal(ms, s.night.start, s.tz);
+const placeTime = (s, ms) => localText(ms, s.night.start, s.tz);
+// what the start of the window is called in sentences: "nightfall" when the night starts at sunset, otherwise "the start"
+export const startWord = (s) => (s.night.kind === "night" && !s.night.startsAtData ? "nightfall" : "the start");
 export function summarySentence(s) {
   const n = s.night, name = s.city.name;
   if (n.kind === "midnightSun") return `The Sun does not set in ${name} in the 24 hours after the forecast time, so the sky does not get dark tonight.`;
+  if (s.twilightOnly) return `The Sun sets in ${name} tonight but never gets 6 degrees below the horizon, so the sky stays in twilight and no hour gets a viewing score.`;
   if (!s.strip.best) return `No stretch of tonight in ${name} reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${s.strip.cloudAvg !== null ? `; cloud averages ${s.strip.cloudAvg} percent over the night` : ""}.`;
   const b = s.strip.best;
   return `The best window tonight in ${name} is ${placeTime(s, b.start)} to ${placeTime(s, b.end)}${b.cloud !== null ? `, with ${b.cloud} percent cloud` : ""}.`;
@@ -335,31 +395,31 @@ export function cityFindings(s) {
     const low = s.strip.hours.length ? s.strip.hours.reduce((a, h) => (h.sunAlt < a.sunAlt ? h : a)) : null;
     if (low) out.push(`Even at its lowest in these hours, at ${t(low.t)}, the Sun is ${Math.round(low.sunAlt)} degrees above the horizon.`);
     if (s.strip.cloudAvg !== null) out.push(`Cloud averages ${s.strip.cloudAvg} percent over the 12 hours around local midnight in MET Norway's forecast.`);
-  }
-  else if (n.kind === "polarNight") out.push(`The Sun does not rise here in the 24 hours from ${t(n.start)}, so this page covers those 24 hours as one long night.`);
+  } else if (n.kind === "polarNight") out.push(`The Sun does not rise here in the 24 hours from ${t(n.start)}, so this page covers those 24 hours as one long night.`);
   else out.push(`The night lasts ${durationText(n.end - n.start)}, from ${n.startsAtData ? `${t(n.start)} (the Sun was already down at the forecast time)` : `sunset at ${t(n.start)}`} to sunrise at ${t(n.end)}.`);
+  if (s.twilightOnly) out.push(`The Sun gets no lower than ${Math.abs(Math.round(s.dark.lowestSunAlt))} degrees below the horizon tonight, short of the 6 degrees the viewing score needs, so the sky stays in twilight; that, not the cloud, is why there is no best window.`);
   const b = s.strip.best;
-  const moonSet = m.events.find((e) => e.kind === "set"), moonRise = m.events.find((e) => e.kind === "rise");
+  const moonSet = m.events.find((e) => e.kind === "set");
   if (b) {
-    const inside = (e) => e.t > b.start && e.t < b.end;
-    const ev = m.events.find(inside);
+    const inside = m.events.filter((e) => e.t > b.start && e.t < b.end);
     const upAtB = s.strip.hours.find((h) => h.t >= b.start) || null;
     const moonUp = upAtB ? upAtB.moonAlt > 0 : false;
-    const why = ev ? `the Moon ${ev.kind === "rise" ? "rises" : "sets"} at ${t(ev.t)}, inside the window (${m.illumPct} percent lit)`
+    const why = inside.length ? `the Moon ${inside.map((e) => `${e.kind === "rise" ? "rises" : "sets"} at ${t(e.t)}`).join(" and ")}, inside the window (${m.illumPct} percent lit)`
       : moonUp ? `the Moon, ${m.illumPct} percent lit, is up through the window`
       : moonSet && moonSet.t <= b.start ? `the Moon sets at ${t(moonSet.t)}, before the window starts` : "the Moon is below the horizon through the window";
     out.push(`The best window is ${t(b.start)} to ${t(b.end)}: ${why}${b.cloud !== null ? `, and the cloud forecast for it averages ${b.cloud} percent` : ""}.`);
     const d = direction(b.cloud, s.strip.cloudAvg);
     if (b.cloud !== null && s.strip.cloudAvg !== null && d) out.push(`Cloud in the best window (${b.cloud} percent) is ${d} the average for the whole night (${s.strip.cloudAvg} percent).`);
-  } else if (n.kind !== "midnightSun") {
-    out.push(`No hour tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on the viewing score${s.strip.cloudAvg !== null ? `: cloud averages ${s.strip.cloudAvg} percent` : ""}${m.illumPct >= 50 && (m.upAtStart || moonRise) ? `, and the Moon is ${m.illumPct} percent lit` : ""}.`);
+  } else if (n.kind !== "midnightSun" && !s.twilightOnly) {
+    const moonBright = m.illumPct >= 50 && (m.upAtStart || m.events.some((e) => e.kind === "rise"));
+    out.push(`No hour tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on the viewing score${s.strip.cloudAvg !== null ? `: cloud averages ${s.strip.cloudAvg} percent` : ""}${moonBright ? `, and the Moon is ${m.illumPct} percent lit` : ""}.`);
   }
-  const moonLine = m.upAtStart ? (moonSet ? `is up at the start and sets at ${t(moonSet.t)}` : "is up all night") : moonRise ? `rises at ${t(moonRise.t)}` : "stays below the horizon";
-  out.push(`The Moon is ${moonPhrase(m.phaseName)}, ${m.illumPct} percent lit, and ${moonLine}.`);
+  const moonDoes = eventsPhrase(m.events, m.upAtStart, t, startWord(s));
+  out.push(`The Moon is ${moonPhrase(m.phaseName)}, ${m.illumPct} percent lit, and ${/^(up|below)/.test(moonDoes) ? `is ${moonDoes}` : moonDoes}.`);
   const placed = s.planets.filter((p) => p.wellPlaced).sort((a, b2) => a.mag - b2.mag);
   if (placed.length) {
     const p = placed[0];
-    out.push(`${p.name} is the brightest planet well placed in the dark tonight (magnitude ${r1(p.mag).toFixed(1)}), highest at ${t(p.best.t)}, ${Math.round(p.best.alt)} degrees up in the ${compassWords(p.best.az)}${placed.length > 1 ? `; ${placed.length - 1} more ${placed.length - 1 === 1 ? "planet is" : "planets are"} well placed too` : ""}.`);
+    out.push(`${p.name} is the brightest planet well placed in the dark tonight (magnitude ${r1(p.mag).toFixed(1)}), highest in the dark at ${t(p.best.t)}, ${Math.round(p.best.alt)} degrees up in the ${compassWords(p.best.az)}${placed.length > 1 ? `; ${placed.length - 1} more ${placed.length - 1 === 1 ? "planet is" : "planets are"} well placed too` : ""}.`);
   } else if (n.kind !== "midnightSun") out.push(`None of the five naked-eye planets is ${PLANET_MIN_ALT} degrees or more up in a dark sky tonight.`);
   if (s.iss.status === "ok") {
     const ps = s.iss.passes, vis = ps.filter((p) => p.visible);
@@ -373,26 +433,42 @@ export function cityFindings(s) {
   return out.slice(0, 6);
 }
 
+// The Moon at one moment, the same everywhere: phase name and lit percent (for the hub, at the newest forecast time).
+export function moonAt(ms) {
+  const phaseDeg = Astro.MoonPhase(new Date(ms));
+  return { at: ms, phaseDeg, phaseName: moonPhaseName(phaseDeg), illumPct: Math.round(Astro.Illumination(Astro.Body.Moon, new Date(ms)).phase_fraction * 100) };
+}
+
 // ------------------------------------------------------------------ the hub
 // summaries: the city summaries that exist this run, in SKY_CITY_IDS order.
-export function hubFindings(summaries) {
+export function hubFindings(summaries, { at = null } = {}) {
   const out = [];
   const withBest = summaries.filter((s) => s.strip.best && s.strip.best.cloud !== null);
   if (withBest.length) {
     const clear = [...withBest].sort((a, b) => a.strip.best.cloud - b.strip.best.cloud || a.city.name.localeCompare(b.city.name))[0];
     out.push(`${clear.city.name} has the clearest best window of the ${summaries.length} cities: ${clear.strip.best.cloud} percent cloud from ${placeTime(clear, clear.strip.best.start)} to ${placeTime(clear, clear.strip.best.end)} local time.`);
   }
-  const none = summaries.filter((s) => s.night.kind !== "midnightSun" && !s.strip.best);
+  const none = summaries.filter((s) => s.night.kind !== "midnightSun" && !s.twilightOnly && !s.strip.best);
   if (none.length) out.push(`${none.length === 1 ? none[0].city.name : `${none.length} cities (${none.map((s) => s.city.name).join(", ")})`} ${none.length === 1 ? "has" : "have"} no best window tonight on the viewing score.`);
-  const nights = summaries.filter((s) => s.night.kind === "night");
-  if (nights.length > 1) {
-    const sorted = [...nights].sort((a, b) => (b.night.end - b.night.start) - (a.night.end - a.night.start));
-    out.push(`The longest night is in ${sorted[0].city.name} (${durationText(sorted[0].night.end - sorted[0].night.start)}) and the shortest in ${sorted[sorted.length - 1].city.name} (${durationText(sorted[sorted.length - 1].night.end - sorted[sorted.length - 1].night.start)}).`);
+  // only whole nights, sunset to sunrise, are compared; a night already under way at the forecast time is given as what remains of it
+  const full = summaries.filter((s) => s.night.kind === "night" && !s.night.startsAtData);
+  const len = (s) => s.night.end - s.night.start;
+  if (full.length > 1) {
+    const sorted = [...full].sort((a, b) => len(b) - len(a) || a.city.name.localeCompare(b.city.name));
+    out.push(`Of the ${full.length} nights measured from sunset to sunrise, the longest is in ${sorted[0].city.name} (${durationText(len(sorted[0]))}) and the shortest in ${sorted[sorted.length - 1].city.name} (${durationText(len(sorted[sorted.length - 1]))}).`);
   }
-  for (const s of summaries.filter((x) => x.night.kind !== "night")) out.push(s.night.kind === "midnightSun" ? `In ${s.city.name} the Sun does not set tonight, so there is no dark sky there.` : `In ${s.city.name} the Sun does not rise in the 24 hours from the start of the night (polar night).`);
+  const under = summaries.filter((s) => s.night.kind === "night" && s.night.startsAtData);
+  if (under.length) out.push(`${under.length === 1 ? `In ${under[0].city.name} the night was` : `In ${and(under.map((s) => s.city.name))} the nights were`} already under way at the forecast time, so ${under.length === 1 ? "its page gives" : "their pages give"} the remaining darkness: ${and(under.map((s) => `${durationText(len(s))} until sunrise${under.length > 1 ? ` in ${s.city.name}` : ""}`))}.`);
+  for (const s of summaries.filter((x) => x.night.kind !== "night" || x.twilightOnly)) {
+    out.push(s.night.kind === "midnightSun" ? `In ${s.city.name} the Sun does not set tonight, so there is no dark sky there.`
+      : s.night.kind === "polarNight" ? `In ${s.city.name} the Sun does not rise in the 24 hours from the start of the night (polar night).`
+      : `In ${s.city.name} the Sun sets but stays less than 6 degrees below the horizon, so the sky stays in twilight all night.`);
+  }
   if (summaries.length) {
-    const m = summaries[0].moon;
-    out.push(`The Moon is ${moonPhrase(m.phaseName)}, about ${m.illumPct} percent lit, the same phase for every city; when it is up differs from city to city.`);
+    const ref = at ?? Date.parse([...summaries.map((x) => x.dataTime)].sort().at(-1));
+    const m = moonAt(ref), pcts = summaries.map((s) => s.moon.illumPct);
+    const lo = Math.min(...pcts), hi = Math.max(...pcts);
+    out.push(`At ${hm(ref, "UTC")} UTC on ${dateLongTz(ref, "UTC")} the Moon is ${moonPhrase(m.phaseName)}, ${m.illumPct} percent lit, as seen from anywhere; the city pages give it at each city's own chart time, ${lo === hi ? `${lo} percent` : `from ${lo} to ${hi} percent`}.`);
   }
   return out.slice(0, 6);
 }
@@ -410,7 +486,8 @@ export function summariseHub(cities, { clouds, precise = null, sky = {}, now, al
   }
   if (!summaries.length) { if (anyBroken) fail("hub", "no city's forecast passed its checks"); throw new SkyStaleError("no city has a cloud forecast less than 6 hours old"); }
   const times = summaries.map((x) => x.dataTime).sort();
-  return { feed: "clouds", cities, summaries, missing, findings: hubFindings(summaries), dataTime: times[times.length - 1], stale: summaries.some((x) => x.stale) };
+  const dataTime = times[times.length - 1];
+  return { feed: "clouds", cities, summaries, missing, findings: hubFindings(summaries, { at: Date.parse(dataTime) }), dataTime, moon: moonAt(Date.parse(dataTime)), stale: summaries.some((x) => x.stale) };
 }
 
 // ------------------------------------------------------------------ ISS today

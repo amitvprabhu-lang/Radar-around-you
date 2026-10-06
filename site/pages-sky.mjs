@@ -9,7 +9,7 @@ import { coastPath, MAP_UNITS_PER_DEGREE } from "./svgmap.mjs";
 import { projectSky } from "../src/core.js";
 import {
   SKY_HUB_FILE, skyCityFile, ISS_FILE, SKY_MAX_AGE_HOURS, ISS_MAX_AGE_DAYS, BEST_WINDOW_THRESHOLD, PLANET_MIN_ALT, PLANET_MAX_MAG,
-  CHART_MAG_LIMIT, FIGURE_MAX, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase,
+  CHART_MAG_LIMIT, FIGURE_MAX, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase, localText, eventsPhrase, startWord, upSpans,
 } from "./sky.mjs";
 import { PLACE_MAX_KM } from "./hazard.mjs";
 import { liveScriptParts } from "./liveseo.mjs";
@@ -22,8 +22,10 @@ export const SKY_SRC = {
   usno: { title: "U.S. Naval Observatory, Astronomical Applications API", url: "https://aa.usno.navy.mil/data/api", note: "The rise, set and phase tables our tests compare these calculations with" },
   celestrak: { title: "CelesTrak current GP data", url: "https://celestrak.org/NORAD/elements/", note: "The ISS element set (NORAD 25544)" },
   satjs: { title: "satellite.js", url: "https://github.com/shashwatak/satellite-js", note: "The SGP4 code that turns the element set into positions" },
-  iau: { title: "IAU constellations", url: "https://www.iau.org/public/themes/constellations/", note: "Constellation names; the stick figures are from the d3-celestial project" },
-  csn: { title: "IAU Catalog of Star Names", url: "https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt", note: "Star names, CC BY" },
+  iau: { title: "IAU constellations", url: "https://www.iau.org/public/themes/constellations/", note: "The constellation names on the chart and in its tables" },
+  csn: { title: "IAU Catalog of Star Names", url: "https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt", note: "The star names on the chart and in its table. IAU products are released under Creative Commons Attribution (CC BY), as the file's header states" },
+  figures: { title: "d3-celestial", url: "https://github.com/ofrohn/d3-celestial", note: "The constellation stick figures on the chart (one common way of joining the stars, not the IAU's). Its data licence is not stated: NOT CONFIRMED" },
+  stars: { title: "ESA Hipparcos and Tycho catalogues", url: "https://www.cosmos.esa.int/web/hipparcos/catalogues", note: "The stars on the chart come from the app's Hipparcos-based catalogue, whose provenance is not recorded. ESA's page gives CC BY-NC 3.0 IGO and Credit: ESA; which licence applies to this exact file is NOT CONFIRMED" },
 };
 export const MET_CREDIT = "The Norwegian Meteorological Institute, shortened MET Norway";
 
@@ -31,9 +33,10 @@ export const MET_CREDIT = "The Norwegian Meteorological Institute, shortened MET
 const when = (iso) => `${dateLong(iso)}, ${timeUtc(iso)}`;
 const timeEl = (iso) => `<time datetime="${esc(iso)}">${esc(when(iso))}</time>`;
 const isoOf = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
-// a local time in the city's zone, machine readable as UTC (the shared script can switch it to the visitor's zone)
-// data-ref: the time a weekday is counted from (the start of the night), so the switch prints the same form in the reader's zone
-const localEl = (ms, ref, tz) => `<time datetime="${isoOf(ms)}" data-tz="${esc(tz)}" data-ref="${isoOf(ref)}">${esc(whenLocal(ms, ref, tz))}</time>`;
+// a local time in the city's zone, machine readable as UTC
+// (a time in the hour the clocks repeat carries its offset, localText in site/sky.mjs). The shared script does not convert these times:
+// the findings, the chart and its heading are worked out for the city's local night, so they stay in the city's zone.
+const localEl = (ms, ref, tz) => `<time datetime="${isoOf(ms)}" data-tz="${esc(tz)}">${esc(localText(ms, ref, tz))}</time>`;
 const deg = (x) => `${Math.round(x)}°`;
 const v = (n, one, many) => (n === 1 ? one : many);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -177,6 +180,34 @@ function seeAlso(file, built, cities) {
 const staleNote = (s, what) => (s.stale ? `<p class="note warn">This copy was built from the data bundled with the site when it was deployed, which is older than the ${what} this page allows for live data. The live copy replaces it after the next data collection.</p>\n` : "");
 const metNote = `<p class="note">Cloud forecast: MET Norway's, not ours. Data from ${esc(MET_CREDIT)}, licensed under NLOD 2.0 and CC BY 4.0.</p>`;
 
+// The app's phase names (moonPhaseName in src/info.js) cover bands of the Moon's cycle; said once on each city page, because the US Naval
+// Observatory names a date by the phase it is in and the two can differ near a quarter.
+export const PHASE_NOTE = "Each phase name covers a band of the cycle about 22.5 degrees (1.8 days) wide, so \"first quarter\" here means 40 to 60 percent lit and another almanac may name the night differently.";
+// "Mars rises at 01:32", "Venus is up at nightfall, sets at 19:19": the events phrase as the rest of a sentence about a body
+const bodyDoes = (phrase) => (/^(up|below)/.test(phrase) ? `is ${phrase}` : phrase);
+
+// The cloud forecast in words from the hourly values: runs of mostly clear (under 25 percent), partly cloudy and mostly cloudy (over 75
+// percent) hours, with their local times. OURS: the two thresholds.
+export function cloudWords(hours, t) {
+  const known = hours.filter((h) => h.cloud !== null);
+  if (!known.length) return "";
+  const kind = (c) => (c < 25 ? "mostly clear" : c > 75 ? "mostly cloudy" : "partly cloudy");
+  const runs = [];
+  for (const h of known) {
+    const k = kind(h.cloud), last = runs[runs.length - 1];
+    if (last && last.k === k && h.t - last.to <= HOUR) last.to = h.t; else runs.push({ k, from: h.t, to: h.t });
+  }
+  if (runs.length === 1) return `The forecast is ${runs[0].k} all night.`;
+  return `The forecast is ${runs.map((r) => (r.from === r.to ? `${r.k} at ${t(r.from)}` : `${r.k} from ${t(r.from)} to ${t(r.to)}`)).join(", then ")}.`;
+}
+const HOUR = 3600e3;
+
+// The sources of the star data a chart actually draws: the catalogue for the dots, IAU-CSN for star names, d3-celestial for the stick
+// figures and the IAU for constellation names.
+export function chartSources(ch) {
+  return [...(ch.stars.length ? [SKY_SRC.stars] : []), ...(ch.named.length ? [SKY_SRC.csn] : []), ...(ch.figures.length ? [SKY_SRC.figures] : []), ...(ch.figures.length || ch.constellationsUp.length ? [SKY_SRC.iau] : [])];
+}
+
 // ------------------------------------------------------------------ a city page
 const passCells = (p, ref, tz) => [p.fromStart ? `Already up at ${localEl(p.rise, ref, tz)}` : localEl(p.rise, ref, tz), `${localEl(p.max.t, ref, tz)}, ${deg(p.max.el)} in the ${esc(compassWords(p.max.az))}`, p.truncated ? `Still up at ${localEl(p.set, ref, tz)}` : localEl(p.set, ref, tz),
   p.lit ? `Yes, ${localEl(p.lit.from, ref, tz)} to ${localEl(p.lit.to, ref, tz)}, up to ${deg(p.lit.maxEl)}` : "No"];
@@ -184,21 +215,24 @@ const nightKindText = (s) => (s.night.kind === "midnightSun" ? "the Sun does not
 
 export function cityPage(s, { built = [], cities = [] } = {}) {
   const c = s.city, file = skyCityFile(c.id), tz = s.tz, ref = s.night.start, n = s.night;
-  const L = (ms) => localEl(ms, ref, tz), T = (ms) => whenLocal(ms, ref, tz);
+  const L = (ms) => localEl(ms, ref, tz), T = (ms) => localText(ms, ref, tz);
+  const first = startWord(s);
   const nightDate = dateLongTz(n.start, tz);
   const m = s.moon, b = s.strip.best;
   const placed = s.planets.filter((p) => p.wellPlaced);
   const vis = s.iss.status === "ok" ? s.iss.passes.filter((p) => p.visible) : [];
   const title = `Tonight's sky in ${c.name}: Moon, planets, ISS, clouds`;
-  const moonWhen = m.upAtStart ? (m.events.find((e) => e.kind === "set") ? `, up at the start of the night and setting at ${L(m.events.find((e) => e.kind === "set").t)}` : ", up all night") : (m.events.find((e) => e.kind === "rise") ? `, rising at ${L(m.events.find((e) => e.kind === "rise").t)}` : ", below the horizon all night");
+  const moonWhen = `, and ${bodyDoes(eventsPhrase(m.events, m.upAtStart, L, first))}`;
+  const zoneText = s.clock ? `Local times are ${esc(tz)}: ${esc(s.clock.before)} until the clocks change at ${esc(hm(s.clock.at, "UTC"))} UTC, ${esc(s.clock.after)} after; a time in the repeated or skipped hour carries its offset.` : `Local times are ${esc(tz)} (${esc(s.offset)}).`;
   const answer = n.kind === "midnightSun" ? `the Sun does not set in ${esc(c.name)} in the 24 hours after the forecast time, so the sky does not get dark tonight`
+    : s.twilightOnly ? `the Sun sets in ${esc(c.name)} tonight but never gets 6° below the horizon, so the sky stays in twilight and no hour gets a viewing score`
     : b ? `the best window for looking up tonight in ${esc(c.name)} is <strong>${L(b.start)} to ${L(b.end)}</strong> local time${b.cloud !== null ? `, with ${b.cloud} percent cloud in MET Norway's forecast` : ""}`
     : `no stretch of tonight in ${esc(c.name)} reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${s.strip.cloudAvg !== null ? `, with ${s.strip.cloudAvg} percent cloud on average in MET Norway's forecast` : ""}`;
-  const lead = `As of ${timeEl(s.dataTime)}, the time of MET Norway's forecast, ${answer}. The Moon is ${esc(moonPhrase(m.phaseName))}, ${m.illumPct} percent lit${moonWhen}. ${placed.length ? `${and(placed.map((p) => esc(p.name)))} ${v(placed.length, "is", "are")} well placed in the dark` : "No naked-eye planet is well placed in the dark"}${s.iss.status === "ok" ? `, and ${vis.length ? `${vis.length} ISS ${v(vis.length, "pass is", "passes are")} sunlit while the sky is dark` : "no ISS pass is sunlit while the sky is dark"}` : ""}. Local times are ${esc(tz)} (${esc(s.offset)}).`;
+  const lead = `As of ${timeEl(s.dataTime)}, the time of MET Norway's forecast, ${answer}. The Moon is ${esc(moonPhrase(m.phaseName))}, ${m.illumPct} percent lit${moonWhen}. ${placed.length ? `${and(placed.map((p) => esc(p.name)))} ${v(placed.length, "is", "are")} well placed in the dark` : "No naked-eye planet is well placed in the dark"}${s.iss.status === "ok" ? `, and ${vis.length ? `${vis.length} ISS ${v(vis.length, "pass is", "passes are")} sunlit while the sky is dark` : "no ISS pass is sunlit while the sky is dark"}` : ""}. ${zoneText}`;
   const descOptions = [
     b ? `${nightDate} in ${c.name}: best window ${T(b.start)} to ${T(b.end)}${b.cloud !== null ? ` with ${b.cloud}% cloud` : ""}, ${m.phaseName.toLowerCase()} Moon ${m.illumPct}% lit, ${placed.length} planets placed, ISS passes.` : null,
     b ? `${nightDate} in ${c.name}: best window ${T(b.start)} to ${T(b.end)}, Moon ${m.illumPct}% lit, planets, ISS passes, MET Norway cloud.` : null,
-    `${nightDate} in ${c.name}: ${nightKindText(s) || "no best window"}; Moon ${m.illumPct}% lit, planets, ISS passes and MET Norway's cloud forecast.`,
+    `${nightDate} in ${c.name}: ${nightKindText(s) || (s.twilightOnly ? "twilight all night" : "no best window")}; Moon ${m.illumPct}% lit, planets, ISS passes and MET Norway's cloud forecast.`,
     `Tonight in ${c.name}: Moon, planets, ISS passes and MET Norway's cloud forecast, computed for ${nightDate}.`,
   ].filter(Boolean);
   const description = descOptions.find((d) => d.length <= 160);
@@ -208,18 +242,24 @@ export function cityPage(s, { built = [], cities = [] } = {}) {
   const moonFig = figure(moonStripSvg({ id: "chart-moon", title: `The Moon's altitude tonight in ${c.name}`, desc: `Every 15 minutes, ${T(n.start)} to ${T(n.end)}. Highest ${deg(m.max.alt)} at ${T(m.max.t)}.`, moon: m, start: n.start, end: n.end, tz }),
     `The Moon's altitude over ${esc(c.name)} tonight (forecast time ${timeEl(s.dataTime)}).`);
   const ch = s.chart;
+  // the Moon's path through this night, with the directions of its rise and set
+  const moonPath = `${m.events.length ? `Tonight it ${m.upAtStart ? `is up at ${first}, then ` : ""}${and(m.events.map((e) => `${e.kind === "rise" ? "rises" : "sets"} in the ${esc(compassWords(e.az))} at ${L(e.t)}`))}.` : m.upAtStart ? "It is above the horizon all night." : "It stays below the horizon all night."}${m.max.alt > 0 ? ` It is highest at ${L(m.max.t)}, ${deg(m.max.alt)} up in the ${esc(compassWords(m.max.az))}.` : ""}`;
+  // the cloud forecast in words, from the hour by hour values (OURS: under 25 percent "mostly clear", over 75 "mostly cloudy")
+  const weather = cloudWords(s.strip.hours, T);
+  // each ISS pass in words
+  const passLines = s.iss.status === "ok" ? s.iss.passes.map((p) => `${p.fromStart ? `Already 10° up at ${L(p.rise)}` : `At ${L(p.rise)} the ISS climbs past 10° in the ${esc(compassWords(p.riseAz))}`}, reaches ${deg(p.max.el)} in the ${esc(compassWords(p.max.az))} at ${L(p.max.t)} and drops below 10° in the ${esc(compassWords(p.setAz))} at ${L(p.set)}${p.lit ? `; it is sunlit in a dark sky from ${L(p.lit.from)} to ${L(p.lit.to)}, up to ${deg(p.lit.maxEl)}` : "; it is not sunlit while the sky is dark"}.`).join(" ") : "";
   const chartFig = figure(polarChartSvg({ id: "chart-sky", title: `The sky over ${c.name} at ${T(s.chartAt)} local time`, desc: `${ch.stars.length} stars, ${ch.figures.length} figures, ${ch.planets.length} ${v(ch.planets.length, "planet", "planets")}${ch.moon ? ", the Moon" : ""}.`, chart: ch }),
     `${esc(c.name)} at ${L(s.chartAt)}, the night after the forecast of ${timeEl(s.dataTime)}: horizon at the edge, overhead in the centre, north up, east left.`);
   const chartRows = [...(ch.moon ? [["Moon", "Moon", deg(ch.moon.alt), esc(compassWords(ch.moon.az))]] : []), ...ch.planets.map((p) => [esc(p.name), "Planet", deg(p.alt), esc(compassWords(p.az))]), ...[...ch.named].sort((a, b) => b.alt - a.alt || a.i - b.i).map((x) => [esc(x.name), `Star, magnitude ${plainNum(x.mag, 1)}`, deg(x.alt), esc(compassWords(x.az))])];
   const consRows = ch.constellationsUp.map((x) => [esc(x.name), deg(x.alt), esc(compassWords(x.az))]);
-  const planetRows = s.planets.map((p) => {
-    const rise = p.events.find((e) => e.kind === "rise"), set = p.events.find((e) => e.kind === "set");
-    return [esc(p.name), magText(p.mag), p.upAtStart ? "Up at the start" : rise ? L(rise.t) : "Not tonight", set ? L(set.t) : p.upAtStart || rise ? "Still up at the end" : "Not tonight",
-      p.best ? `${L(p.best.t)}, ${deg(p.best.alt)} in the ${esc(compassWords(p.best.az))}` : "Not above the horizon in a dark sky", p.wellPlaced ? "Yes" : "No", esc(p.constellation)];
-  });
+  // every rise and set in the night, in order, so a planet that sets and rises again shows both (eventsPhrase in site/sky.mjs)
+  const planetRows = s.planets.map((p) => [esc(p.name), magText(p.mag), cap(eventsPhrase(p.events, p.upAtStart, L, first)),
+    p.best ? `${L(p.best.t)}, ${deg(p.best.alt)} in the ${esc(compassWords(p.best.az))}` : "Not up in a dark sky", p.wellPlaced ? "Yes" : "No", esc(p.constellation)]);
+  // one sentence per planet with this city's own times and heights
+  const planetLines = s.planets.map((p) => `${esc(p.name)} ${bodyDoes(eventsPhrase(p.events, p.upAtStart, L, first))}${p.best ? `; while up in a dark sky it is highest at ${L(p.best.t)}, ${deg(p.best.alt)} in the ${esc(compassWords(p.best.az))}` : "; it is not up while the sky is dark"}.`).join(" ");
   const issHtml = s.iss.status !== "ok" ? `<p>Not shown: ${esc(s.iss.reason)}.</p>`
     : s.iss.passes.length ? `${table({ caption: `ISS passes at least 10° up tonight over ${c.name} (local time)`, head: ["Rises above 10°", "Highest", "Drops below 10°", "Sunlit while the sky is dark"], rows: s.iss.passes.map((p) => passCells(p, ref, tz)) })}
-<p>${vis.length ? `${vis.length} of the ${s.iss.passes.length} ${v(s.iss.passes.length, "pass is", "passes are")} sunlit while the sky is dark` : `None of the ${s.iss.passes.length} ${v(s.iss.passes.length, "pass is", "passes is")} sunlit while the sky is dark`}, by our calculation from the element set of ${timeEl(s.iss.epoch)}.</p>`
+<p>${passLines} By our calculation from the element set of ${timeEl(s.iss.epoch)}, ${vis.length ? `${vis.length} of the ${s.iss.passes.length} ${v(s.iss.passes.length, "pass is", "passes are")}` : `none of the ${s.iss.passes.length} ${v(s.iss.passes.length, "pass is", "passes is")}`} sunlit while the sky is dark.</p>`
     : `<p>The ISS does not pass at least 10° above the horizon of ${esc(c.name)} between ${L(n.start)} and ${L(n.end)} (element set of ${timeEl(s.iss.epoch)}).</p>`;
   const nightText = n.kind === "midnightSun" ? `The Sun does not set in ${esc(c.name)} in the 24 hours after the forecast time, so there is no night. The tables below cover the 12 hours around local midnight, ${L(n.start)} to ${L(n.end)}, and nothing in them is dark.`
     : n.kind === "polarNight" ? `The Sun does not rise in ${esc(c.name)} in the 24 hours from ${L(n.start)}, so this page covers those 24 hours as tonight.`
@@ -227,7 +267,7 @@ export function cityPage(s, { built = [], cities = [] } = {}) {
   const cloudText = s.strip.cloudAvg === null ? "MET Norway's forecast does not cover these hours." : s.strip.cloudMin === s.strip.cloudMax ? `The forecast gives ${s.strip.cloudAvg} percent cloud for every hour.` : `Cloud averages ${s.strip.cloudAvg} percent over these hours, from ${s.strip.cloudMin} to ${s.strip.cloudMax} percent.`;
   const figs = ch.figures.map((f) => esc(f.name)), stars = ch.named.filter((x) => x.label).map((x) => esc(x.name));
   const faq = [
-    [`When is the best time to look at the stars in ${c.name} tonight?`, b ? `${L(b.start)} to ${L(b.end)} local time by our viewing score${b.cloud !== null ? `, with ${b.cloud} percent cloud forecast` : ""}; a score, not a promise.` : `No stretch of tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${n.kind === "midnightSun" ? ", because the Sun does not set" : ""}.`],
+    [`When is the best time to look at the stars in ${c.name} tonight?`, b ? `${L(b.start)} to ${L(b.end)} local time by our viewing score${b.cloud !== null ? `, with ${b.cloud} percent cloud forecast` : ""}; a score, not a promise.` : `No stretch of tonight reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${n.kind === "midnightSun" ? ", because the Sun does not set" : s.twilightOnly ? ", because the Sun never gets 6° below the horizon and the sky stays in twilight" : ""}.`],
     ["What phase is the Moon tonight?", `${esc(cap(m.phaseName))}, ${m.illumPct} percent lit at ${L(m.at)}.`],
     [`Which planets are up tonight from ${c.name}?`, placed.length ? `${and(placed.map((p) => `${esc(p.name)} (highest ${deg(p.best.alt)} at ${L(p.best.t)})`))}.` : `None is at least ${PLANET_MIN_ALT}° up in a dark sky tonight.`],
     [`When can I see the ISS from ${c.name} tonight?`, s.iss.status !== "ok" ? `This build cannot say: ${esc(s.iss.reason)}.` : vis.length ? `${and(vis.map((p) => `${L(p.lit.from)} to ${L(p.lit.to)}`))}, when it is sunlit in a dark sky by our calculation.` : `No pass tonight is sunlit in a dark sky by our calculation.`],
@@ -237,17 +277,17 @@ ${metNote}
 ${seeAlso(file, built, cities)}
 
 <h2 id="clouds">When is it dark and clear tonight in ${esc(c.name)}?</h2>
-<p>${nightText} ${cloudText} <a href="${href(file, SKY_HUB_FILE)}#how">How the viewing score works</a>.</p>
+<p>${nightText} ${cloudText} ${weather} <a href="${href(file, SKY_HUB_FILE)}#how">How the viewing score works</a>.</p>
 ${cloudFig}
 ${table({ caption: `Hour by hour tonight in ${c.name} (local time)`, head: ["Hour", "Cloud (percent)", "Moon altitude", "Viewing score", "In the best window"], numeric: [1, 2, 3], rows: hoursRows })}
 
 <h2 id="moon">Where is the Moon tonight?</h2>
-<p>The Moon is ${esc(moonPhrase(m.phaseName))} and ${m.illumPct} percent lit at ${L(m.at)}. ${m.events.length ? `Tonight it ${and(m.events.map((e) => `${e.kind === "rise" ? "rises" : "sets"} at ${L(e.t)}`))}.` : m.upAtStart ? "It is above the horizon all night." : "It stays below the horizon all night."} It is highest at ${L(m.max.t)}, ${deg(m.max.alt)} ${m.max.alt > 0 ? `up in the ${esc(compassWords(m.max.az))}` : "below the horizon"}.</p>
+<p>The Moon is ${esc(moonPhrase(m.phaseName))} and ${m.illumPct} percent lit at ${L(m.at)}. ${moonPath} ${PHASE_NOTE}</p>
 ${moonFig}
 
 <h2 id="planets">Which planets are up tonight?</h2>
-<p>Well placed means at least ${PLANET_MIN_ALT}° up in a dark sky at magnitude ${PLANET_MAX_MAG} or brighter (lower is brighter).</p>
-${table({ caption: `The five naked-eye planets tonight from ${c.name} (local time)`, head: ["Planet", "Magnitude", "Rises", "Sets", "Highest in a dark sky", "Well placed", "In the constellation"], rows: planetRows })}
+<p>${planetLines} Well placed means at least ${PLANET_MIN_ALT}° up in a dark sky at magnitude ${PLANET_MAX_MAG} or brighter (lower is brighter).</p>
+${table({ caption: `The five naked-eye planets tonight from ${c.name} (local time)`, head: ["Planet", "Magnitude", "Rises and sets tonight", "Highest while up in a dark sky", "Well placed", "In the constellation"], rows: planetRows })}
 
 <h2 id="chart">What does the sky look like at ${esc(hm(s.chartAt, tz))}?</h2>
 <p>${figs.length ? `Figures drawn: ${and(figs)}.` : "No bright constellation is high enough to draw."} ${stars.length ? `Brightest named stars up: ${and(stars)}.` : ""}</p>
@@ -262,7 +302,7 @@ ${issHtml}
 <p>Computed, not observed: the Sun, Moon and planets with astronomy-engine, the ISS with SGP4 from CelesTrak's element set; the cloud is MET Norway's forecast. Published only while that forecast is under ${SKY_MAX_AGE_HOURS.clouds} hours old. <a href="${href(file, SKY_HUB_FILE)}#how">Method and what was checked</a>.</p>
 
 ${faqHtml(faq)}
-${sources([SKY_SRC.met, SKY_SRC.engine, SKY_SRC.celestrak])}`;
+${sources([SKY_SRC.met, SKY_SRC.engine, SKY_SRC.celestrak, ...chartSources(ch)])}`;
   const crumbs = [{ name: "Tonight's sky", file: SKY_HUB_FILE }];
   return {
     file, crumbs, crumbTitle: c.name, title, description, h1: `What is in the sky tonight in ${c.name}?`, kicker: "Tonight's sky",
@@ -290,10 +330,10 @@ export function skyHubPage(summaries, findings, { built = [], cities = [], missi
     const b = s.strip.best, ref = s.night.start;
     const vis = s.iss.status === "ok" ? String(s.iss.passes.filter((p) => p.visible).length) : "Not computed";
     return [built.includes(f) ? `<a href="${href(file, f)}">${esc(c.name)}</a>` : esc(c.name),
-      s.night.kind === "midnightSun" ? "The Sun does not set" : `${localEl(s.night.start, ref, s.tz)} to ${localEl(s.night.end, ref, s.tz)} (${durationText(s.night.end - s.night.start)}${s.night.kind === "polarNight" ? ", the Sun does not rise" : ""})`,
+      s.night.kind === "midnightSun" ? "The Sun does not set" : `${s.night.startsAtData ? "Already dark at the forecast time, " : ""}${localEl(s.night.start, ref, s.tz)} to ${localEl(s.night.end, ref, s.tz)} (${durationText(s.night.end - s.night.start)}${s.night.startsAtData ? " left" : ""}${s.night.kind === "polarNight" ? ", the Sun does not rise" : ""}${s.twilightOnly ? ", twilight only" : ""})`,
       s.strip.cloudAvg === null ? "No forecast" : `${s.strip.cloudAvg}%`,
       b ? `${localEl(b.start, ref, s.tz)} to ${localEl(b.end, ref, s.tz)}, ${b.cloud === null ? "no cloud forecast" : `${b.cloud}% cloud`}` : "None",
-      `${s.moon.illumPct}% lit${s.moon.upAtStart ? ", up at dusk" : ""}`, vis];
+      `${s.moon.illumPct}% lit${s.moon.upAtStart ? (s.night.kind === "night" && !s.night.startsAtData ? ", up at dusk" : ", up at the forecast time") : ""}`, vis];
   });
   const withAvg = summaries.filter((s) => s.strip.cloudAvg !== null);
   const cloudBars = withAvg.length ? figure(barChartSvg({ id: "chart-cities", title: "Average cloud cover tonight by city", desc: `MET Norway's forecast, averaged over each city's night: ${withAvg.map((s) => `${s.city.name} ${s.strip.cloudAvg} percent`).join(", ")}.`, rows: withAvg.map((s) => ({ label: s.city.name, value: s.strip.cloudAvg })) }),
@@ -308,16 +348,17 @@ ${metNote}
 ${seeAlso(file, built.filter((f) => !cities.some((c) => skyCityFile(c.id) === f && !byId.has(c.id))), cities)}
 
 <h2 id="cities">Tonight in the six cities</h2>
-${table({ caption: "Tonight's best window, cloud, Moon and ISS passes by city (local times)", head: ["City", "Tonight", "Cloud on average", "Best window", "Moon", "ISS passes sunlit in a dark sky"], numeric: [2, 5], rows })}
+${table({ caption: "Tonight's best window, cloud, Moon and ISS passes by city (local times)", head: ["City", "Tonight", "Cloud on average", "Best window", "Moon (lit at the city's chart time)", "ISS passes sunlit in a dark sky"], numeric: [2, 5], rows })}
 ${cloudBars}
 
 <h2 id="how">How these pages are made</h2>
 <ul>
 <li>The night starts at the first sunset after MET Norway's forecast time for the city, or at the forecast time when the Sun has already set, and ends at the next sunrise. Sunrise and sunset are astronomy-engine's rise and set times (see the checks below). Where the Sun does not set or rise within 24 hours, the page says so.</li>
 <li>Each hour of the night gets a viewing score from 0 to 100, the live app's own: zero while the Sun is less than 6° below the horizon (${DARK_SUN_ALT}°), more as the sky darkens to 18° below, less for a bright Moon that is up, and scaled by the share of sky MET Norway forecasts to be clear. The best window is the run of consecutive hours scoring ${BEST_WINDOW_THRESHOLD} or more with the highest total.</li>
-<li>The Sun, Moon and planets are computed with the astronomy-engine library, whose documentation says its accuracy is always within 1 arcminute of results from NOVAS. Our tests compare this code's Sun and Moon rise and set times with the US Naval Observatory's tables for these six cities on the 2026 solstices and require agreement within ${RISE_SET_CHECK_MINUTES} minutes, and the Moon's phase with the Observatory's phase table. The planet positions are not compared with a second source.</li>
+<li>The Sun, Moon and planets are computed with the astronomy-engine library, whose documentation says its accuracy is always within 1 arcminute of results from NOVAS. Our tests compare this code's Sun and Moon rise and set times with the US Naval Observatory's tables for these six cities on the 2026 solstices and require agreement within ${RISE_SET_CHECK_MINUTES} ${v(RISE_SET_CHECK_MINUTES, "minute", "minutes")}, and the Moon's phase with the Observatory's phase table. The planet positions are not compared with a second source.</li>
 <li>The polar chart shows stars brighter than magnitude ${CHART_MAG_LIMIT} from the app's star catalogue and the stick figures of up to ${FIGURE_MAX} bright constellations, placed from the catalogue's fixed positions without a correction for the slow drift of the sky (precession); the Moon and planets are placed for the moment shown.</li>
 <li>ISS passes come from the newest element set for the ISS in CelesTrak's data with the SGP4 model, the same code as the live app. A pass is listed when the ISS is at least 10° up; it is sunlit in a dark sky when sunlight falls on it while the Sun is more than 6° below the observer's horizon. We have not measured how far pass times drift as the element set ages, so treat them as approximate. Passes are not shown when the element set is more than ${ISS_MAX_AGE_DAYS} days old.</li>
+<li>Times on the city pages are each city's local time and are not converted to yours: the findings, the sky chart and its heading are worked out for that local night.</li>
 <li>Findings say "about the same" when a number is within ${Math.round(ABOUT_SAME * 100)} percent of what it is compared with.</li>
 <li>Everything is computed, not observed, and nothing here promises that anything will be seen: weather, haze, lights and your horizon decide that.</li>
 </ul>
@@ -372,7 +413,7 @@ ${passTables}
 <ul>
 <li>Positions are computed, not observed: CelesTrak's element set for the ISS (NORAD catalogue number 25544) is run through the SGP4 model with the satellite.js library, the same code as the live app. We have not measured how far these positions drift from the real ISS as the element set ages; the age is shown above.</li>
 <li>This page is a snapshot at the data time. The real-time view is <a href="${href(file, "index.html")}">the live globe</a>.</li>
-<li>The page is published only when the satellite data is less than ${SKY_MAX_AGE_HOURS.satellites} hours old and the ISS element set less than ${ISS_MAX_AGE_DAYS} days old.</li>
+<li>The live copy of this page is published only when the satellite data is less than ${SKY_MAX_AGE_HOURS.satellites} hours old and the ISS element set less than ${ISS_MAX_AGE_DAYS} days old. A copy built when the site is deployed uses the data bundled with the site, which can be older than that; it then says so at the top, and the live copy replaces it after the next data collection.</li>
 </ul>
 
 ${faqHtml(faq)}

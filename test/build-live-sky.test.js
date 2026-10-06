@@ -52,9 +52,9 @@ test("the sky pages are built from the clouds feed and precise.json, each with i
   for (const f of SKY_FILES) assert.ok(xml.includes(`/${urlPath(f)}</loc><lastmod>${ix.pages[f].dataTime}</lastmod>`), f);
   const hub = fs.readFileSync(path.join(out, RIGHT_NOW_FILE), "utf8");
   for (const f of SKY_FILES) assert.ok(hub.includes(`href="../${urlPath(f)}"`), `the right-now hub links ${f}`);
-  assert.match(hub, /Best window 19:30 to Wed 7 Oct 06:26 local time, 8% cloud/);
+  assert.match(hub, /Best window 19:30 to Wed 7 Oct 06:05 local time, 8% cloud/);
   assert.match(hub, /At 49\.2° S, 31\.0° E, 435 km up/);
-  assert.match(hub, /<h2 id="notable">What is notable<\/h2>[\s\S]*Tonight's best viewing window in Pune is 19:30 to 06:26 local time, with 8 percent cloud/);
+  assert.match(hub, /<h2 id="notable">What is notable<\/h2>[\s\S]*Tonight's best viewing window in Pune is 19:30 to 06:05 local time, with 8 percent cloud/);
   for (const f of SKY_FILES) for (const svg of fs.readFileSync(path.join(out, f), "utf8").match(/<svg[\s\S]*?<\/svg>/g) || []) assert.equal(xmlProblem(svg), null, f);
   assert.deepEqual(LIVE_FILES.filter((f) => SKY_FILES.includes(f)), SKY_FILES, "the registry lists the sky pages in order");
 });
