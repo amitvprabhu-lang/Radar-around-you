@@ -12,14 +12,16 @@ import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, 
 import { buildPages } from "../site/pages.mjs";
 import { SATCOUNT_FILE } from "../site/pages-satcount.mjs";
 import { HUB_FILE, COUNTRY_FILES } from "../site/pages-country.mjs";
-import { LIVE_FILES, RIGHT_NOW_FILE } from "../site/livepages.mjs";
+import { LIVE_FILES, LIVE_PAGES, RIGHT_NOW_FILE } from "../site/livepages.mjs";
 import { HAZARD_PAGES } from "../site/hazard.mjs";
 import { realFeeds, realPlaces } from "./helpers/hazardfixture.mjs";
 import { SITE, renderPage, href, urlPath, noindexFromEnv, robotsMeta, ROBOTS_CONTENT, siteUrlFromEnv, DEFAULT_SITE_URL } from "../site/layout.mjs";
 import { neighbours, latitudeRanges, ordinal } from "../site/pages-places.mjs";
 import { indexConstellations, visibilityFrom } from "../src/constellations.js";
 import { GUIDE_LINKS } from "../src/guidelinks.js";
-import { homeTextHtml, homeBodyHtml, HOME_STYLE, HOME_PRE_APP, HOME_TEXT_CSS, HOME_SCRIPT, HOME_QUESTIONS, HOME_ID, COUNTRY_HUB_FILE } from "../site/home-text.mjs";
+import { homeTextHtml, homeBodyHtml, homeLiveHtml, liveLinks, HOME_STYLE, HOME_PRE_APP, HOME_TEXT_CSS, HOME_SCRIPT, HOME_QUESTIONS, HOME_ID, HOME_H1, HOME_LIVE_HEADING, COUNTRY_HUB_FILE } from "../site/home-text.mjs";
+import { STRIP_SCRIPT, STRIP_FIGURES } from "../site/home-strip.mjs";
+import { OG_IMAGE } from "../site/layout.mjs";
 import { readIndexNowKey } from "../site/indexnow.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -484,29 +486,36 @@ const homePage = () => read("index.html");
 const sectionOf = (h) => { const m = h.match(new RegExp(`<section id="${HOME_ID}"[\\s\\S]*?</section>`)); assert.ok(m, "the home page has the text section"); return m[0]; };
 const wordsOf = (html) => (textOf(html).replace(/&[a-z#0-9]+;/g, " ").match(/\b[\w'-]+\b/g) || []).length;
 
-test("the built home page carries the text section, with its questions in order and 500 to 700 words", () => {
+test("the built home page carries the text section, with its h1, the live block and its questions in order, and 500 to 700 words of answers", () => {
   const home = homePage(), section = sectionOf(home);
   assert.equal(countOf(home, `id="${HOME_ID}"`), 1);
-  assert.deepEqual([...section.matchAll(/<h2>([^<]*)<\/h2>/g)].map((m) => m[1]), HOME_QUESTIONS);
-  assert.ok(!/<h1[ >]/.test(section), "no h1 in the section: the page keeps its own title");
-  // the headings are distinct questions and none repeats the title or h1 of any page on the site (the home page's own title included)
+  assert.deepEqual([...section.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1]), [HOME_LIVE_HEADING, ...HOME_QUESTIONS]);
+  assert.deepEqual([...section.matchAll(/<h1[^>]*>([^<]*)<\/h1>/g)].map((m) => m[1]), [HOME_H1], "one h1, the section's own");
+  // the headings are distinct questions and none repeats the title, h1 or h2 of any other page on the site (the home page's own title included)
   assert.equal(new Set(HOME_QUESTIONS).size, HOME_QUESTIONS.length);
   for (const q of HOME_QUESTIONS) assert.match(q, /^[A-Z][^?]*\?$/, q);
-  const unesc = (t) => t.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").trim().toLowerCase();
-  const taken = new Set([APP_TITLE.toLowerCase()]);
+  const unesc = (t) => t.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ").trim().toLowerCase();
+  const taken = new Map([[APP_TITLE.toLowerCase(), "the home page title"]]);
   for (const f of pageFiles) {
+    if (f === "index.html") continue;
     const h = read(f);
-    for (const m of h.matchAll(/<title>([^<]*)<\/title>|<h1[^>]*>([\s\S]*?)<\/h1>/g)) taken.add(unesc(textOf(m[1] || m[2])));
+    for (const m of h.matchAll(/<title>([^<]*)<\/title>|<h([12])[^>]*>([\s\S]*?)<\/h\2>/g)) taken.set(unesc(textOf(m[1] || m[3])), f);
   }
-  for (const q of HOME_QUESTIONS) assert.ok(!taken.has(q.toLowerCase()), `${q} repeats a page title or h1`);
+  for (const q of [HOME_H1, HOME_LIVE_HEADING, ...HOME_QUESTIONS]) assert.ok(!taken.has(q.toLowerCase()), `${q} repeats a title or heading of ${taken.get(q.toLowerCase())}`);
+  assert.notEqual(HOME_H1, APP_TITLE, "the h1 is not the title tag");
+  assert.ok(HOME_H1.split(/\s+/).length <= 14, "a short h1");
+  // the answers (everything but the live block) stay 500 to 700 words, as the design asks; the live block is labels, one explanation and
+  // a row of links, measured on its own
   for (const hub of [false, true]) {
-    const n = wordsOf(homeTextHtml({ countryHub: hub }));
+    const n = wordsOf(homeTextHtml({ countryHub: hub }).replace(homeLiveHtml(), ""));
     assert.ok(n >= 500 && n <= 700, `${n} words (country hub ${hub})`);
   }
+  const live = wordsOf(homeLiveHtml());
+  assert.ok(live >= 60 && live <= 200, `${live} words in the live block`);
   // order: the noscript block, the top focus target and the read-more link (first in the tab order), the app, then the one-screen
   // spacer, the section and its script; none of it is inside noscript
   const at = (s) => home.indexOf(s);
-  const order = ["</noscript>", '<span id="top" class="home-top" tabindex="-1"></span>', `<a class="home-more" href="#${HOME_ID}">What is this? Read more</a>`, '<div id="app"', '<div class="home-spacer" aria-hidden="true"></div>', `<section id="${HOME_ID}"`, '<script id="home-wheel">'];
+  const order = ["</noscript>", '<span id="top" class="home-top" tabindex="-1"></span>', `<a class="home-more" href="#${HOME_ID}">What is this? Read more</a>`, '<div id="app"', '<div class="home-spacer" aria-hidden="true"></div>', `<section id="${HOME_ID}"`, `<h1 id="home-h1">`, '<div id="home-strip"', '<nav class="home-live-links"', "<h2>Where is the International Space Station", '<script id="home-wheel">', '<script id="home-strip-js">'];
   for (const part of order) assert.equal(countOf(home, part), 1, part);
   for (let i = 1; i < order.length; i++) assert.ok(at(order[i - 1]) < at(order[i]), `${order[i - 1]} before ${order[i]}`);
   // nothing focusable comes before the read-more link: between <body> and it there is only the noscript block and the top target
@@ -519,14 +528,14 @@ test("the built home page carries the text section, with its questions in order 
 test("the home text section is visible text: no hidden-text markup in the section or in the rules that style it", () => {
   const section = sectionOf(homePage());
   assert.ok(!/\shidden[\s>=]|\sstyle=|aria-hidden|visually-hidden|sr-only|display:\s*none|font-size:\s*0/i.test(section), "no hidden attribute, inline style or hiding class in the section");
-  const SECTION_PARTS = /home-text|home-inner|home-lead|home-back|home-links|about-home/;
+  const SECTION_PARTS = /home-text|home-inner|home-lead|home-back|home-links|about-home|home-strip|home-live/;
   let seen = 0;
   for (const [, sel, decl] of HOME_TEXT_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (!SECTION_PARTS.test(sel)) continue;
     seen++;
     assert.ok(!/display:\s*none|visibility:\s*hidden|font-size:\s*0|opacity:\s*0|clip|text-indent|(?:^|;)\s*height:\s*0|left:\s*-|color:\s*transparent/.test(decl), `${sel.trim()} hides text: ${decl}`);
   }
-  assert.ok(seen >= 6, `found the section's rules (${seen})`);
+  assert.ok(seen >= 14, `found the section's rules (${seen})`);
   // the section sits above the fixed app, opaque, in the app's own colours and fonts, at a readable measure, inside the safe area
   assert.match(HOME_TEXT_CSS, /\.home-text \{ position: relative; z-index: 2; background: var\(--ink-2\);/);
   assert.match(HOME_TEXT_CSS, /\.home-inner \{ max-width: 70ch;/);
@@ -546,17 +555,21 @@ test("every link in the home text section resolves to a built page or an anchor 
     const [p, frag] = link.split("#");
     if (p === "") { assert.ok(homeIds.has(frag), `#${frag} is on the home page`); continue; }
     const target = p.endsWith("/") ? p + "index.html" : p;
-    assert.ok(pageFiles.includes(target), `${link} -> ${target} does not exist`);
-    if (frag) assert.ok(ids(read(target)).has(frag), `anchor #${frag} missing in ${target}`);
+    // a live page arrives with the server's pull job, so it may be absent from the deploy build; it must then be a registered live page
+    assert.ok(pageFiles.includes(target) || LIVE_FILES.includes(target), `${link} -> ${target} is neither a built page nor a registered live page`);
+    if (frag && pageFiles.includes(target)) assert.ok(ids(read(target)).has(frag), `anchor #${frag} missing in ${target}`);
   }
   // the row of links at the end: guides, About, the count page, the methods page, and the country hub when the build has it
   const row = sectionOf(home).match(/<nav class="home-links"[\s\S]*?<\/nav>/)[0];
   for (const want of ["guides/", "about/", "how-many-satellites-in-orbit/", "methods/"]) assert.ok(row.includes(`href="${want}"`), want);
+  // outside the live block (which names every registered live page), the answers and the row link the hub only when the build has it
   const hubBuilt = pageFiles.includes(COUNTRY_HUB_FILE);
-  assert.equal(home.includes('href="satellites-by-country/"'), hubBuilt, "the country hub is linked exactly when the build has its page");
+  const noLive = (h) => h.replace(homeLiveHtml(), "");
+  assert.equal(noLive(home).includes('href="satellites-by-country/"'), hubBuilt, "the country hub is linked exactly when the build has its page");
   const withHub = homeTextHtml({ countryHub: true });
-  assert.equal(countOf(withHub, 'href="satellites-by-country/"'), 2, "with the hub: once in the count answer and once in the row");
-  assert.ok(!homeTextHtml().includes("satellites-by-country"));
+  assert.equal(countOf(noLive(withHub), 'href="satellites-by-country/"'), 2, "with the hub: once in the count answer and once in the row");
+  assert.ok(!noLive(homeTextHtml()).includes("satellites-by-country"));
+  assert.equal(countOf(homeLiveHtml(), 'href="satellites-by-country/"'), 1, "the live block lists the hub once, as a registered live page");
   assert.ok(wrapApp(APP, { countryHub: true }).includes('href="satellites-by-country/"'));
   // the count answer explains the two numbers and links the count page
   const count = withHub.match(/<h2>Why are there two satellite numbers on this site\?<\/h2>\n<p>([\s\S]*?)<\/p>/)[1];
@@ -580,9 +593,11 @@ test("the home text keeps the house style and holds no numbers that go stale", (
   }
   const text = textOf(homeBodyHtml({ countryHub: true }));
   // only fixed figures from the README and the code: satellites launched in the last 30 days, the 90-day calendar, places of 15,000
-  // people or more, and the 10 degrees above the horizon that the tile counts from (src/sky.js)
+  // people or more, the 10 degrees above the horizon that the tile counts from (src/sky.js), and the 24 hours of the live strip's labels
+  // (the window the earthquake and fire pages use); the strip's values are dashes in the HTML and only the browser fills them
   const numbers = [...text.matchAll(/\b\d[\d,.]*\b/g)].map((m) => m[0]);
-  assert.deepEqual([...new Set(numbers)].sort(), ["10", "15,000", "30", "90"], numbers.join(" "));
+  assert.deepEqual([...new Set(numbers)].sort(), ["10", "15,000", "24", "30", "90"], numbers.join(" "));
+  assert.deepEqual([...homeLiveHtml().matchAll(/<dd data-fig="([a-z]+)">([^<]*)<\/dd>/g)].map((m) => [m[1], m[2]]), STRIP_FIGURES.map(([k]) => [k, "-"]), "a dash for every value in the HTML");
   assert.ok(!/%|percent|\b(thousands|millions) of\b/i.test(text));
   // the claims that must stay limited, as the README and the About page limit them
   assert.match(text, /six cities only/, "aircraft over six cities only");
@@ -759,4 +774,102 @@ test("a malformed IndexNow key stops the build before it writes anything", () =>
     assert.throws(() => build({ outDir: dir, appFile, publicDir: null, noindex: false, indexnowKey: bad }), /indexnow/i, bad);
     assert.ok(!fs.existsSync(dir), bad);
   }
+});
+
+// ---- the home page's h1, its heading order and the noscript block (site/home-text.mjs, site/build.mjs)
+test("the home page has one h1 of its own, in the text section, followed only by h2s; the noscript block has none", () => {
+  const home = homePage();
+  // the test app has no loader; the real template has the loader's h1, which the app removes once it has started
+  assert.equal(countOf(home, "<h1"), 1);
+  const template = fs.readFileSync(path.join(root, "template.html"), "utf8");
+  assert.equal(countOf(template, "<h1"), 1, "the template's only h1 is the loader's");
+  assert.ok(template.includes('<div id="loader"') && template.indexOf("<h1>") > template.indexOf('<div id="loader"'), "inside the loader");
+  const noscript = home.match(/<noscript>[\s\S]*?<\/noscript>\n/)[0];
+  assert.ok(!/<h[1-6][ >]/.test(noscript), "no heading in the noscript block");
+  assert.ok(noscript.includes(`font-weight:700;line-height:1.2">${SITE.name}</p>`), "the noscript block names the site in a paragraph");
+  // heading levels in the section: an h1 first, then h2s, no level skipped
+  const levels = [...sectionOf(home).matchAll(/<h([1-6])[ >]/g)].map((m) => Number(m[1]));
+  assert.equal(levels[0], 1);
+  assert.ok(levels.slice(1).length >= 7 && levels.slice(1).every((l) => l === 2), levels.join(","));
+  // the h1 sits at the top of the section, after the back link and before the lead, and labels the section
+  const sec = sectionOf(home);
+  assert.ok(sec.indexOf('<p class="home-back">') < sec.indexOf("<h1") && sec.indexOf("<h1") < sec.indexOf('<p class="home-lead">'));
+  assert.ok(sec.includes(`<h1 id="home-h1">${HOME_H1}</h1>`) && sec.includes('aria-labelledby="home-h1"'));
+  // the h1 says what the site is, in words no other page uses as a heading, and the lead does not repeat the name
+  assert.equal(HOME_H1, "Radar Around You: a live feed of satellites, the ISS, earthquakes, aurora and storms");
+  assert.ok(!sec.match(/<p class="home-lead">[^<]*/)[0].includes(SITE.name));
+});
+
+// ---- the row of live pages and the strip (site/home-text.mjs, site/livepages.mjs, site/home-strip.mjs)
+test("the live pages row is built from the registry: the right-now hub first, then every registered page once, by its name", () => {
+  for (const p of LIVE_PAGES) assert.ok(typeof p.name === "string" && p.name.trim().length >= 5, `${p.file} has a name for its link`);
+  assert.equal(new Set(LIVE_PAGES.map((p) => p.name)).size, LIVE_PAGES.length, "the names are distinct");
+  const row = homePage().match(/<nav class="home-live-links" aria-label="Live pages">[\s\S]*?<\/nav>/)[0];
+  const links = [...row.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]);
+  assert.equal(links.length, LIVE_PAGES.length);
+  assert.deepEqual(links[0], ["right-now/", "Right now: every live figure"]);
+  assert.deepEqual(new Set(links.map(([h]) => h + "index.html")), new Set(LIVE_FILES), "every registered live page, each once");
+  for (const [h, t] of links) {
+    assert.equal(t, LIVE_PAGES.find((p) => p.file === h + "index.html").name.replace(/'/g, "&#39;").replace(/&(?!#39;)/g, "&amp;"), h);
+    assert.ok(!/click here|read more|^here$/i.test(t), t);
+    assert.ok(pageFiles.includes(h + "index.html") || LIVE_FILES.includes(h + "index.html"), `${h}: a page the deploy build writes or a registered live page`);
+  }
+  // a page added to the registry appears by itself, and one without a name still gets readable link text
+  const more = [...LIVE_PAGES, { file: "rocket-launches/index.html", kind: "launches", feeds: ["launches"], name: "Rocket launches" }, { file: "solar-wind-now/index.html", kind: "x", feeds: [] }];
+  assert.deepEqual(liveLinks(more).slice(-2), [{ file: "rocket-launches/index.html", name: "Rocket launches" }, { file: "solar-wind-now/index.html", name: "Solar wind now" }]);
+  assert.ok(homeLiveHtml(more).includes('<li><a href="rocket-launches/">Rocket launches</a></li>'));
+  assert.equal(liveLinks(more)[0].file, RIGHT_NOW_FILE);
+});
+
+test("the strip is in the HTML with its labels, a dash for every value, where the figures come from, and its script after the section", () => {
+  const home = homePage(), sec = sectionOf(home);
+  const strip = sec.match(/<div id="home-strip" class="home-strip">[\s\S]*?<\/div>\n<p>/)[0];
+  for (const [k, label] of STRIP_FIGURES) assert.ok(strip.includes(`<dt>${label}</dt><dd data-fig="${k}">-</dd>`), k);
+  assert.ok(textOf(strip).replace(/\s+/g, " ").includes("These figures load from the site's live data in your browser; the same numbers, except the next launch, are on /right-now/ as plain HTML."));
+  assert.ok(strip.includes('<a href="right-now/">/right-now/</a>'));
+  assert.ok(strip.includes('<p class="home-strip-status" aria-live="polite"></p>'), "the status line is empty until the script fills it");
+  // the strip sits above the live pages row, inside the section
+  assert.ok(sec.indexOf('id="home-strip"') < sec.indexOf('class="home-live-links"'));
+  assert.equal(countOf(home, STRIP_SCRIPT), 1);
+  assert.ok(home.indexOf("</section>") < home.indexOf('<script id="home-strip-js">'), "the script comes after the section, so the strip exists when it runs");
+  for (const f of pageFiles) if (f !== "index.html") assert.ok(!read(f).includes("home-strip"), `${f} has no strip`);
+  assert.ok(!wrapApp(APP, { homeText: false }).includes("home-strip"), "the plain app has no strip");
+});
+
+// ---- the share image (tools/make-og-image.mjs, site/layout.mjs, site/build.mjs)
+const pngSize = (buf) => ({ sig: buf.subarray(0, 8).toString("hex"), chunk: buf.subarray(12, 16).toString("ascii"), width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) });
+test("every page names the share image with its size and a description, and the card is the large-image kind", () => {
+  const img = `${SITE.url}/og-image.png`;
+  for (const f of ["index.html", "guides/earthquakes/index.html", "moon-phases/index.html", SATCOUNT_FILE, "earthquakes-today/index.html", RIGHT_NOW_FILE]) {
+    const h = read(f), head = h.slice(0, h.indexOf("</head>"));
+    assert.ok(head.includes(`<meta property="og:image" content="${img}">`), `${f}: og:image`);
+    assert.ok(head.includes('<meta property="og:image:width" content="1200">') && head.includes('<meta property="og:image:height" content="630">'), `${f}: size`);
+    assert.ok(head.includes('<meta property="og:image:type" content="image/png">'), `${f}: type`);
+    assert.ok(head.includes(`<meta property="og:image:alt" content="${OG_IMAGE.alt}">`), `${f}: alt`);
+    assert.ok(head.includes('<meta name="twitter:card" content="summary_large_image">') && head.includes(`<meta name="twitter:image" content="${img}">`), `${f}: twitter`);
+    assert.equal(countOf(h, 'name="twitter:card"'), 1, `${f}: one card type`);
+  }
+  for (const f of pageFiles) assert.ok(read(f).includes(`<meta property="og:image" content="${img}">`), `${f}: og:image`);
+  assert.match(OG_IMAGE.alt, /globe/); assert.ok(!/\d/.test(OG_IMAGE.alt), "the description holds no number");
+});
+
+test("the build writes the share image: a 1200 by 630 PNG under 250 KB, the committed file, also in a noindex build", () => {
+  const src = fs.readFileSync(path.join(root, "site/assets/og-image.png"));
+  const built = fs.readFileSync(path.join(outDir, "og-image.png"));
+  assert.ok(built.equals(src), "copied as committed");
+  const h = pngSize(built);
+  assert.equal(h.sig, "89504e470d0a1a0a", "a PNG signature");
+  assert.equal(h.chunk, "IHDR");
+  assert.deepEqual([h.width, h.height], [OG_IMAGE.width, OG_IMAGE.height]);
+  assert.deepEqual([OG_IMAGE.width, OG_IMAGE.height], [1200, 630]);
+  assert.ok(built.length < 250 * 1000, `${built.length} bytes`);
+  const dir = path.join(tmp, "out-noindex-og");
+  build({ outDir: dir, appFile, publicDir: null, noindex: true });
+  assert.ok(fs.readFileSync(path.join(dir, "og-image.png")).equals(src));
+  assert.ok(!fs.readFileSync(path.join(outDir, "llms.txt"), "utf8").includes("og-image"), "not listed in llms.txt");
+  // the drawing script is committed, uses the project's own browser and is not part of any build step
+  const tool = fs.readFileSync(path.join(root, "tools/make-og-image.mjs"), "utf8");
+  assert.ok(tool.includes('from "../harness.mjs"') && tool.includes("site/assets/og-image.png"));
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  assert.ok(!Object.values(pkg.scripts).some((c) => c.includes("make-og-image")), "never run by the Hostinger build");
 });

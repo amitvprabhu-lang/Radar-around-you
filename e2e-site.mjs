@@ -6,7 +6,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./harness.mjs";
-import { LIVE_FILES, HAZARD_FILES, RIGHT_NOW_FILE } from "./site/livepages.mjs";
+import { LIVE_FILES, LIVE_PAGES, HAZARD_FILES, RIGHT_NOW_FILE } from "./site/livepages.mjs";
+import { HOME_H1 } from "./site/home-text.mjs";
+import { STRIP_FIGURES, STRIP_LIMITS, stripFigures } from "./site/home-strip.mjs";
+import { livePack } from "./test/livepack.js";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
@@ -21,11 +24,16 @@ const problems = [], notFound = [];
 p.on("console", (m) => { if (m.type() === "error" && !/Service Worker registration blocked|status of 404/.test(m.text())) problems.push("console.error: " + m.text().slice(0, 200)); });
 p.on("pageerror", (e) => problems.push("pageerror: " + e.message.slice(0, 200)));
 p.on("requestfailed", (r) => problems.push(`request failed: ${r.url().slice(0, 100)} ${r.failure()?.errorText}`));
-// home: another body for the home page (the comparison build without the text section below); missing files go to `missing`
-const serve = (c, { home = null, missing = notFound } = {}) => c.route("https://radar.test/**", (route) => {
+// home: another body for the home page (the comparison build without the text section below); missing files go to `missing`;
+// live: an optional pretend live folder (a Map of "live/..." paths to objects or Buffers), served instead of the empty one
+const serve = (c, { home = null, missing = notFound, live = null } = {}) => c.route("https://radar.test/**", (route) => {
   const u = new URL(route.request().url());
   let rel = decodeURIComponent(u.pathname.slice(1));
   if (rel === "" && home) return route.fulfill({ status: 200, headers: { "content-type": "text/html" }, body: home });
+  if (live && live.has(rel)) {
+    const v = live.get(rel);
+    return route.fulfill({ status: 200, headers: { "content-type": MIME[path.extname(rel)] || "application/octet-stream", "cache-control": "no-store" }, body: Buffer.isBuffer(v) ? v : Buffer.from(JSON.stringify(v)) });
+  }
   if (rel === "" || rel.endsWith("/")) rel += "index.html";
   const f = path.join(site, rel);
   if (!f.startsWith(site) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) {
@@ -52,6 +60,18 @@ const want = process.env.SITE_NOINDEX === "1" ? "noindex,nofollow" : "index,foll
 check(`the page's robots tag matches SITE_NOINDEX (${want})`, robots === want, String(robots));
 check("no page errors, no failed requests and no console errors on the home page", problems.length === 0, problems.join(" | "));
 check("only the not-yet-connected live folder was missing", notFound.every((u) => u.startsWith("/live/")), notFound.join(" "));
+// the home page's row of live pages: every registered live page, the right-now hub first; each one this build wrote answers 200 raw
+const liveRow = await p.evaluate(() => [...document.querySelectorAll(".home-live-links a")].map((a) => [a.getAttribute("href"), a.textContent]));
+check("the home page lists every registered live page, the right-now hub first, each by its name", liveRow.length === LIVE_PAGES.length && liveRow[0][0] === "right-now/" && LIVE_PAGES.every((pg) => liveRow.some(([h, t]) => h + "index.html" === pg.file && t === pg.name)), JSON.stringify(liveRow));
+const rowStatus = [];
+for (const [h] of liveRow) {
+  if (!fs.existsSync(site + h + "index.html")) continue;  // arrives with the server's pull job, not with the deploy
+  rowStatus.push([h, await p.evaluate(async (u) => (await fetch(u)).status, "https://radar.test/" + h)]);
+}
+check(`each live page this build wrote answers 200 (${rowStatus.length} of ${liveRow.length}; the others arrive with the pull job)`, rowStatus.length >= 2 && rowStatus.every(([, st]) => st === 200), JSON.stringify(rowStatus));
+// the share image is served at the address every page names
+const og = await p.evaluate(async () => { const r = await fetch("/og-image.png"); const b = new Uint8Array(await r.arrayBuffer()); const v = new DataView(b.buffer); return { status: r.status, w: v.getUint32(16), h: v.getUint32(20), bytes: b.length }; });
+check("the share image answers 200 as a 1200 by 630 PNG under 250 KB", og.status === 200 && og.w === 1200 && og.h === 630 && og.bytes < 250000, JSON.stringify(og));
 
 // a content page and the crawler files, fetched as a web host would serve them
 const page = await ctx.newPage();
@@ -171,6 +191,9 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   check(`${label}: the home page with the text section starts`, up && plain.up, errs.join(" | "));
   if (!up) { await c.close(); continue; }
   const after = await firstScreen(pg);
+  // once the app has loaded, the loader's h1 is gone and the text section's h1 is the page's one rendered h1
+  const h1s = await pg.evaluate(() => [...document.querySelectorAll("h1")].filter((e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden").map((e) => e.textContent));
+  check(`${label}: after load there is exactly one rendered h1, the text section's`, h1s.length === 1 && h1s[0] === HOME_H1, JSON.stringify(h1s));
   check(`${label}: the first screen is laid out exactly as without the text section (stats strip, tab bar, canvas, top bar, layer chips, no scrollbar)`, JSON.stringify(before) === JSON.stringify(after), `${JSON.stringify(before)} against ${JSON.stringify(after)}`);
   const s0 = await textState(pg);
   check(`${label}: the section is in the page below the first screen and not in view at load`, s0.top !== null && s0.y === 0 && s0.top >= s0.vh, JSON.stringify(s0));
@@ -249,8 +272,12 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
       check(`${label}: "Back to the globe" returns the page to the top`, s5.y === 0, JSON.stringify(s5));
     }
   }
-  const words = await pg.evaluate(() => (document.getElementById("about-home").innerText.match(/\b[\w'-]+\b/g) || []).length);
-  check(`${label}: the section shows its text (500 to 700 words) with no page errors`, words >= 500 && words <= 700 && errs.length === 0, `${words} words; ${errs.join(" | ")}`);
+  // the answers keep the design's 500 to 700 words; the live block (strip labels, one explanation, the row of live pages) is counted on
+  // its own, as in test/site.test.js
+  const count = (t) => (t.match(/\b[\w'-]+\b/g) || []).length;
+  const { all, live } = await pg.evaluate(() => ({ all: document.getElementById("about-home").innerText, live: document.querySelector("#about-home .home-live").innerText }));
+  const words = count(all) - count(live), liveWords = count(live);
+  check(`${label}: the section shows its text (500 to 700 words of answers, 60 to 200 in the live block) with no page errors`, words >= 500 && words <= 700 && liveWords >= 60 && liveWords <= 200 && errs.length === 0, `${words} words of answers, ${liveWords} in the live block; ${errs.join(" | ")}`);
   await c.close();
 }
 
@@ -264,6 +291,34 @@ for (const [label, viewport, mobile] of [["phone", { width: 390, height: 780 }, 
   await pg.click(".home-more"); await pg.waitForTimeout(500);
   const st = await pg.evaluate(() => ({ y: Math.round(scrollY), top: Math.round(document.getElementById("about-home").getBoundingClientRect().top), vh: innerHeight }));
   check("with JavaScript off, the read-more link is shown on a phone and brings the text into view", shown && st.y > 0 && st.top >= 0 && st.top < st.vh, JSON.stringify({ shown, st }));
+  const strip = await pg.evaluate(() => ({ labels: [...document.querySelectorAll("#home-strip dt")].map((e) => e.textContent), values: [...document.querySelectorAll("#home-strip dd")].map((e) => e.textContent), status: document.querySelector(".home-strip-status").textContent, note: document.querySelector(".home-strip-note").textContent, h1: [...document.querySelectorAll("#about-home h1")].length }));
+  check("with JavaScript off, the strip shows its labels, a dash for every value and where the figures come from", JSON.stringify(strip.labels) === JSON.stringify(STRIP_FIGURES.map(([, l]) => l)) && strip.values.every((v) => v === "-") && strip.values.length === 6 && strip.status === "" && /These figures load from the site's live data in your browser/.test(strip.note) && strip.h1 === 1, JSON.stringify(strip));
+  await c.close();
+}
+
+// with a pretend live folder (the test pack the live suite uses, with a dated earthquake list), the strip fills its six values from it,
+// worked out the same way as the unit-tested functions, and the page logs no errors
+{
+  const taken = new Date(Date.now() - 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const pack = livePack({ taken });
+  const ago = (min) => new Date(Date.parse(taken) - min * 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  pack.files["live/quakes/v1/quakes.json"] = { generated: taken, events: [5.5, 4.1, 2.7].map((mag, i) => ({ id: `t${i}`, mag, place: "Test place", time: ago(30 + i * 60), lat: 1 + i, lon: 2, depth: 10, status: "reviewed", felt: 0, url: "" })) };
+  const live = new Map(Object.entries(pack.files));
+  const docs = Object.fromEntries(["quakes", "kp", "storms", "fires", "launches"].map((k) => [k, pack.files[`live/${pack.manifest.feeds[k].files[k + ".json"]}`]]));
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serve(c, { missing: [], live });
+  const pg = await c.newPage();
+  const errs = [];
+  pg.on("console", (m) => { if (m.type() === "error" && !/Service Worker registration blocked|status of 404/.test(m.text())) errs.push("console.error: " + m.text().slice(0, 200)); });
+  pg.on("pageerror", (e) => errs.push("pageerror: " + e.message.slice(0, 200)));
+  await pg.goto("https://radar.test/", { waitUntil: "commit", timeout: 60000 });
+  const up = await pg.waitForFunction(() => !document.getElementById("loader") && !!window.__radar, null, { timeout: 120000 }).then(() => true, () => false);
+  const filled = await pg.waitForFunction(() => [...document.querySelectorAll("#home-strip dd")].every((e) => e.textContent !== "-"), null, { timeout: 30000 }).then(() => true, () => false);
+  const shown = await pg.evaluate(() => ({ values: Object.fromEntries([...document.querySelectorAll("#home-strip dd")].map((e) => [e.getAttribute("data-fig"), e.textContent])), status: document.querySelector(".home-strip-status").textContent }));
+  const want = stripFigures(pack.manifest, docs, Date.now(), STRIP_LIMITS);
+  check("with a mocked live folder, the strip shows its six values, the same as the unit-tested functions give", up && filled && JSON.stringify(shown.values) === JSON.stringify(Object.fromEntries(STRIP_FIGURES.map(([k]) => [k, want.values[k]]))) && shown.values.quakes === "3" && shown.values.largest === "5.5", JSON.stringify({ up, filled, shown, want: want.values }));
+  check("with a mocked live folder, the strip gives the data time in UTC and calmly names a feed older than its limit", /^Live data published \d{4}-\d\d-\d\d \d\d:\d\d UTC\./.test(shown.status) && /Kp \(more than 8 hours old\)/.test(shown.status), shown.status);
+  check("with a mocked live folder, no page errors and no console errors", errs.length === 0, errs.join(" | "));
   await c.close();
 }
 

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { allChecks } from "./verify.mjs";
-import { renderPage, SITE, NAV, urlPath, esc, robotsMeta } from "./layout.mjs";
+import { renderPage, SITE, NAV, urlPath, esc, robotsMeta, OG_IMAGE, ogImageTags } from "./layout.mjs";
 import { buildPages } from "./pages.mjs";
 import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { sitemapLive } from "./pages-satcount.mjs";
@@ -96,6 +96,8 @@ export function hazardSnapshotPages(h, { now, coast, satellites, satelliteFiles 
 }
 
 // Wraps the built app with the tags search engines read. Nothing in the app's own code changes.
+// The noscript block names the site in a paragraph, not an h1: the page's h1 is the text section's (site/home-text.mjs), which is in the
+// HTML with or without JavaScript, and the loader's h1 belongs to the template.
 // homeText adds the text section below the first screen (site/home-text.mjs): its style block goes just before the noscript block, so
 // asDocument moves it into <head> after the template's own styles; the top focus target and the read-more link go between the noscript
 // block and the app, first in the tab order; the section and its script go at the end of the page. countryHub says
@@ -119,12 +121,12 @@ ${robotsMeta(noindex)}
 <meta property="og:title" content="${esc(APP_TITLE)}">
 <meta property="og:description" content="${esc(APP_DESCRIPTION)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta name="twitter:card" content="summary">
+${ogImageTags()}
 <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
 <script type="application/ld+json">${JSON.stringify(ldSite).replace(/</g, "\\u003c")}</script>`;
   const nav = NAV.filter(([f]) => f !== "").map(([f, label]) => `<li><a href="${f}">${esc(label)}</a></li>`).join("");
   const features = APP_FEATURES.map((f) => `<li>${esc(f)}</li>`).join("");
-  const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><h1>${esc(SITE.name)}</h1><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
+  const noscript = `<noscript><div style="max-width:720px;margin:0 auto;padding:24px 16px;font:17px/1.6 system-ui,sans-serif;color:#eaf0ff;background:#04060c"><p style="margin:0 0 12px;font-size:28px;font-weight:700;line-height:1.2">${esc(SITE.name)}</p><p>${esc(APP_DESCRIPTION)}</p><p>${esc(APP_DETAIL)}</p><ul>${features}</ul><p>The app needs JavaScript. These pages work without it:</p><ul>${nav}<li><a href="constellations/">The 88 constellations</a></li><li><a href="stars/">Stars with official names</a></li></ul></div></noscript>\n`;
   const wrapped = appHtml.replace("<title>Radar Around You</title>", () => head).replace('<div id="app"', () => (homeText ? HOME_STYLE : "") + noscript + (homeText ? HOME_PRE_APP : "") + '<div id="app"');
   return homeText ? wrapped + homeBodyHtml({ countryHub }) : wrapped;
 }
@@ -170,9 +172,13 @@ export function assertChecks(checks, allowUnchecked = false) {
   if (problems.length) throw new Error("site: " + problems.join("; "));
 }
 
+// The committed share image (drawn by tools/make-og-image.mjs, run by hand; the build only copies it).
+export const OG_IMAGE_SOURCE = path.join(root, "site/assets/og-image.png");
+
 export function build({ outDir = path.join(root, "dist/site"), appFile = path.join(root, "dist/radar.html"), publicDir = path.join(root, "public"), allowUnchecked = false, noindex = SITE.noindex, now = new Date(), satellites = loadSatellites(), coast = loadCoast(), hazards = loadHazards(), indexnowKey = readIndexNowKey() } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("site: the IndexNow key must be 8 to 128 letters, digits and dashes");
   if (!fs.existsSync(appFile)) throw new Error(`site: ${appFile} not found; run npm run build first`);
+  if (!fs.existsSync(OG_IMAGE_SOURCE)) throw new Error(`site: ${OG_IMAGE_SOURCE} not found; run node tools/make-og-image.mjs`);
   const cities = loadCities();
   const checks = allChecks(cities);
   assertChecks(checks, allowUnchecked);
@@ -211,6 +217,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     if (indexnowKey) fs.writeFileSync(path.join(outDir, `${indexnowKey}.txt`), indexnowKey, "utf8");
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
+  // the share image every page names in og:image (written for a noindex build too: harmless, and the tags stay the same)
+  fs.copyFileSync(OG_IMAGE_SOURCE, path.join(outDir, OG_IMAGE.file));
   return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };
 }
 
