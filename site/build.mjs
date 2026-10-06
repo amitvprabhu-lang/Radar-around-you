@@ -17,6 +17,7 @@ import { LIVE_FAMILY } from "./liveregistry.mjs";
 import { buildLlmsTxt } from "./llms.mjs";
 import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
+import { LIVE_SCRIPT_FILE, liveScriptSource } from "./live-pages-js.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -209,6 +210,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     if (indexnowKey) fs.writeFileSync(path.join(outDir, `${indexnowKey}.txt`), indexnowKey, "utf8");
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
+  // the live pages' shared script (design section 8.1), at the site root where every live page's scriptSrc points
+  fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
   return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };
 }
 

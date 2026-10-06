@@ -16,7 +16,7 @@ export function webPageLd({ file, title, description, dataTime, crumbTitle }) {
 }
 
 // The shared table with scope="col" on every header cell (layout.mjs's table puts header cells only in the head row).
-export const scopedTable = (opts) => table(opts).replace(/<th(?=[ >])/g, '<th scope="col"');
+export const scopedTable = (opts) => table(opts).replace(/<th(?=[ >])(?![^>]*\bscope=)/g, '<th scope="col"');
 
 // A chart or map in a figure with a one-sentence caption (what it shows and its data time); the SVG keeps its own title and desc.
 export const figureHtml = (svg, caption) => `<figure style="margin:18px 0">${svg}<figcaption style="color:var(--muted);font-size:14px;margin-top:6px">${esc(caption)}</figcaption></figure>`;

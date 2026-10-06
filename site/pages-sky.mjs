@@ -12,6 +12,7 @@ import {
   CHART_MAG_LIMIT, FIGURE_MAX, RISE_SET_CHECK_MINUTES, ABOUT_SAME, DARK_SUN_ALT, hm, whenLocal, dateLongTz, durationText, compassWords, moonPhrase,
 } from "./sky.mjs";
 import { PLACE_MAX_KM } from "./hazard.mjs";
+import { liveScriptParts } from "./liveseo.mjs";
 
 // ------------------------------------------------------------------ sources (addresses as recorded in docs/ and pipeline/config.py)
 export const SKY_SRC = {
@@ -31,7 +32,8 @@ const when = (iso) => `${dateLong(iso)}, ${timeUtc(iso)}`;
 const timeEl = (iso) => `<time datetime="${esc(iso)}">${esc(when(iso))}</time>`;
 const isoOf = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 // a local time in the city's zone, machine readable as UTC (the shared script can switch it to the visitor's zone)
-const localEl = (ms, ref, tz) => `<time datetime="${isoOf(ms)}" data-tz="${esc(tz)}">${esc(whenLocal(ms, ref, tz))}</time>`;
+// data-ref: the time a weekday is counted from (the start of the night), so the switch prints the same form in the reader's zone
+const localEl = (ms, ref, tz) => `<time datetime="${isoOf(ms)}" data-tz="${esc(tz)}" data-ref="${isoOf(ref)}">${esc(whenLocal(ms, ref, tz))}</time>`;
 const deg = (x) => `${Math.round(x)}°`;
 const v = (n, one, many) => (n === 1 ? one : many);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -265,7 +267,7 @@ ${sources([SKY_SRC.met, SKY_SRC.engine, SKY_SRC.celestrak])}`;
   return {
     file, crumbs, crumbTitle: c.name, title, description, h1: `What is in the sky tonight in ${c.name}?`, kicker: "Tonight's sky",
     lead, meta: `Forecast time ${timeEl(s.dataTime)}.`, cta: { label: "Open the live sky for this place", query: "#sky" }, body,
-    jsonld: [webPageLd({ title, description, file, dataTime: s.dataTime, trail: [...crumbs, { name: c.name, file }] })], dataTime: s.dataTime,
+    jsonld: [webPageLd({ title, description, file, dataTime: s.dataTime, trail: [...crumbs, { name: c.name, file }] })], dataTime: s.dataTime, ...liveScriptParts(file, { dataTime: s.dataTime }),
   };
 }
 
@@ -325,7 +327,7 @@ ${sources([SKY_SRC.met, SKY_SRC.metLicence, SKY_SRC.engine, SKY_SRC.usno, SKY_SR
   return {
     file, crumbTitle: "Tonight's sky", title, description, h1: "Where is the sky clearest tonight?", kicker: "Tonight's sky",
     lead, meta: `Newest forecast time ${timeEl(newest)}. Each row gives its own night; cloud forecasts by MET Norway.`, cta: { label: "See tonight's sky for your place", query: "#tonight" }, body,
-    jsonld: [webPageLd({ title, description, file, dataTime: newest, trail: [{ name: "Tonight's sky", file }] })], dataTime: newest,
+    jsonld: [webPageLd({ title, description, file, dataTime: newest, trail: [{ name: "Tonight's sky", file }] })], dataTime: newest, ...liveScriptParts(file, { dataTime: newest }),
   };
 }
 
@@ -378,7 +380,7 @@ ${sources([SKY_SRC.celestrak, SKY_SRC.satjs])}`;
   return {
     file, crumbTitle: "ISS today", title, description, h1: "Where is the International Space Station today?", kicker: "Live position",
     lead, meta: `Data as of ${timeEl(s.dataTime)}, the time of our satellite data. Element set from CelesTrak.`, cta: { label: "See the ISS live on the globe", query: "" }, body,
-    jsonld: [webPageLd({ title, description, file, dataTime: s.dataTime, trail: [{ name: "ISS today", file }] })], dataTime: s.dataTime,
+    jsonld: [webPageLd({ title, description, file, dataTime: s.dataTime, trail: [{ name: "ISS today", file }] })], dataTime: s.dataTime, ...liveScriptParts(file, { dataTime: s.dataTime }),
   };
 }
 

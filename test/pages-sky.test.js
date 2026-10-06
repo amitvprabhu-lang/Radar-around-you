@@ -177,7 +177,10 @@ test("house style: no dashes, no emoji, no hidden text, nothing loaded from else
     assert.ok(!/[\u2013\u2014]/.test(h), `${f}: en or em dash`);
     assert.ok(!/\p{Extended_Pictographic}/u.test(h), `${f}: emoji`);
     assert.ok(!/\bhidden\b|display:\s*none|aria-hidden|sr-only|visually-hidden/i.test(h.replace(/<style[\s\S]*?<\/style>/g, "").replace(/<script[\s\S]*?<\/script>/g, "")), `${f}: hidden text`);
-    assert.ok(!/<script[^>]+src=/.test(h) && !/<img /.test(h) && !/<link[^>]+stylesheet/.test(h), f);
+    // the only script loaded is the site's own live-pages.js (design section 8.1), and nothing else comes from elsewhere
+    assert.deepEqual([...h.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1].replace(/^(\.\.\/)+/, "")), ["live-pages.js"], f);
+    assert.match(h, /<body data-live-v="1"/, f);
+    assert.ok(!/<img /.test(h) && !/<link[^>]+stylesheet/.test(h), f);
     assert.ok(Buffer.byteLength(h) < 250 * 1024, `${f}: ${Buffer.byteLength(h)}`);
     assert.ok(!/NaN|undefined|\bnull\b|Infinity/.test(textOf(h)), `${f}: a broken value`);
   }

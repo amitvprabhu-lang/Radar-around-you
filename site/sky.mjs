@@ -12,6 +12,7 @@ import { loadPrecise, passesFor, ecefAt } from "../src/sgp4.js";
 import { visiblePart } from "../src/tonight.js";
 import { moonPhaseName } from "../src/info.js";
 import { freshness, isoZ, parseTime, HOUR_MS, nearestPlace, PLACE_MAX_KM } from "./hazard.mjs";
+import { direction, SAME_WITHIN } from "./insight.mjs";
 
 const DAY_MS = 24 * HOUR_MS, MIN_MS = 60e3;
 
@@ -51,8 +52,8 @@ export const FIGURE_MIN_ALT = 20, FIGURE_MAX_MAG = 2.5, FIGURE_MAX = 12;
 // The tests compare the Sun and Moon rise and set times of this code with the US Naval Observatory's tables (test/fixtures/usno) and
 // require agreement within this many minutes. The pages quote this number, so the claim cannot drift from the test.
 export const RISE_SET_CHECK_MINUTES = 1;
-// The one threshold for direction words in findings (design section 8.2): within 15 percent of the comparison is "about the same".
-export const ABOUT_SAME = 0.15;
+// The one threshold for direction words in findings (design section 8.2), shared with every live page (site/insight.mjs).
+export const ABOUT_SAME = SAME_WITHIN;
 export const PLANETS = ["Mercury", "Venus", "Mars", "Jupiter", "Saturn"];
 
 export class SkyStaleError extends Error {
@@ -291,13 +292,8 @@ export function issPasses(iss, city, fromMs, hours) {
 }
 
 // ------------------------------------------------------------------ the direction words of the findings
-// value against a comparison: "above", "below" or "about the same as", with the 15 percent threshold.
-export function direction(value, base) {
-  if (!fin(value) || !fin(base)) return null;
-  if (base === 0) return value === 0 ? "about the same as" : value > 0 ? "above" : "below";
-  if (Math.abs(value - base) <= ABOUT_SAME * Math.abs(base)) return "about the same as";
-  return value > base ? "above" : "below";
-}
+// The one threshold and the one function for every live page's findings (site/insight.mjs): within 15 percent is "about the same as".
+export { direction };
 
 // ------------------------------------------------------------------ one city
 // clouds: the parsed clouds.json; precise: precise.json (or null); sky: { stars, constellations, starNames }.
