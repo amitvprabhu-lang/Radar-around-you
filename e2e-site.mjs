@@ -6,7 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./harness.mjs";
-import { LIVE_FILES, HAZARD_FILES, RIGHT_NOW_FILE } from "./site/livepages.mjs";
+import os from "node:os";
+import { LIVE_FILES, HAZARD_FILES, RIGHT_NOW_FILE, EVENT_FILES } from "./site/livepages.mjs";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
@@ -115,6 +116,106 @@ for (const f of [...HAZARD_FILES, RIGHT_NOW_FILE]) {
     check("the right-now hub links every live page this build wrote", unlinked.length === 0, unlinked.join(" "));
   }
 }
+
+// ---- the fleet and events pages (site/pages-events.mjs). The Starlink tracker is written at deploy time from the bundled satellites;
+// the launch and GDACS pages need data that public/ does not carry with a data time, so they are built here from the saved feeds of
+// 6 October (test/fixtures/events) with the live build itself and served beside dist/site, as hosting/pull.php would copy them in.
+const { buildLive } = await import("./site/build-live.mjs");
+const { countryFixture } = await import("./test/helpers/satfixture.mjs");
+const { EVENTS_DIR, EVENTS_NOW } = await import("./test/helpers/eventsfixture.mjs");
+const overlay = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-events-"));
+{
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-events-data-")), fx = countryFixture(), base = "satellites/S1";
+  fs.mkdirSync(path.join(data, base), { recursive: true });
+  for (const [n, b] of [["details.bin", fx.details], ["swarm.bin", fx.swarm], ["satmeta.json", JSON.stringify(fx.meta)]]) fs.writeFileSync(path.join(data, base, n), b);
+  fs.cpSync(EVENTS_DIR, data, { recursive: true, filter: (src) => !src.endsWith("manifest.json") });
+  const m = JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, "manifest.json"), "utf8"));
+  m.feeds.satellites = { version: "S1", files: { "details.bin": `${base}/details.bin`, "swarm.bin": `${base}/swarm.bin`, "satmeta.json": `${base}/satmeta.json` } };
+  fs.writeFileSync(path.join(data, "manifest.json"), JSON.stringify(m));
+  const r = buildLive({ dataDir: data, outDir: overlay, now: EVENTS_NOW, noindex: process.env.SITE_NOINDEX === "1", bounds: { min: 5, max: 1000 }, starlinkMin: 50 });
+  check("the launch and GDACS pages build from the saved feeds", r.failed.length === 0 && ["rocket-launches/index.html", "natural-disasters-now/index.html"].every((f) => fs.existsSync(path.join(overlay, f))), JSON.stringify(r.failed));
+  fs.rmSync(data, { recursive: true, force: true });
+}
+// live: an optional mocked live folder { "manifest.json": object, "<path>": object }, served at /live/
+const serveEvents = (c, live = null) => c.route("https://radar.test/**", (route) => {
+  const u = new URL(route.request().url());
+  const rel = decodeURIComponent(u.pathname.slice(1)).replace(/(^|\/)$/, "$1index.html");
+  if (live && rel.startsWith("live/")) {
+    const body = live[rel.slice(5)];
+    return body ? route.fulfill({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) : route.fulfill({ status: 404, body: "" });
+  }
+  const f = ["rocket-launches/index.html", "natural-disasters-now/index.html"].includes(rel) ? path.join(overlay, rel) : path.join(site, rel);
+  if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return route.fulfill({ status: 404, headers: { "content-type": "text/html" }, body: "<html><body>Not found</body></html>" });
+  return route.fulfill({ status: 200, headers: { "content-type": MIME[path.extname(f)] || "application/octet-stream" }, body: fs.readFileSync(f) });
+});
+check("the site carries the live pages' shared script, under 20 KB", fs.existsSync(site + "live-pages.js") && fs.statSync(site + "live-pages.js").size < 20 * 1024);
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serveEvents(c);
+  const pg = await c.newPage();
+  for (const f of EVENT_FILES) {
+    const path1 = "/" + f.replace(/index\.html$/, "");
+    const r = await pg.evaluate(async (u) => { const x = await fetch(u); return { status: x.status, text: await x.text() }; }, "https://radar.test" + path1);
+    const h = r.text;
+    const canonical = (h.match(/<link rel="canonical" href="([^"]+)">/) || [])[1] || "";
+    const robots = (h.match(/<meta name="robots" content="([^"]+)">/) || [])[1];
+    const lead = (h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "";
+    check(`${path1} answers 200 raw, with its canonical address, a robots tag matching SITE_NOINDEX, a number in the lead and the data time`,
+      r.status === 200 && canonical.endsWith(path1) && robots === want && /^As of <time datetime="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ">/.test(lead) && /<strong>[^<]*(<span[^>]*>)?[\d,]+/.test(lead) && /<figure/.test(h),
+      JSON.stringify({ status: r.status, canonical, robots, lead: lead.slice(0, 160) }));
+  }
+  await pg.close();
+  await c.close();
+}
+// with JavaScript: no console errors, sorting, local times and the in-place refresh from a mocked live folder; without it: the same content
+{
+  const errs = [];
+  const nowIso = new Date(Date.now() - 60e3).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const launches = JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, JSON.parse(fs.readFileSync(path.join(EVENTS_DIR, "manifest.json"), "utf8")).feeds.launches.files["launches.json"]), "utf8"));
+  launches.generated = nowIso;
+  launches.launches = [{ ...launches.launches[0], name: "Test Rocket | Mocked refresh", net: new Date(Date.now() + 5 * 86400e3).toISOString().replace(/\.\d{3}Z$/, "Z"), precision: "MIN" }];
+  const live = { "manifest.json": { feeds: { launches: { version: "MOCK", sourceTime: nowIso, files: { "launches.json": "launches/MOCK/launches.json" } } } }, "launches/MOCK/launches.json": launches };
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: true, serviceWorkers: "block", timezoneId: "Asia/Kolkata" });
+  await serveEvents(c, live);
+  const pg = await c.newPage();
+  pg.on("console", (m) => { if (m.type() === "error") errs.push(m.text().slice(0, 200)); });
+  pg.on("pageerror", (e) => errs.push(e.message.slice(0, 200)));
+  await pg.goto("https://radar.test/rocket-launches/", { waitUntil: "load", timeout: 60000 });
+  const refreshed = await pg.waitForFunction(() => { const e = document.querySelector('[data-live-key="next-name"]'); return e && e.textContent === "Test Rocket | Mocked refresh" && e.classList.contains("live-new"); }, null, { timeout: 20000 }).then(() => true, () => false);
+  const st = await pg.evaluate(() => ({ status: (document.querySelector("[data-live-status]") || {}).textContent, n30: (document.querySelector('[data-live-key="launches-30"]') || {}).textContent, local: document.querySelectorAll("main .lt").length }));
+  check("rocket launches: the live refresh reads the mocked live folder and updates the next launch and the 30 day count in place, marked", refreshed && st.n30 === "1" && /Updated in place/.test(st.status || ""), JSON.stringify(st));
+  check("rocket launches: times outside tables are also shown in the reader's time zone", st.local > 0, JSON.stringify(st));
+  const sorted = await pg.evaluate(() => {
+    const t = [...document.querySelectorAll("main .tablewrap table")].find((x) => x.tBodies[0].rows.length > 8);
+    if (!t) return null;
+    const firstCol = () => [...t.tBodies[0].rows].map((r) => r.cells[2].textContent);
+    const before = firstCol();
+    t.tHead.rows[0].cells[2].querySelector("button").click();
+    const asc = firstCol();
+    t.tHead.rows[0].cells[2].querySelector("button").click();
+    return { before, asc, desc: firstCol(), aria: t.tHead.rows[0].cells[2].getAttribute("aria-sort"), filter: !!t.parentNode.previousElementSibling && t.parentNode.previousElementSibling.type === "search" };
+  });
+  const sortedOk = sorted && JSON.stringify(sorted.asc) === JSON.stringify([...sorted.before].sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0))) && JSON.stringify(sorted.desc) === JSON.stringify([...sorted.asc].reverse()) && sorted.aria === "descending" && sorted.filter;
+  check("rocket launches: a table of more than 8 rows sorts both ways by a header button, sets aria-sort and has a filter box", !!sortedOk, JSON.stringify(sorted).slice(0, 300));
+  await pg.goto("https://radar.test/natural-disasters-now/", { waitUntil: "load", timeout: 60000 });
+  await pg.waitForTimeout(500);
+  await pg.goto("https://radar.test/starlink-tracker/", { waitUntil: "load", timeout: 60000 });
+  await pg.waitForTimeout(500);
+  check("the three pages run the shared script with no console errors", errs.length === 0, errs.join(" | "));
+  await c.close();
+  // JavaScript off: the same numbers, tables and figures are there
+  const off = await browser.newContext({ viewport: { width: 1280, height: 800 }, javaScriptEnabled: false, ignoreHTTPSErrors: true, serviceWorkers: "block" });
+  await serveEvents(off);
+  const p2 = await off.newPage();
+  for (const f of EVENT_FILES) {
+    await p2.goto("https://radar.test/" + f.replace(/index\.html$/, ""), { waitUntil: "load", timeout: 60000 });
+    const raw = fs.readFileSync(f === "starlink-tracker/index.html" ? site + f : path.join(overlay, f), "utf8");
+    const seen = await p2.evaluate(() => ({ rows: document.querySelectorAll("main tbody tr").length, figures: document.querySelectorAll("main figure svg").length, lead: document.querySelector(".lead").innerText }));
+    check(`${f}: with JavaScript off the page shows every table row, figure and the lead's numbers`, seen.rows === (raw.match(/<tbody>[\s\S]*?<\/tbody>/g) || []).reduce((n, b) => n + (b.match(/<tr/g) || []).length, 0) && seen.figures === (raw.match(/<figure/g) || []).length && /\d/.test(seen.lead), JSON.stringify(seen).slice(0, 200));
+  }
+  await off.close();
+}
+fs.rmSync(overlay, { recursive: true, force: true });
 
 const about = await ctx.newPage();
 await about.goto("https://radar.test/about/", { waitUntil: "load", timeout: 60000 });
