@@ -45,3 +45,20 @@ test("the loader's progress bar animates transform, not width, so the compositor
   const main = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
   assert.ok(main.includes("loadBar.style.transform = `scaleX(${Math.round(f * 100) / 100})`;") && !main.includes("loadBar.style.width"));
 });
+
+test("each frame takes the canvas size from a ResizeObserver, not from getBoundingClientRect (Lighthouse: forced reflow)", () => {
+  const main = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.ok(main.includes("const rect = canvasBox || canvas.getBoundingClientRect();"), "the frame reads the kept size, and the box only as a fallback");
+  assert.match(main, /new ResizeObserver\(\(entries\) => \{ const r = entries\[entries\.length - 1\]\.contentRect; canvasBox = \{ width: r\.width, height: r\.height \}; \}\)\.observe\(canvas\);/);
+  assert.ok(main.indexOf("let canvasBox = null;") < main.indexOf("function drawFrame("), "declared before the frame loop can run");
+});
+
+test("the globe, sky and Under scenes take the width from their last resize in every frame, not from clientWidth (forced reflow)", () => {
+  for (const f of ["orbit", "sky", "under"]) {
+    const s = fs.readFileSync(new URL(`../src/${f}.js`, import.meta.url), "utf8");
+    assert.ok(s.includes("(viewW || renderer.domElement.clientWidth) / 900"), f);
+    assert.ok(!/clamp\(renderer\.domElement\.clientWidth \/ 900/.test(s), f);
+    assert.match(s, /api\.resize = \(w, h\) => \{\s*viewW = w;/, `${f}: resize keeps the width`);
+    assert.ok(s.indexOf("let viewW = 0;") < s.indexOf("api.update = "), `${f}: declared before update`);
+  }
+});

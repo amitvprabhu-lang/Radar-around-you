@@ -641,6 +641,9 @@ export function createOrbit(ctx) {
   api.setLayers({});
 
   let lastT = performance.now();
+  // the width from the last resize (main.js calls resize at start and on every window resize); reading clientWidth in every frame forced a
+  // style pass after the previous frame's label writes (Lighthouse 13: forced reflow)
+  let viewW = 0;
   api.update = (date, tSec, dtSec) => {
     uni.time.value = tSec;
     uni.pr.value = renderer.getPixelRatio();
@@ -654,7 +657,7 @@ export function createOrbit(ctx) {
     swarmU.tMin.value = (date.getTime() - meta.ref) / 60000;
     swarmU.gmst.value = gmstDeg(date) * DEG;
     newU.show.value.set(1, 1, 1, 1);
-    uni.sizeScale.value = clamp(renderer.domElement.clientWidth / 900, 0.8, 1.35) * (tier === "low" ? 1.1 : 1);
+    uni.sizeScale.value = clamp((viewW || renderer.domElement.clientWidth) / 900, 0.8, 1.35) * (tier === "low" ? 1.1 : 1);
     updateReplay(dtSec);
     // while a quake replays, pull the camera back so the expanding wave fronts stay in view
     if (api.autoFrame && replay.active && cam.mode === "globe" && !blend && sel.item && sel.item.kind === "quake") {
@@ -769,6 +772,7 @@ export function createOrbit(ctx) {
     camera.setViewOffset(w, h, 0, px, w, h);
   };
   api.resize = (w, h) => {
+    viewW = w;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };

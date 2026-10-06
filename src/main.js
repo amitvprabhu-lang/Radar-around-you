@@ -702,6 +702,12 @@ async function main() {
     orbit.resize(w, hh); sky.resize(w, hh); under.resize(w, hh);
   }
   window.addEventListener("resize", resize);
+  // the canvas's size for the work done every frame, kept up to date by a ResizeObserver (which reports any change, a window resize or
+  // not): reading canvas.getBoundingClientRect() at the start of each frame forced a style pass after the previous frame's label writes
+  // (Lighthouse 13: forced reflow). The canvas has no border or padding, so its content box is its border box. Without ResizeObserver,
+  // or before its first report, the frame reads the box as before.
+  let canvasBox = null;
+  if (typeof ResizeObserver === "function") new ResizeObserver((entries) => { const r = entries[entries.length - 1].contentRect; canvasBox = { width: r.width, height: r.height }; }).observe(canvas);
 
   // ------------------------------------------------------------------ share image
   async function shareImage() {
@@ -797,7 +803,7 @@ async function main() {
     S.draws = gate.draws;
     const date = nowDate();
     const tSec = (now - t0) / 1000;
-    const rect = canvas.getBoundingClientRect();
+    const rect = canvasBox || canvas.getBoundingClientRect();
     // keep the thing you are looking at clear of the card or panel that covers the lower part of the screen
     {
       const cardUp = !$("card").hidden;

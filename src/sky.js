@@ -383,11 +383,14 @@ export function createSky(ctx) {
     return best ? best.cloud : null;
   };
 
+  // the width from the last resize (main.js calls resize at start and on every window resize); reading clientWidth in every frame forced a
+  // style pass after the previous frame's label writes (Lighthouse 13: forced reflow)
+  let viewW = 0;
   api.update = (date, tSec, dtSec) => {
     if (!place) return;
     uni.time.value = tSec;
     uni.pr.value = renderer.getPixelRatio();
-    uni.sizeScale.value = clamp(renderer.domElement.clientWidth / 900, 0.8, 1.35);
+    uni.sizeScale.value = clamp((viewW || renderer.domElement.clientWidth) / 900, 0.8, 1.35);
     ensureBodies(date);
     const sun = sunAltAz(place.lat, place.lon, date);
     info.sunAlt = sun.alt; info.sunAz = sun.az;
@@ -737,7 +740,7 @@ export function createSky(ctx) {
     if (Math.abs(px) < 0.5) { if (camera.view && camera.view.enabled) { camera.clearViewOffset(); } return; }
     camera.setViewOffset(w, h, 0, px, w, h);
   };
-  api.resize = (w, h) => { camera.aspect = w / h; camera.updateProjectionMatrix(); };
+  api.resize = (w, h) => { viewW = w; camera.aspect = w / h; camera.updateProjectionMatrix(); };
   // Sky Lens: with the camera behind, the painted sky and the made-up hills would hide the real ones
   api.setLens = (on) => { dome.visible = !on; for (const m of horizonMeshes) m.visible = !on; api.lens = !!on; };
   api.lens = false;

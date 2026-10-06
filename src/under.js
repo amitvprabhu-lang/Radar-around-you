@@ -104,10 +104,13 @@ export function createUnder(ctx) {
     cam.yaw = 22; cam.pitch = 24; cam.zoom = 1;
   };
 
+  // the width from the last resize (main.js calls resize at start and on every window resize); reading clientWidth in every frame forced a
+  // style pass after the previous frame's label writes (Lighthouse 13: forced reflow)
+  let viewW = 0;
   api.update = (date, tSec, dtSec) => {
     uni.time.value = tSec;
     uni.pr.value = renderer.getPixelRatio();
-    uni.sizeScale.value = clamp(renderer.domElement.clientWidth / 900, 0.8, 1.35);
+    uni.sizeScale.value = clamp((viewW || renderer.domElement.clientWidth) / 900, 0.8, 1.35);
     if (!st.q) return;
     if (!replay.paused) {
       replay.tau += dtSec * replay.speed;
@@ -151,6 +154,7 @@ export function createUnder(ctx) {
   };
   // distance at which the whole disc (radius 1, plus room for labels) fits the narrower side of the screen
   api.resize = (w, h) => {
+    viewW = w;
     camera.aspect = w / h;
     camera.fov = 34;
     const half = Math.min(camera.fov / 2, (Math.atan(Math.tan((camera.fov / 2) * DEG) * (w / h)) / DEG)) * DEG;
