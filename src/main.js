@@ -20,7 +20,7 @@ import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
 import { findTrains } from "./trains.js";
 import { soonCount } from "./launches.js";
 import { createLens, LENS_DEFAULT_FOV } from "./lens.js";
-import { makeYield, afterFirstPaint } from "./schedule.js";
+import { makeYield, afterFirstPaint, createIdleQueue } from "./schedule.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -52,6 +52,7 @@ async function main() {
   // The loader and the page's text are painted before any heavy work starts, and the heavy work then runs in separate tasks
   // (yieldToMain between them) so the page answers taps and scrolling while the app starts.
   const yieldToMain = makeYield();
+  const idle = createIdleQueue();
   await afterFirstPaint();
   const canvas = $("gl");
   const loadBar = $("loadBar"), loadText = $("loadText");
@@ -800,6 +801,16 @@ async function main() {
   }
 
   // ------------------------------------------------------------------ first run
+  // A scene's shaders are compiled and linked before it is first drawn, so that frame does not stop the page while the graphics
+  // driver works. With KHR_parallel_shader_compile the wait is asynchronous (capped, so a lost context can never keep the loader
+  // up). Without it the compile calls go out in one task and the first frame comes in a later one, which gives the driver a head
+  // start; three.js would warn if compileAsync asked for the missing extension, so it is not used then.
+  async function precompile(scene, camera) {
+    try {
+      if (renderer.extensions.has("KHR_parallel_shader_compile")) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 10000))]);
+      else { renderer.compile(scene, camera); await yieldToMain(); }
+    } catch { /* the first frame of the scene compiles them instead, as before */ }
+  }
   function onFirstFrames() {
     orbit.flyTo(S.place.lat, S.place.lon, orbit.heroDist(), 3200);
   }
@@ -819,6 +830,7 @@ async function main() {
   await yieldToMain();
   resize();
   orbit.cam.lat = S.place.lat - 10; orbit.cam.lon = S.place.lon - 80; orbit.cam.dist = 9;
+  await precompile(orbit.scene, orbit.camera);
   requestAnimationFrame(frame);
 
   startLater(app).then(async () => {
@@ -837,6 +849,11 @@ async function main() {
     announceArrivals();
     renderStats(true);
     startLive();
+    // Not needed for the first screen: the sky and Under views' shaders and the Moon's texture are prepared when the
+    // browser is idle, so the first switch to those views does not stall while they compile.
+    idle.add(() => precompile(sky.scene, sky.camera));
+    idle.add(() => precompile(under.scene, under.camera));
+    idle.add(() => renderer.initTexture(app.tex.moon));
   });
 
   // ------------------------------------------------------------------ live feeds

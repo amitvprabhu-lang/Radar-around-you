@@ -302,7 +302,8 @@ export function createSky(ctx) {
   function sampleGlow(city) {
     // average night-light brightness around the place, from the night-lights texture (0..1). A rough proxy for sky glow.
     try {
-      const img = tex.night.image;
+      // the picture as an <img>, the right way up: the texture's own copy may be an upside-down ImageBitmap (engine.js)
+      const img = tex.night.userData.image || tex.night.image;
       const w = img.width, h = img.height;
       const cx = ((city.lon + 180) / 360) * w, cy = ((90 - city.lat) / 180) * h;
       const c = document.createElement("canvas");

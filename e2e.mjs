@@ -23,6 +23,50 @@ async function boot(label, viewport, mobile) {
   await p.evaluate(() => document.getElementById("toasts").replaceChildren());
   return p;
 }
+// Reads every globe texture back from the graphics card (level 0, through a framebuffer) and compares it with the same file uploaded
+// the old way (three.js TextureLoader: an <img> with flipY). Also works out the sky glow of the current place the old way.
+const textureCheck = (p) => p.evaluate(async () => {
+  const { THREE, renderer, tex } = window.__radar.app;
+  const gl = renderer.getContext();
+  const files = { day: "tex/day2k.webp", night: "tex/night2k.webp", water: "tex/water2k.webp", relief: "tex/relief2k.webp", clouds: "tex/clouds2k.webp" };
+  const readGL = (t, w, h) => {
+    const wt = renderer.properties.get(t).__webglTexture;
+    if (!wt) return null;
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, wt, 0);
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fb);
+    renderer.resetState();
+    return px;
+  };
+  const out = { differing: {}, kinds: {} };
+  for (const [k, f] of Object.entries(files)) {
+    const old = await new THREE.TextureLoader().loadAsync(f);
+    renderer.initTexture(old);
+    const w = old.image.width, h = old.image.height;
+    const a = readGL(old, w, h), b = readGL(tex[k], w, h);
+    let n = !a || !b ? -1 : 0;
+    for (let i = 0; n >= 0 && i < a.length; i++) if (a[i] !== b[i]) n++;
+    out.differing[k] = n;
+    out.kinds[k] = tex[k].image && tex[k].image.constructor.name;
+    old.dispose();
+  }
+  out.released = Object.values(out.kinds).every((c) => c === "HTMLImageElement") && Object.keys(files).every((k) => tex[k].userData.image === tex[k].image);
+  const img = new Image(); img.src = files.night; await img.decode();
+  const place = window.__radar.S.place, w = img.width, h = img.height;
+  const c = document.createElement("canvas"); c.width = 16; c.height = 8;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(img, ((place.lon + 180) / 360) * w - 8, ((90 - place.lat) / 180) * h - 4, 16, 8, 0, 0, 16, 8);
+  const px = g.getImageData(0, 0, 16, 8).data;
+  let sum = 0, mx = 0;
+  for (let i = 0; i < px.length; i += 4) { const l = (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255; sum += l; mx = Math.max(mx, l); }
+  out.glowOld = Math.min(1, Math.max(0, sum / (px.length / 4) * 4.5 + mx * 0.25));
+  out.glowApp = window.__radar.sky.info.glow;
+  return out;
+});
 const shot = (p, name) => p.screenshot({ path: `${dir}shots/e2e-${name}.png` });
 const R = (p, fn, arg) => p.evaluate(fn, arg);
 
@@ -40,6 +84,13 @@ async function suite(label, viewport, mobile) {
   check(L("layer chips present"), (await p.locator("#layerChips .chip").count()) === 9);
   check(L("canvas has size"), await R(p, () => { const c = document.getElementById("gl"); return c.width > 100 && c.height > 100; }));
   check(L("WebGL2 context"), await R(p, () => window.__radar.app.renderer.capabilities.isWebGL2));
+  if (label === "phone") {
+    // The textures are decoded off the main thread as upside-down ImageBitmaps and released to an <img> after the upload (src/engine.js).
+    const tx = await textureCheck(p);
+    check(L("textures are decoded off the main thread and their bitmaps released after the upload"), tx.released, JSON.stringify(tx.kinds));
+    check(L("every globe texture on the graphics card holds exactly the texels the old <img> upload gave"), Object.values(tx.differing).every((n) => n === 0), JSON.stringify(tx.differing));
+    check(L("the sky glow sample is the same as with the old <img> texture"), tx.glowOld === tx.glowApp, `${tx.glowOld} vs ${tx.glowApp}`);
+  }
 
   // ---- B. layers and time
   await p.click("#layerChips .chip >> nth=1"); // Starlink
@@ -528,6 +579,24 @@ async function suite(label, viewport, mobile) {
   check(L("Escape closes the sheet"), await p.locator("#sheet").isHidden());
 
   await shot(p, `${label}-end`);
+  if (label === "phone") {
+    // Last on the page, as it resets the graphics: after a lost WebGL context is restored, three.js uploads every texture again from
+    // texture.image, which for a released bitmap is an <img> the right way up (src/engine.js flipForReupload); the globe must come back the same.
+    const lost = await R(p, async () => {
+      const r = window.__radar, gl = r.app.renderer.getContext();
+      const ext = gl.getExtension("WEBGL_lose_context");
+      if (!ext) return { ok: false, why: "no WEBGL_lose_context" };
+      ext.loseContext();
+      await new Promise((res) => setTimeout(res, 500));
+      ext.restoreContext();
+      const f0 = r.S.frames;
+      await new Promise((res) => { const end = Date.now() + 30000; const t = setInterval(() => { if (r.S.frames > f0 + 3 || Date.now() > end) { clearInterval(t); res(); } }, 100); });
+      return { ok: !gl.isContextLost() && r.S.frames > f0 + 3, frames: r.S.frames - f0 };
+    });
+    check(L("the app draws again after a lost WebGL context is restored"), lost.ok, JSON.stringify(lost));
+    const tx = await textureCheck(p);
+    check(L("after a context restore every globe texture again holds exactly the texels of the old <img> upload"), Object.values(tx.differing).every((n) => n === 0), JSON.stringify(tx.differing));
+  }
   await p.context().close();
 }
 

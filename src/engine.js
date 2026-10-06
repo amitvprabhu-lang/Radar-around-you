@@ -40,8 +40,84 @@ export const TIER_SETTINGS = {
   low: { pixelRatio: 1, sphere: 64, antialias: false, bigTexture: false },
 };
 
-export async function loadTexture(url, { wrapS = THREE.ClampToEdgeWrapping, anisotropy = 1, mip = true } = {}) {
-  const t = await new THREE.TextureLoader().loadAsync(url);
+// A 1 by 2 pixel PNG, red above blue, for checking that createImageBitmap really turns a picture upside down when asked.
+const FLIP_TEST_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAIAAAAW4yFwAAAADUlEQVR4nGP4zwAC/wEIAAH/2ZC7NQAAAABJRU5ErkJggg==";
+// The options that make an ImageBitmap hold exactly what WebGL takes from an <img> as three.js uploads it: turned upside down
+// (WebGL ignores its flip setting for ImageBitmaps), not premultiplied and with no colour conversion (three.js asks for none).
+export const BITMAP_OPTIONS = { imageOrientation: "flipY", premultiplyAlpha: "none", colorSpaceConversion: "none" };
+// The check of the flip from pixels: after the flip the top pixel must be the blue one and the bottom one red (RGBA, top row first).
+export const flippedPixels = (px) => px[2] > 200 && px[0] < 50 && px[4] > 200 && px[6] < 50;
+let bitmapCheck = null;
+function bitmapsFlip() {
+  if (!bitmapCheck) {
+    bitmapCheck = (async () => {
+      if (typeof createImageBitmap !== "function" || typeof document === "undefined") return false;
+      const bytes = Uint8Array.from(atob(FLIP_TEST_PNG), (c) => c.charCodeAt(0));
+      const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" }), BITMAP_OPTIONS);
+      const c = document.createElement("canvas");
+      c.width = 1; c.height = 2;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(bmp, 0, 0);
+      if (bmp.close) bmp.close();
+      return flippedPixels(g.getImageData(0, 0, 1, 2).data);
+    })().catch(() => false);
+  }
+  return bitmapCheck;
+}
+
+// Textures whose bitmap was released after the upload, leaving the same picture as an <img> (see releaseAfterUpload).
+const released = new Set();
+
+// Once a bitmap texture is on the graphics card, its decoded bitmap (8 MB for a 2k map) is closed and texture.image becomes the
+// same picture as an <img>, which holds only the compressed bytes until something draws it, so the page keeps no second full-size
+// copy of every map. three.js reads texture.image again only to upload it again: after a lost WebGL context is restored
+// (flipForReupload below) or when needsUpdate is set, which nothing in the app does for these maps. An <img> that has not loaded
+// keeps the bitmap. Called by three.js through texture.onUpdate, once.
+export function releaseAfterUpload(t, img, registry = released) {
+  t.onUpdate = null;
+  if (!img || !img.complete || !(img.naturalWidth > 0)) return false;
+  const bmp = t.image;
+  t.image = img;
+  if (bmp && typeof bmp.close === "function") bmp.close();
+  registry.add(t);
+  return true;
+}
+// After a context loss three.js uploads every texture again from texture.image. A released texture now holds an <img> the right way
+// up, so it must be uploaded with the flip that the <img> path uses. Called when the WebGL context is lost (boot.js).
+export function flipForReupload(registry = released) {
+  for (const t of registry) t.flipY = true;
+}
+
+// The picture as an ImageBitmap, decoded off the main thread. Uploading an <img> made the browser decode it again on the main
+// thread at the first frame (about half a second per 2k texture on a throttled phone profile). Null when this browser cannot do it
+// exactly as the <img> path would, and then the <img> path is used.
+// The <img> made from the same bytes is in userData.image, the right way up, for code that draws the picture on a canvas (the sky
+// glow sample): a canvas samples an <img> and an upside-down bitmap a little differently, so the <img> keeps those numbers exactly
+// as they were. keepImage decodes it now, for a picture that will be drawn at once.
+async function loadBitmapTexture(url, keepImage) {
+  if (!(await bitmapsFlip())) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const bmp = await createImageBitmap(blob, BITMAP_OPTIONS);
+    const t = new THREE.Texture(bmp);
+    t.flipY = false;  // already upside down, as WebGL would have turned it
+    t.premultiplyAlpha = false;
+    t.needsUpdate = true;
+    const img = new Image();
+    const src = URL.createObjectURL(blob);
+    const loaded = new Promise((resolve) => { img.onload = img.onerror = () => { URL.revokeObjectURL(src); resolve(); }; });
+    img.src = src;
+    if (keepImage) { await loaded; await img.decode().catch(() => {}); }
+    t.userData.image = img;
+    t.onUpdate = () => releaseAfterUpload(t, img);
+    return t;
+  } catch { return null; }
+}
+
+export async function loadTexture(url, { wrapS = THREE.ClampToEdgeWrapping, anisotropy = 1, mip = true, keepImage = false } = {}) {
+  const t = (await loadBitmapTexture(url, keepImage)) || (await new THREE.TextureLoader().loadAsync(url));
   t.wrapS = wrapS;
   t.wrapT = THREE.ClampToEdgeWrapping;
   t.anisotropy = anisotropy;

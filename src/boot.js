@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import "./engine.js";
 import { loadCore, loadLater, expandSwarm, TEXTURES } from "./data.js";
-import { loadTexture, tierFor, TIER_SETTINGS } from "./engine.js";
+import { loadTexture, tierFor, TIER_SETTINGS, flipForReupload } from "./engine.js";
 import { makeYield } from "./schedule.js";
 
 // The prototype data is a snapshot. If the visitor opens the page within 36 hours of the snapshot the clock is real time,
@@ -31,7 +31,7 @@ export async function boot({ canvas, quality = "auto", onProgress = () => {}, yi
   const tset = TIER_SETTINGS[tier];
   // The downloads start first: they run on the network while the main thread sets up WebGL, which takes seconds on a slow phone.
   const corePromise = loadCore(onProgress);
-  const texPromises = Object.entries(TEXTURES).map(([k, f]) => loadTexture(f, { wrapS: THREE.RepeatWrapping }).then((t) => [k, f, t]));
+  const texPromises = Object.entries(TEXTURES).map(([k, f]) => loadTexture(f, { wrapS: THREE.RepeatWrapping, keepImage: k === "night" }).then((t) => [k, f, t]));
   // if WebGL fails below, these are never awaited; their own failures must not be reported as unhandled
   corePromise.catch(() => {});
   texPromises.forEach((p) => p.catch(() => {}));
@@ -40,6 +40,8 @@ export async function boot({ canvas, quality = "auto", onProgress = () => {}, yi
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.setClearColor(0x03050a, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tset.pixelRatio));
+  // three.js uploads every texture again after a lost context is restored; released bitmap textures then hold an <img> (engine.js)
+  canvas.addEventListener("webglcontextlost", () => flipForReupload());
   await yieldFn();
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const core = await corePromise;
