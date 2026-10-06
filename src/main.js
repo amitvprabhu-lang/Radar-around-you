@@ -16,11 +16,12 @@ import { validCustomPlace, placeFromPosition, placeFromRecord } from "./places.j
 import { parseHash, buildHash, createHashSync } from "./links.js";
 import { createWakeLock } from "./wake.js";
 import { skyCalendar, skyCalendarSteps, highlight } from "./calendar.js";
-import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
+import { createLive, summarize, overlayCities, LIVE_BASE, needsEarlyPoll } from "./live.js";
 import { findTrains } from "./trains.js";
 import { soonCount } from "./launches.js";
 import { createLens, LENS_DEFAULT_FOV } from "./lens.js";
 import { makeYield, afterFirstPaint, createIdleQueue, runStepsAsync } from "./schedule.js";
+import { rendererName, decideLowPower, createDrawGate } from "./power.js";
 import { $, h, icon, fmtTime, fmtDateTime, num, kmText, safeStore, ageText, daysAgoText, durText } from "./dom.js";
 
 const LAYERS = [
@@ -66,6 +67,12 @@ async function main() {
   loadText.textContent = "Building the 3D scenes";
   await new Promise((r) => setTimeout(r, 30));
   const { D, renderer, clock } = app;
+  // low-power drawing: decided at once from the renderer's name, or later from the measured frame rate (src/power.js)
+  const glName = rendererName(renderer.getContext());
+  const gate = createDrawGate();
+  const frameTimes = [];
+  let powerDecision = decideLowPower({ renderer: glName });
+  if (powerDecision) gate.setOn(powerDecision.on);
   const orbit = createOrbit(app);
   await yieldToMain();
   const sky = createSky({ ...app, swarmGeo: orbit.swarmGeo });
@@ -308,6 +315,7 @@ async function main() {
   };
 
   function select(item) {
+    wakeDrawing();
     S.selected = item;
     S.cardCollapsed = S.view === "sky" || (item && item.kind === "sat" && S.followIdx === item.idx);
     S.guide = null; renderGuide();
@@ -543,6 +551,7 @@ async function main() {
 
   // ------------------------------------------------------------------ views
   function setView(v) {
+    wakeDrawing();
     if (v === "feed") { panels.openFeed(); syncTabs(); return; }
     panels.closeSheet();
     if (v === S.view) { syncTabs(); return; }
@@ -689,7 +698,8 @@ async function main() {
   // ------------------------------------------------------------------ sizing
   function resize() {
     const w = canvas.clientWidth || window.innerWidth, hh = canvas.clientHeight || window.innerHeight;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, { high: 2, medium: 1.5, low: 1 }[app.tier]));
+    // low-power drawing also draws fewer pixels (one per CSS pixel)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, gate.on ? 1 : { high: 2, medium: 1.5, low: 1 }[app.tier]));
     renderer.setSize(w, hh, false);
     orbit.resize(w, hh); sky.resize(w, hh); under.resize(w, hh);
   }
@@ -755,11 +765,39 @@ async function main() {
   }
 
   // ------------------------------------------------------------------ frame loop
-  let last = performance.now(), t0 = last, lastSlow = 0, lastLive = 0, frames = 0, readyShown = false, shift = 0;
+  let last = performance.now(), t0 = last, lastSlow = 0, lastLive = 0, frames = 0, readyShown = false, shift = 0, prevFrameAt = null;
   function frame(now) {
+    frameTimer = null;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     clock.tick();
+    // things that move on their own keep low-power drawing awake: sped-up time, a quake replay, following a satellite, sensors, camera
+    if (gate.on && (S.rateIdx || orbit.replay.active || under.replay.active || S.followIdx >= 0 || lens.active || sky.view.sensor || pointers.size)) gate.wake(now, 600);
+    const draw = gate.shouldDraw(now);
+    if (draw) drawFrame(now, dt);
+    if (now - lastLive > 1000) {
+      lastLive = now;
+      panels.tickLive();
+      updateClockText();
+      if (S.view === "under") updateUnderPanel();
+      if (S.view === "globe") renderStats();
+      if (S.precise.size && S.tonightKey !== S.place.id + ":" + Math.floor(nowDate().getTime() / 600000)) updateTonightBtn();
+    }
+    frames++;
+    S.frames = frames;
+    if (frames === 3 && !readyShown) { readyShown = true; $("loader").classList.add("done"); setTimeout(() => $("loader").remove(), 900); onFirstFrames(); }
+    // measure the frame rate at full speed once the loader is gone, and decide once (see src/power.js)
+    if (readyShown && !powerDecision && prevFrameAt !== null) {
+      frameTimes.push(now - prevFrameAt);
+      const d = decideLowPower({ frameTimes });
+      if (d) setPowerDecision(d);
+    }
+    prevFrameAt = now;
+    scheduleFrame(now);
+  }
+  function drawFrame(now, dt) {
+    gate.drew(now);
+    S.draws = gate.draws;
     const date = nowDate();
     const tSec = (now - t0) / 1000;
     const rect = canvas.getBoundingClientRect();
@@ -790,14 +828,6 @@ async function main() {
     }
     render();
     updateLabels(rect.width, rect.height);
-    if (now - lastLive > 1000) {
-      lastLive = now;
-      panels.tickLive();
-      updateClockText();
-      if (S.view === "under") updateUnderPanel();
-      if (S.view === "globe") renderStats();
-      if (S.precise.size && S.tonightKey !== S.place.id + ":" + Math.floor(nowDate().getTime() / 600000)) updateTonightBtn();
-    }
     if (S.view === "sky") {
       updateGuide();
       if (skyHud.heading) {
@@ -812,10 +842,40 @@ async function main() {
       }
     }
     if (S.view === "globe" && orbit.cam.dist < 2.4 && !hiTex) maybeLoadHighRes();
-    frames++;
-    S.frames = frames;
-    if (frames === 3 && !readyShown) { readyShown = true; $("loader").classList.add("done"); setTimeout(() => $("loader").remove(), 900); onFirstFrames(); }
-    requestAnimationFrame(frame);
+  }
+
+  // ------------------------------------------------------------------ low-power drawing (src/power.js)
+  // On a software renderer, or when frames are slow, the loop draws only after something happens and otherwise once every few
+  // seconds, so the page goes idle between frames; the text on screen still changes every second. Full speed elsewhere.
+  let frameTimer = null;
+  function scheduleFrame(now) {
+    const d = gate.nextDelay(now);
+    if (d <= 0) requestAnimationFrame(frame);
+    else frameTimer = setTimeout(() => { frameTimer = null; requestAnimationFrame(frame); }, d);
+  }
+  // draw continuously for a while from now; a frame waiting on a timer comes at once
+  function wakeDrawing(ms) {
+    gate.wake(performance.now(), ms);
+    if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; requestAnimationFrame(frame); }
+  }
+  // one frame at once, without a period of continuous drawing (a resize or new data changes the picture once)
+  function requestDrawing() {
+    gate.requestDraw();
+    if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; requestAnimationFrame(frame); }
+  }
+  function setPowerDecision(d) {
+    powerDecision = d;
+    if (d.on && !gate.on) { gate.setOn(true); resize(); wakeDrawing(); }
+  }
+  for (const type of ["pointerdown", "pointermove", "wheel", "keydown", "touchstart"]) window.addEventListener(type, () => wakeDrawing(), { capture: true, passive: true });
+  window.addEventListener("resize", () => requestDrawing());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) requestDrawing(); });
+  // programmatic camera moves and view changes (deep links, Show me buttons, live data) wake it too
+  for (const [obj, names] of [[orbit, ["flyTo", "follow", "unfollow", "startQuake", "select"]], [sky, ["lookAt", "select", "setPlace"]], [under, ["setQuake"]]]) {
+    for (const n of names) { const f = obj[n]; if (typeof f === "function") obj[n] = (...a) => { wakeDrawing(); return f(...a); }; }
+  }
+  for (const [obj, names] of [[orbit, ["refreshMarkers", "refreshAurora", "refreshStorms", "refreshFires"]], [sky, ["refreshPlace", "refreshAurora"]]]) {
+    for (const n of names) { const f = obj[n]; if (typeof f === "function") obj[n] = (...a) => { requestDrawing(); return f(...a); }; }
   }
 
   // The 4k Earth map (about 480 KB) is only fetched when it will be seen: on a fast device, or once someone zooms in.
@@ -868,6 +928,7 @@ async function main() {
   resize();
   orbit.cam.lat = S.place.lat - 10; orbit.cam.lon = S.place.lon - 80; orbit.cam.dist = 9;
   await precompile(orbit.scene, orbit.camera);
+  gate.wake(performance.now());  // the first seconds draw continuously, also in low-power mode
   requestAnimationFrame(frame);
 
   startLater(app).then(async () => {
@@ -913,6 +974,7 @@ async function main() {
 
   const byTimeDesc = (a, b) => Date.parse(b.time) - Date.parse(a.time);
   function refreshDerived() {
+    requestDrawing();
     sumCache.at = 0;
     invalidateTonight(); S.statsKey = "";
     renderStats(true);
@@ -951,8 +1013,11 @@ async function main() {
       const st = liveCtl.state();
       if (!document.hidden && (!st.lastPollAt || Date.now() - st.lastPollAt > 60000)) liveCtl.pollNow();
     });
-    // a visitor who arrives after the pipeline has been quiet should see what is current without waiting for the first interval
-    if (!D.live.manifest || Date.now() - Date.parse(D.live.manifest.generatedAt) > 120000) setTimeout(() => liveCtl.pollNow(), 4000);
+    // With no manifest at start (it failed or timed out), try again soon instead of waiting the whole interval. A manifest that
+    // arrived at start was asked for seconds ago with no-store, so asking again at once (as the app did when the manifest was over
+    // two minutes old) would only repeat it; the normal interval (the manifest's pollSec) follows instead, which leaves the network
+    // quiet after the start.
+    if (needsEarlyPoll(D.live.manifest)) setTimeout(() => liveCtl.pollNow(), 4000);
   }
 
   // The "something just happened" moments: the newest notable quake and the newest launch
@@ -1011,7 +1076,7 @@ async function main() {
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 
   // hooks for tests and debugging
-  window.__radar = { wake, applyHash, S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize, liveCtl: () => liveCtl, liveSummary };
+  window.__radar = { lowPower: () => ({ on: gate.on, reason: powerDecision ? powerDecision.reason : "deciding", renderer: glName, draws: gate.draws, awake: gate.awake(performance.now()) }), wakeDrawing, wake, applyHash, S, app, orbit, sky, under, panels, actions, setView, select, tonightPlan, tonightModel, resize, liveCtl: () => liveCtl, liveSummary };
   window.__radarStarted = true;
 }
 

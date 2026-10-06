@@ -109,6 +109,9 @@ export function overlayCities(cities, clouds, planes) {
   return changed;
 }
 
+// Whether the app should ask for the manifest again a few seconds after it starts: only when it started without one.
+export const needsEarlyPoll = (manifest) => !manifest;
+
 export function pollDelayMs(manifest, failures) {
   const base = Math.min(3600, Math.max(60, (manifest && manifest.pollSec) || 300)) * 1000;
   return Math.min(30 * 60000, base * 2 ** Math.min(failures, 4));

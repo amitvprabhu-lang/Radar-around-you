@@ -88,6 +88,23 @@ async function suite(label, viewport, mobile) {
   check(L("canvas has size"), await R(p, () => { const c = document.getElementById("gl"); return c.width > 100 && c.height > 100; }));
   check(L("WebGL2 context"), await R(p, () => window.__radar.app.renderer.capabilities.isWebGL2));
   if (label === "phone") {
+    // Low-power drawing (src/power.js): this harness renders with SwiftShader, so the app must have chosen it from the renderer's name,
+    // go idle when nothing happens (a draw every few seconds, the text still ticking every second) and wake at once on a pointer event.
+    const lp0 = await R(p, () => window.__radar.lowPower());
+    check(L("low-power drawing is on for the software renderer"), lp0.on && /software renderer/.test(lp0.reason) && /swiftshader/i.test(lp0.renderer), JSON.stringify(lp0));
+    await p.waitForFunction(() => !window.__radar.lowPower().awake, null, { timeout: 30000 }).catch(() => {});
+    const idle = await R(p, async () => {
+      const r = window.__radar, d0 = r.lowPower().draws, f0 = r.S.frames, awake0 = r.lowPower().awake;
+      await new Promise((res) => setTimeout(res, 7000));
+      return { awake0, draws: r.lowPower().draws - d0, frames: r.S.frames - f0 };
+    });
+    check(L("with no input the loop goes idle: at most 3 draws in 7 s, and the clock text still ticks"), !idle.awake0 && idle.draws <= 3 && idle.frames >= 4, JSON.stringify(idle));
+    const box = await p.locator("#gl").boundingBox();
+    const d1 = await R(p, () => window.__radar.lowPower().draws);
+    await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await p.mouse.move(box.x + box.width / 2 + 5, box.y + box.height / 2 + 5);
+    const woke = await R(p, async (d1) => { const r = window.__radar, awake = r.lowPower().awake; await new Promise((res) => setTimeout(res, 2500)); return { awake, draws: r.lowPower().draws - d1 }; }, d1);
+    check(L("a pointer event wakes the loop at once and it draws continuously"), woke.awake && woke.draws >= 2, JSON.stringify(woke));
     // The textures are decoded off the main thread as upside-down ImageBitmaps and released to an <img> after the upload (src/engine.js).
     const tx = await textureCheck(p);
     check(L("textures are decoded off the main thread and their bitmaps released after the upload"), tx.released, JSON.stringify(tx.kinds));
