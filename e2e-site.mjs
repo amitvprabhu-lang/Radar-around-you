@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./harness.mjs";
 import { LIVE_FILES, HAZARD_FILES, RIGHT_NOW_FILE } from "./site/livepages.mjs";
+import { SKY_PAGES } from "./site/sky.mjs";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 const MIME = { ".json": "application/json", ".bin": "application/octet-stream", ".webp": "image/webp", ".html": "text/html", ".txt": "text/plain", ".xml": "application/xml", ".webmanifest": "application/manifest+json", ".js": "text/javascript" };
@@ -115,6 +116,27 @@ for (const f of [...HAZARD_FILES, RIGHT_NOW_FILE]) {
     check("the right-now hub links every live page this build wrote", unlinked.length === 0, unlinked.join(" "));
   }
 }
+
+// the sky pages (tonight's sky hub, six cities, ISS today), fetched raw: written at deploy time from the forecast and precise.json bundled
+// in public/, each answers 200 with its canonical address, a robots tag matching SITE_NOINDEX, the data time in the lead, the "What this
+// means" findings first, its figures as inline SVG, MET Norway's credit where the cloud forecast is shown, and the shared script
+for (const f of SKY_PAGES.map((x) => x.file)) {
+  const path1 = "/" + f.replace(/index\.html$/, "");
+  const r = await rawGet("https://radar.test" + path1);
+  const h = r.text;
+  const canonical = (h.match(/<link rel="canonical" href="([^"]+)">/) || [])[1] || "";
+  const robots = (h.match(/<meta name="robots" content="([^"]+)">/) || [])[1];
+  const lead = (h.match(/<p class="lead">([\s\S]*?)<\/p>/) || [])[1] || "";
+  const firstH2 = (h.match(/<main[\s\S]*?<h2[^>]*>([^<]*)<\/h2>/) || [])[1];
+  check(`${path1} answers 200 raw, with its canonical address, a robots tag matching SITE_NOINDEX, the data time in the lead and the findings first`,
+    r.status === 200 && canonical.endsWith(path1) && robots === want && /^As of <time datetime="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ">/.test(lead) && firstH2 === "What this means",
+    JSON.stringify({ status: r.status, canonical, robots, lead: lead.slice(0, 120), firstH2 }));
+  check(`${path1} carries its figures as inline SVG with captions and loads only the site's own live-pages.js`,
+    /<figure>\s*<svg[^>]+role="img"/.test(h) && /<figcaption>/.test(h) && /<script src="(\.\.\/)+live-pages\.js" defer><\/script>/.test(h) && /<body data-live-v="1"/.test(h), path1);
+  if (f !== "iss-today/index.html") check(`${path1} credits MET Norway visibly`, h.includes("The Norwegian Meteorological Institute, shortened MET Norway"), path1);
+}
+const js = await rawGet("https://radar.test/live-pages.js");
+check("the shared live-pages.js is served", js.status === 200 && js.text.includes("function liveZones(d)"), String(js.status));
 
 const about = await ctx.newPage();
 await about.goto("https://radar.test/about/", { waitUntil: "load", timeout: 60000 });
