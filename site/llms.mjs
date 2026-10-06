@@ -6,6 +6,7 @@ import { SATCOUNT_FILE } from "./pages-satcount.mjs";
 import { HUB_FILE } from "./satcountry.mjs";
 import { RIGHT_NOW_FILE } from "./hazard.mjs";
 import { FAMILY_PAGES } from "./livepages.mjs";
+import { GALLERY_FILE } from "./embed.mjs";
 
 const clean = (s) => String(s).replace(/\s+/g, " ").trim();
 // OURS: the live pages' descriptions hold today's numbers, so this file uses fixed notes instead.
@@ -25,6 +26,8 @@ export const HAZARD_NOTES = {
 // every family page of site/livepages.mjs, with its fixed note (HAZARD_NOTES for the hazard pages, the page's own `note` for the others)
 const LIVE_HAZARD_LIST = [[RIGHT_NOW_FILE, "Right now"], ...FAMILY_PAGES.map((p) => [p.file, p.name])];
 const noteOf = (file) => HAZARD_NOTES[file] || (FAMILY_PAGES.find((p) => p.file === file) || {}).note;
+// OURS: the fixed note for the widget gallery, listed with the live data when the build has the page
+export const EMBED_NOTE = "Five free live widgets (earthquakes, an aurora meter, tropical storms, wildfires and tonight's sky) for other sites to embed, with one credit line.";
 const REFERENCE = ["moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html"];
 
 export function buildLlmsTxt({ pages, url, name, summary }) {
@@ -44,7 +47,8 @@ export function buildLlmsTxt({ pages, url, name, summary }) {
     "## Sky reference", ...REFERENCE.map((f) => entry(f)), "",
     "## Guides", ...guides.map((f) => entry(f)), "",
     "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE),
-    ...LIVE_HAZARD_LIST.map(([f, title]) => `- [${title}](${url}/${urlPath(f)}): ${noteOf(f)}`), "",
+    ...LIVE_HAZARD_LIST.map(([f, title]) => `- [${title}](${url}/${urlPath(f)}): ${noteOf(f)}`),
+    ...(byFile.has(GALLERY_FILE) ? [entry(GALLERY_FILE, EMBED_NOTE)] : []), "",
   ];
   return lines.join("\n");
 }

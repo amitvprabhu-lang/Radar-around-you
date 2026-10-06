@@ -11,6 +11,9 @@ import { LIVE_PAGES, RIGHT_NOW_FILE } from "./livepages.mjs";
 import { STRIP_FIGURES, STRIP_DASH, STRIP_SCRIPT } from "./home-strip.mjs";
 
 export const HOME_ID = "about-home";
+// The widget gallery (site/embed.mjs, GALLERY_FILE), linked under the row of live pages; a plain string here, so this module does not
+// load the gallery's code.
+export const EMBED_GALLERY_FILE = "embed/index.html";
 // The section links the satellites by country hub only when the build has that page.
 export const COUNTRY_HUB_FILE = "satellites-by-country/index.html";
 const go = (to) => { const [file, frag] = to.split("#"); return href("index.html", file) + (frag ? `#${frag}` : ""); };
@@ -62,6 +65,7 @@ ${figures}
 ${liveLinks(pages).map((p) => `<li>${a(p.file, p.name)}</li>`).join("\n")}
 </ul>
 </nav>
+<p class="home-embed">Five of these views also come as ${a(EMBED_GALLERY_FILE, "live widgets for your own website")}.</p>
 </div>`;
 }
 

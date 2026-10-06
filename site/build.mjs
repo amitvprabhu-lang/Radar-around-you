@@ -19,6 +19,7 @@ import { buildLlmsTxt } from "./llms.mjs";
 import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home-text.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 import { LIVE_SCRIPT_FILE, liveScriptSource } from "./live-pages-js.mjs";
+import { writeEmbed } from "./embed.mjs";
 import { indexConstellations } from "../src/constellations.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -207,6 +208,8 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   // the shared script of the live pages (site/live-pages-js.mjs): written by every deploy, so the live pages copied in by hosting/pull.php
   // find it, and cached like any other file
   fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
+  // the five embeddable widget pages (site/embed.mjs): noindex, so not in the sitemap; the gallery page is in `pages`
+  writeEmbed(outDir, { coast });
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
     // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out

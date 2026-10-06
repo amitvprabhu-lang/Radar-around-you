@@ -3,6 +3,7 @@ import { moonPage, seasonsPage, eclipsesPage, planetsPage, showersPage } from ".
 import { cityPage, citiesIndex, constellationPage, constellationsIndex, starsIndex } from "./pages-places.mjs";
 import { satelliteCountPage } from "./pages-satcount.mjs";
 import { aboutPage } from "./pages-about.mjs";
+import { galleryPage } from "./embed.mjs";
 import { auroraGuide, stormGuide, quakeGuide, fireGuide, asteroidGuide, satelliteGuide, guidesIndex, methodsPage } from "./pages-guides.mjs";
 
 // cities: [{ id, name, country, lat, lon, tz }], consIdx: indexConstellations(doc), starsDoc: public/starnames.json,
@@ -18,5 +19,6 @@ export function buildPages({ cities, consIdx, starsDoc, checks, details = null, 
     starsIndex(starsDoc, consIdx, details),
     guidesIndex(guides), ...guides, methodsPage(checks), aboutPage(),
     ...(satcount ? [satelliteCountPage(satcount, { updated })] : []), ...countryPages, ...livePages,
+    galleryPage(),
   ];
 }
