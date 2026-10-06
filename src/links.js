@@ -50,3 +50,21 @@ export function buildHash({ view = "globe", sheet = null, watchTab = null, place
   else if (view !== "globe" && VIEWS.includes(view)) parts.push(view);
   return parts.length ? "#" + parts.join("&") : "";
 }
+
+// Keeps the address bar in step with the screen, but only once start() has been called: the app calls it just before it reads the
+// link it was opened with. While the app starts, keyboard focus can reach the tabs under the loader, and an early sync would
+// replace a deep link such as #status before it was applied. want, read and write are injected for the tests.
+export function createHashSync({ want, read, write }) {
+  let ready = false;
+  return {
+    start() { ready = true; },
+    get ready() { return ready; },
+    sync() {
+      if (!ready) return false;
+      const w = want(), h = read();
+      if (h === w || (w === "" && h === "")) return false;
+      write(w);
+      return true;
+    },
+  };
+}

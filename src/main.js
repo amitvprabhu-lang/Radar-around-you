@@ -13,7 +13,7 @@ import { buildTonight, buildTonightAsync } from "./tonight.js";
 import { loadPrecise } from "./sgp4.js";
 import { loadFeedData, loadPlaces } from "./data.js";
 import { validCustomPlace, placeFromPosition, placeFromRecord } from "./places.js";
-import { parseHash, buildHash } from "./links.js";
+import { parseHash, buildHash, createHashSync } from "./links.js";
 import { createWakeLock } from "./wake.js";
 import { skyCalendar, skyCalendarSteps, highlight } from "./calendar.js";
 import { createLive, summarize, overlayCities, LIVE_BASE } from "./live.js";
@@ -161,11 +161,13 @@ async function main() {
   };
   // deep links: the hash always describes the current screen and place, and a pasted or edited hash moves the app there
   const defaultPlaceId = (D.cities.find((c) => c.tz === tzGuess) || D.cities[0]).id;
+  const hashSync = createHashSync({
+    want: () => buildHash({ view: S.view, sheet: S.sheet, watchTab: S.watchTab, placeId: S.place.id, defaultPlaceId }),
+    read: () => location.hash,
+    write: (h) => history.replaceState(null, "", location.pathname + location.search + h),
+  });
   function syncHash() {
-    try {
-      const want = buildHash({ view: S.view, sheet: S.sheet, watchTab: S.watchTab, placeId: S.place.id, defaultPlaceId });
-      if (location.hash !== want && !(want === "" && location.hash === "")) history.replaceState(null, "", location.pathname + location.search + want);
-    } catch { /* some hosts do not allow changing the address */ }
+    try { hashSync.sync(); } catch { /* some hosts do not allow changing the address */ }
   }
   actions.syncHash = syncHash;
   actions.sheetOpened = syncHash;
@@ -347,7 +349,9 @@ async function main() {
     if (tonightJob && tonightJob.key === key) return;
     const job = { key };
     tonightJob = job;
-    buildTonightAsync(tonightArgs(), { yieldFn: yieldToMain }).then((t) => {
+    // a superseded build stops at its next pause instead of finishing work nobody will use
+    const yieldOrStop = async () => { await yieldToMain(); if (tonightJob !== job) throw new Error("superseded"); };
+    buildTonightAsync(tonightArgs(), { yieldFn: yieldOrStop }).then((t) => {
       if (tonightJob !== job) return;
       tonightJob = null;
       S._tonight = t; S.tonightKey = key;
@@ -822,7 +826,7 @@ async function main() {
     try {
       const { loadTexture } = await import("./engine.js");
       const { TEXTURES_LATER } = await import("./data.js");
-      const t = await loadTexture(TEXTURES_LATER.day4k, { anisotropy: app.aniso, wrapS: THREE.RepeatWrapping });
+      const t = await loadTexture(TEXTURES_LATER.day4k, { anisotropy: app.aniso, wrapS: THREE.RepeatWrapping, renderer });
       orbit.setHighTexture(t);
       hiTex = t;
     } catch { hiTex = null; }
@@ -988,7 +992,11 @@ async function main() {
     if (t.con) openConstellationLink(t.con);
   }
   window.addEventListener("hashchange", () => applyHash(location.hash));
-  applyHash(location.hash);
+  // the link the page was opened with is read before any sync may write the address bar; with no link, the screen as it is now
+  // (a tab may have been chosen while the app started) is written once it has been applied
+  const openedWith = location.hash;
+  hashSync.start();
+  applyHash(openedWith).then(() => { if (!openedWith) syncHash(); });
 
   // installable and usable offline: the worker is optional, so a browser that refuses it (or a page not served over https) simply runs as before
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

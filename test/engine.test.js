@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { flippedPixels, BITMAP_OPTIONS, releaseAfterUpload, flipForReupload } from "../src/engine.js";
+import { uprightPixels, decideBitmapPath, BITMAP_OPTIONS, releaseAfterUpload, flipForReupload } from "../src/engine.js";
 
 // The decoding itself needs a browser (e2e.mjs compares every texture texel by texel with the old upload); these are the pure parts.
 test("the bitmap options match what three.js asks WebGL for when it uploads an <img>", () => {
@@ -9,12 +9,18 @@ test("the bitmap options match what three.js asks WebGL for when it uploads an <
   assert.deepEqual(BITMAP_OPTIONS, { imageOrientation: "flipY", premultiplyAlpha: "none", colorSpaceConversion: "none" });
 });
 
-test("the flip check accepts only the test picture turned upside down", () => {
+test("the bitmap path is chosen only when the WebGL read-back shows the picture the way the <img> upload puts it", async () => {
   const red = [255, 0, 0, 255], blue = [0, 0, 255, 255];
-  assert.equal(flippedPixels([...blue, ...red]), true, "blue on top after the flip");
-  assert.equal(flippedPixels([...red, ...blue]), false, "the picture as it was: the browser ignored the option");
-  assert.equal(flippedPixels([...blue, ...blue]), false);
-  assert.equal(flippedPixels([0, 0, 0, 0, 0, 0, 0, 0]), false, "an empty canvas (a failed draw)");
+  // readPixels gives the texture's bottom row first; the <img> path puts the picture's bottom row (blue) there
+  assert.equal(await decideBitmapPath(() => [...blue, ...red]), true, "correct");
+  assert.equal(await decideBitmapPath(async () => new Uint8Array([...blue, ...red])), true, "correct, from a typed array and a promise");
+  assert.equal(await decideBitmapPath(() => [...red, ...blue]), false, "flipped: the browser uploads bitmaps the other way up");
+  assert.equal(await decideBitmapPath(() => { throw new Error("no WebGL"); }), false, "throws");
+  assert.equal(await decideBitmapPath(async () => { throw new Error("decode failed"); }), false, "rejects");
+  assert.equal(await decideBitmapPath(() => [0, 0, 0, 0, 0, 0, 0, 0]), false, "an empty read-back");
+  assert.equal(await decideBitmapPath(() => null), false);
+  assert.equal(await decideBitmapPath(() => [...blue, ...blue]), false);
+  assert.equal(uprightPixels([...blue]), false, "too short");
 });
 
 test("releaseAfterUpload swaps a loaded <img> in for the bitmap, closes the bitmap and remembers the texture, once", () => {
@@ -30,7 +36,24 @@ test("releaseAfterUpload swaps a loaded <img> in for the bitmap, closes the bitm
   assert.ok(reg.has(t));
 });
 
-test("releaseAfterUpload keeps the bitmap while the <img> has not loaded or failed", () => {
+test("releaseAfterUpload waits for an <img> still loading and releases the bitmap when it loads", () => {
+  let closed = 0, listener = null;
+  const bmp = { close: () => { closed++; } };
+  const img = { complete: false, naturalWidth: 0, addEventListener: (type, fn, opts) => { assert.equal(type, "load"); assert.deepEqual(opts, { once: true }); listener = fn; } };
+  const t = { image: bmp, onUpdate: () => {} };
+  const reg = new Set();
+  assert.equal(releaseAfterUpload(t, img, reg), false);
+  assert.equal(t.image, bmp);
+  assert.equal(closed, 0);
+  assert.equal(typeof listener, "function", "it waits for the load");
+  img.complete = true; img.naturalWidth = 2048;
+  listener();
+  assert.equal(t.image, img);
+  assert.equal(closed, 1);
+  assert.ok(reg.has(t));
+});
+
+test("releaseAfterUpload keeps the bitmap when the <img> failed or there is none", () => {
   for (const img of [{ complete: false, naturalWidth: 0 }, { complete: true, naturalWidth: 0 }, null]) {
     let closed = 0;
     const bmp = { close: () => { closed++; } };

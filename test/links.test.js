@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseHash, buildHash, parsePlaceToken, VIEWS, SHEETS, WATCH_TABS } from "../src/links.js";
+import { parseHash, buildHash, parsePlaceToken, VIEWS, SHEETS, WATCH_TABS, createHashSync } from "../src/links.js";
 
 test("every view, sheet and watch tab parses from its own name", () => {
   for (const v of VIEWS) assert.equal(parseHash("#" + v).view, v);
@@ -56,4 +56,24 @@ test("a constellation link takes exactly three letters and nothing else", () => 
   assert.equal(parseHash("#con=UMi").con, "umi");
   assert.equal(parseHash("#sky&con=cru").view, "sky");
   for (const bad of ["#con=", "#con=cr", "#con=crux", "#con=c1u", "#con=<s>", "#con=cru%20", "#con", "#con=../x"]) assert.equal(parseHash(bad).con, null, bad);
+});
+
+test("the hash sync writes nothing until the opening link has been read, then keeps the address in step", () => {
+  let hash = "#status", screen = "#sky";
+  const writes = [];
+  const s = createHashSync({ want: () => screen, read: () => hash, write: (h) => { writes.push(h); hash = h; } });
+  // during start-up a tab press changes the screen: the deep link must survive
+  assert.equal(s.ready, false);
+  assert.equal(s.sync(), false);
+  assert.equal(hash, "#status");
+  assert.deepEqual(writes, []);
+  s.start();
+  screen = "#status";  // the link was applied
+  assert.equal(s.sync(), false, "nothing to write when the address already matches");
+  screen = "#sky";
+  assert.equal(s.sync(), true);
+  assert.equal(hash, "#sky");
+  screen = ""; hash = "";
+  assert.equal(s.sync(), false);
+  assert.deepEqual(writes, ["#sky"]);
 });
