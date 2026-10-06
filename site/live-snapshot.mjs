@@ -98,7 +98,9 @@ async function getOnce(fetchImpl, url, ms, max) {
       if (status !== 200) return { status };
       return { status, body: await readLimited(res, max) };
     } catch (e) {
-      return { error: (e && e.message) || String(e), tooLarge: e instanceof TooLarge };
+      // Node's fetch says only "fetch failed" and keeps the reason (such as ECONNREFUSED or ENOTFOUND) in its cause
+      const cause = e && e.cause ? ` (${e.cause.code || e.cause.message || e.cause})` : "";
+      return { error: `${(e && e.message) || String(e)}${cause}`, tooLarge: e instanceof TooLarge };
     }
   })();
   try { return await Promise.race([attempt, timeout]); } finally { clearTimeout(timer); }

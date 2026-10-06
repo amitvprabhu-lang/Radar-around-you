@@ -272,6 +272,13 @@ test("a network error: nothing written, the reason reported, one retry and no mo
   assert.deepEqual(lines, [`live snapshot: skipped (live data: ${report.live.reason}; pages: ${report.pages.reason})`]);
 });
 
+test("the reason names the cause Node's fetch keeps behind \"fetch failed\"", async () => {
+  const d = branch(), out = siteDir();
+  const fetchImpl = async () => { const e = new TypeError("fetch failed"); e.cause = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9"), { code: "ECONNREFUSED" }); throw e; };
+  const { report } = await run(d, out, { fetchImpl });
+  assert.equal(report.live.reason, "manifest.json: fetch failed (ECONNREFUSED)");
+});
+
 test("a failed file download is retried once, and a second success is accepted", async () => {
   const d = branch(), out = siteDir();
   let n = 0;
