@@ -8,8 +8,8 @@ import { isoZ, parseTime, freshness, HOUR_MS } from "./hazard.mjs";
 import { sameStorm } from "../src/dedupe.js";
 import { unpackDetails, launchDateFromDay, swarmFromRad, SWARM_EARTH_RADIUS_KM, decodeSwarm, swarmPositionEcef, ecefToGeodetic } from "../src/core.js";
 import { countSatellites, assertPlausible, ACTIVE_STATUSES } from "./satcount.mjs";
-import { launchWhenText } from "./live-pages-js.mjs";
-import { direction, percentText, topShare, meanAndRange, and, changeSince } from "./insight.mjs";
+import { launchWhenText, regionName } from "./live-pages-js.mjs";
+import { direction, percentText, meanAndRange, and, changeSince, topWithTies, namesCapped } from "./insight.mjs";
 
 const DAY_MS = 24 * HOUR_MS;
 
@@ -49,8 +49,8 @@ const countBy = (list, key) => {
 const num = (n) => n.toLocaleString("en-GB");
 const v = (n, one, many) => (n === 1 ? one : many);
 // a country name for an ISO code, from the runtime's own region names; the code itself if there is none, "Not given" for none
-const regionNames = (() => { try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch { return null; } })();
-export const countryName = (cc) => { if (!cc) return "Not given"; try { return (regionNames && regionNames.of(cc)) || cc; } catch { return cc; } };
+// (the same function the live refresh uses, so the page and the refreshed text agree)
+export const countryName = regionName;
 const dateLongUtc = (ms) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(ms));
 
 // ------------------------------------------------------------------ rocket launches (Launch Library 2, pipeline/hazards.py, launches)
@@ -144,7 +144,7 @@ export function summariseDisasters(list, { now, allowStale = false, dataTime, st
   // NHC's storms, when its list is fresh enough: their GDACS copies are left out (the storm page shows them), with src/dedupe.js's rule
   let nhc = [], stormsNote = "NHC's storm list was not available in this build, so no cyclone was matched with it";
   if (storms && Array.isArray(storms.storms) && Number.isFinite(parseTime(storms.generated))) {
-    if (allowStale || nowMs(now) - parseTime(storms.generated) <= STORMS_FOR_DEDUPE_MAX_HOURS * HOUR_MS) { nhc = storms.storms.filter((s) => s && typeof s.name === "string"); stormsNote = null; }
+    if (allowStale || nowMs(now) - parseTime(storms.generated) <= STORMS_FOR_DEDUPE_MAX_HOURS * HOUR_MS) { nhc = storms.storms.filter((s) => s && typeof s === "object"); stormsNote = null; }
     else stormsNote = `NHC's storm list was older than ${STORMS_FOR_DEDUPE_MAX_HOURS} hours, so no cyclone was matched with it`;
   }
   const dupes = rest.filter((e) => e.type === "TC" && nhc.some((s) => sameStorm(s, e)));
@@ -162,14 +162,15 @@ export function summariseDisasters(list, { now, allowStale = false, dataTime, st
   const pub = (e) => ({ ...e, from: isoZ(e.from), to: isoZ(e.to) });
   return {
     feed: "events", dataTime: isoZ(t), stale, listed: all.length, atCap: all.length >= GDACS_MAX_EVENTS, earthquakesLeftOut: eq,
-    olderLeftOut: keep.length - shown.length, stormsNote, duplicates: dupes.map((e) => ({ name: e.name, nhc: (nhc.find((s) => sameStorm(s, e)) || {}).name || "" })),
+    olderLeftOut: keep.length - shown.length, stormsNote, duplicates: dupes.map((e) => ({ name: e.name, nhc: String((nhc.find((s) => sameStorm(s, e)) || {}).name || "").trim() || "an unnamed storm" })),
     current: current.length, recent: recent.length, currentByType: tally(current), recentByType: tally(recent),
     currentRed: level(current, "Red"), currentOrange: level(current, "Orange"), currentGreen: level(current, "Green"),
     recentRed: level(recent, "Red"), recentOrange: level(recent, "Orange"),
     alerted: shown.filter((e) => e.alert !== "Green").sort(order).map(pub),
     greenByType: GDACS_TYPE_ORDER.map((type) => ({ type, name: GDACS_TYPES[type], events: shown.filter((e) => e.alert === "Green" && e.type === type).sort(order).map(pub) })).filter((g) => g.events.length),
     points: shown.map((e) => ({ lat: e.lat, lon: e.lon, type: e.type, alert: e.alert, name: e.name, current: e.current })),
-    countries: countBy(current.filter((e) => e.country), (e) => e.country), noCountry: shown.filter((e) => !e.country).length,
+    // each place a current event names, counted once per event: GDACS lists several places in one field ("Papua New Guinea, Indonesia")
+    countries: countBy(current.flatMap((e) => [...new Set(e.country.split(",").map((c) => c.trim()).filter(Boolean))]), (c) => c), noCountry: shown.filter((e) => !e.country).length,
   };
 }
 
@@ -201,7 +202,10 @@ export function summariseStarlink({ meta, details, swarm }, { now, allowStale = 
   const n = meta.count;
   const ab = swarm.buffer.slice(swarm.byteOffset, swarm.byteOffset + swarm.byteLength);
   const f32 = new Float32Array(ab, 0, n * 2), u16 = new Uint16Array(ab, n * 8, n * 6);
-  const isNew = new Set(meta.newIdx || []);
+  // launched in the 30 days that end with the data day (that day included), from each satellite's launch day; the collector's newIdx
+  // (used by the count page) reaches one day further back, 30 days before the reference day plus that day
+  const dataDay = Date.UTC(new Date(taken).getUTCFullYear(), new Date(taken).getUTCMonth(), new Date(taken).getUTCDate());
+  const last30From = dataDay - 29 * DAY_MS;
   const bands = new Map(), incl = new Map(), months = new Map(), days = new Map(), points = [];
   let count = 0, last30 = 0, noLaunch = 0;
   const at = new Date(taken);
@@ -209,13 +213,13 @@ export function summariseStarlink({ meta, details, swarm }, { now, allowStale = 
     const d = unpackDetails(details, i);
     if (d.type !== 0 || !ACTIVE.has(d.status) || u16[i * 6 + 5] !== STARLINK_KIND) continue;
     count++;
-    if (isNew.has(i)) last30++;
     const alt = meanAltitudeKm(f32[i * 2 + 1]);
     const band = Math.floor(alt / ALT_BAND_KM) * ALT_BAND_KM;
     bands.set(band, (bands.get(band) || 0) + 1);
     const deg = Math.round((u16[i * 6 + 1] / 65535) * 180);
     incl.set(deg, (incl.get(deg) || 0) + 1);
     const day = launchDateFromDay(d.launchDay);
+    if (day && day.getTime() >= last30From && day.getTime() <= dataDay) last30++;
     if (day) {
       const k = monthKey(day.getTime()); months.set(k, (months.get(k) || 0) + 1);
       const dk = day.toISOString().slice(0, 10); days.set(dk, (days.get(dk) || 0) + 1);
@@ -239,45 +243,66 @@ export function summariseStarlink({ meta, details, swarm }, { now, allowStale = 
   const complete = monthRows.slice(-13, -1);
   return {
     feed: "satellites", dataTime: isoZ(taken), stale, starlink: count, active: counts.active, share: counts.active ? count / counts.active : 0,
-    bands: bandRows, occupiedBands: bandRows.filter((b) => b.count).length, topBands: [...bandRows].filter((b) => b.count).sort((a, b) => b.count - a.count || a.from - b.from).slice(0, 3),
+    bands: bandRows, occupiedBands: bandRows.filter((b) => b.count).length, topBands: topWithTies([...bandRows].filter((b) => b.count).sort((a, b) => b.count - a.count || a.from - b.from), 3),
     lowest: bandRows[0].from, highest: bandRows[bandRows.length - 1].to,
     inclinations: [...incl].map(([deg, c]) => ({ deg, count: c })).sort((a, b) => b.count - a.count || a.deg - b.deg),
     months: monthRows, monthsTotal: monthRows.reduce((s, m) => s + m.count, 0), completeMonths: complete, noLaunchDate: noLaunch,
-    last30, topDays: [...days].map(([day, c]) => ({ day, count: c })).sort((a, b) => b.count - a.count || b.day.localeCompare(a.day)).slice(0, TOP_DAYS),
+    last30, last30From: isoZ(last30From), topDays: topWithTies([...days].map(([day, c]) => ({ day, count: c })).sort((a, b) => b.count - a.count || b.day.localeCompare(a.day)), TOP_DAYS),
     points,
   };
 }
 
 // ------------------------------------------------------------------ findings ("What this means", design section 8.2)
 // Each returns up to six { text, numbers, quoted } items: plain sentences from the summary (and the previous build's history entry, when
-// there is one), with every number in the text listed in numbers and every name from the feed (which can hold digits) in quoted, so a
-// test can check the sentence says nothing the data does not. previous:
-// { dataTime, values } from history.json, or null.
+// there is one). numbers lists every number the sentence prints, each taken from the summary or worked out from it (never read back from
+// the sentence), and quoted the names from the feed (which can hold digits), so a test can check that the sentence prints nothing else.
+// A top entry is never picked alone when others tie with it: they are named together ("joint most"), three at most and then a count.
+// previous: { dataTime, values } from history.json, or null.
 const at = (iso) => `${dateLongUtc(Date.parse(iso))}, ${new Date(iso).toISOString().slice(11, 16)} UTC`;
+// the numbers `at` prints, from the time itself: day, year, hours, minutes
+const atNums = (iso) => { const d = new Date(iso); return [d.getUTCDate(), d.getUTCFullYear(), d.getUTCHours(), d.getUTCMinutes()]; };
+// the numbers launchWhenText prints for a launch, from its planned time and precision
+const whenNums = (l) => { const d = new Date(l.net); return ["SEC", "MIN"].includes(l.precision) ? atNums(l.net) : l.precision === "HR" ? [d.getUTCDate(), d.getUTCFullYear(), d.getUTCHours(), 0] : l.precision === "D" || /^day$/i.test(l.precisionName || "") ? [d.getUTCDate(), d.getUTCFullYear()] : [d.getUTCFullYear(), ...(/[12]/.test(l.precisionName || "") ? [1, 2] : [])]; };
 const changeText = (what, nowV, prev, key) => {
   const c = prev && prev.values ? changeSince(nowV, prev.values[key]) : null;
   if (!c) return null;
-  return { text: `${what}: ${num(c.now)}, against ${num(c.before)} in the previous build of this page (data as of ${at(prev.dataTime)}), ${c.word === "about the same as" ? "about the same" : c.word === "above" ? "more" : "fewer"}.`, numbers: [c.now, c.before] };
+  return { text: `${what}: ${num(c.now)}, against ${num(c.before)} in the previous build of this page (data as of ${at(prev.dataTime)}), ${c.word === "about the same as" ? "about the same" : c.word === "above" ? "more" : "fewer"}.`, numbers: [c.now, c.before, ...atNums(prev.dataTime)] };
 };
+// "X has the most ..." or "X and Y have the joint most ..., N each"; tied: the rows that share the top count (topWithTies), label: a name
+const most = (tied, label, more) => ({ names: namesCapped(tied.map(label), 3, more), one: tied.length === 1, extra: tied.length > 3 ? [tied.length - 3] : [] });
 
 export function launchFindings(s, previous = null) {
   const out = [];
-  const top = s.byProvider[0];
   if (!s.in30) out.push({ text: `No launch in the list is planned in the ${LAUNCH_WINDOW_DAYS} days after the data time.`, numbers: [LAUNCH_WINDOW_DAYS] });
   else {
-    const t3 = topShare(s.byProvider, 3, s.in30);
-    out.push(s.byProvider.length > 3
-      ? { quoted: [top.name], text: `${top.name} has the most launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time: ${num(top.count)} of ${num(s.in30)} (${percentText(top.count, s.in30)} percent). The top three providers together have ${num(t3.count)} (${percentText(t3.count, s.in30)} percent).`, numbers: [LAUNCH_WINDOW_DAYS, top.count, s.in30, percentText(top.count, s.in30), t3.count, percentText(t3.count, s.in30)] }
-      : { quoted: [top.name], text: `The ${num(s.in30)} ${v(s.in30, "launch", "launches")} planned in the ${LAUNCH_WINDOW_DAYS} days after the data time ${v(s.in30, "comes", "come")} from ${num(s.byProvider.length)} ${v(s.byProvider.length, "provider", "providers")}; ${top.name} has the most, ${num(top.count)} (${percentText(top.count, s.in30)} percent).`, numbers: [s.in30, LAUNCH_WINDOW_DAYS, s.byProvider.length, top.count, percentText(top.count, s.in30)] });
-    const c = s.byCountry[0];
-    out.push({ text: `By the country of the pad, they are planned from ${num(s.byCountry.length)} ${v(s.byCountry.length, "country", "countries")}; the country with the most is ${countryName(c.name)}, with ${num(c.count)} (${percentText(c.count, s.in30)} percent).`, numbers: [s.byCountry.length, c.count, percentText(c.count, s.in30)] });
+    const tied = topWithTies(s.byProvider, 1), top = tied[0], m = most(tied, (x) => x.name, "more providers"), pct = percentText(top.count, s.in30);
+    const quoted = tied.slice(0, 3).map((x) => x.name);
+    if (s.byProvider.length === 1) out.push({ quoted, text: `All ${num(s.in30)} ${v(s.in30, "launch", "launches")} planned in the ${LAUNCH_WINDOW_DAYS} days after the data time ${v(s.in30, "comes", "come")} from ${top.name}.`, numbers: [s.in30, LAUNCH_WINDOW_DAYS] });
+    else {
+      const first = m.one ? `${top.name} has the most launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time: ${num(top.count)} of ${num(s.in30)} (${pct} percent).`
+        : `${m.names} have the joint most launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time: ${num(top.count)} each of ${num(s.in30)} (${pct} percent each).`;
+      const numbers = [LAUNCH_WINDOW_DAYS, top.count, s.in30, pct, ...m.extra];
+      let second = "";
+      // the share of the top three, only when there are more than three providers and the top tie does not already name three
+      if (s.byProvider.length > 3 && tied.length < 3) {
+        const t3 = topWithTies(s.byProvider, 3), sum = t3.reduce((a, x) => a + x.count, 0);
+        second = t3.length === 3 ? ` The top three providers together have ${num(sum)} (${percentText(sum, s.in30)} percent).`
+          : ` The ${num(t3.length)} providers with the most, counting a tie for third place, together have ${num(sum)} (${percentText(sum, s.in30)} percent).`;
+        numbers.push(sum, percentText(sum, s.in30), t3.length);
+      }
+      out.push({ quoted, text: first + second, numbers });
+    }
+    const ct = topWithTies(s.byCountry, 1), c = ct[0], cm = most(ct, (x) => countryName(x.name), "more countries"), cp = percentText(c.count, s.in30);
+    out.push(s.byCountry.length === 1
+      ? { text: `By the country of the pad, all of them are planned from ${countryName(c.name)}.`, numbers: [] }
+      : { text: `By the country of the pad, they are planned from ${num(s.byCountry.length)} ${v(s.byCountry.length, "country", "countries")}; ${cm.one ? `the country with the most is ${countryName(c.name)}, with ${num(c.count)} (${cp} percent)` : `the countries with the most are ${cm.names}, with ${num(c.count)} each (${cp} percent each)`}.`, numbers: [s.byCountry.length, c.count, cp, ...cm.extra] });
     const rough = s.in30 - s.exact30;
     out.push({ text: `${num(s.exact30)} of these ${num(s.in30)} ${v(s.exact30, "has", "have")} a time to the hour or better; ${rough ? `the other ${num(rough)} ${v(rough, "has", "have")} only a month, a quarter or another rough date, so ${v(rough, "its day is", "their days are")} not set and ${v(rough, "it", "they")} can fall later` : "none has only a month or a quarter"}.`, numbers: [s.exact30, s.in30, ...(rough ? [rough] : [])] });
   }
-  if (s.nextExact) out.push({ text: `The next launch with a time to the hour or better is ${s.nextExact.name}, ${s.nextExact.when}, about ${num(s.nextExactHours)} ${v(s.nextExactHours, "hour", "hours")} after the data time.`, numbers: [s.nextExactHours, ...(s.nextExact.when.match(/\d+/g) || []).map(Number)], quoted: [s.nextExact.name] });
+  if (s.nextExact) out.push({ text: `The next launch with a time to the hour or better is ${s.nextExact.name}, ${s.nextExact.when}, about ${num(s.nextExactHours)} ${v(s.nextExactHours, "hour", "hours")} after the data time.`, numbers: [s.nextExactHours, ...whenNums(s.nextExact)], quoted: [s.nextExact.name] });
   const ch = changeText(`Launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time`, s.in30, previous, "in30");
-  if (ch) { ch.numbers.push(LAUNCH_WINDOW_DAYS, ...(ch.text.match(/\d+/g) || []).map(Number)); out.push(ch); }
-  if (s.windowShort) out.push({ text: `The list our collector keeps ends at ${at(s.last)}, inside the ${LAUNCH_WINDOW_DAYS} days, so the ${LAUNCH_WINDOW_DAYS} day counts can be low.`, numbers: [LAUNCH_WINDOW_DAYS, ...(at(s.last).match(/\d+/g) || []).map(Number)] });
+  if (ch) { ch.numbers.push(LAUNCH_WINDOW_DAYS); out.push(ch); }
+  if (s.windowShort) out.push({ text: `The list our collector keeps ends at ${at(s.last)}, inside the ${LAUNCH_WINDOW_DAYS} days, so the ${LAUNCH_WINDOW_DAYS} day counts can be low.`, numbers: [LAUNCH_WINDOW_DAYS, ...atNums(s.last)] });
   return out.slice(0, 6);
 }
 
@@ -285,7 +310,8 @@ export function disasterFindings(s, previous = null) {
   const out = [];
   const or = s.alerted.filter((e) => e.current);
   if (or.length) out.push({ text: `${num(or.length)} current ${v(or.length, "event has", "events have")} an Orange or Red alert from GDACS: ${and(or.slice(0, 3).map((e) => `${e.name} (${e.alert})`))}${or.length > 3 ? ` and ${num(or.length - 3)} more` : ""}.`, numbers: [or.length, ...(or.length > 3 ? [or.length - 3] : [])], quoted: or.slice(0, 3).map((e) => e.name) });
-  else out.push({ text: `No current event on this page has an Orange or Red alert; all ${num(s.current)} current ${v(s.current, "event is", "events are")} Green.`, numbers: [s.current] });
+  else if (s.current) out.push({ text: `No current event on this page has an Orange or Red alert; all ${num(s.current)} current ${v(s.current, "event is", "events are")} Green.`, numbers: [s.current] });
+  else out.push({ text: "GDACS lists no current event on this page (earthquakes are left out).", numbers: [] });
   if (s.recentRed + s.recentOrange) out.push({ text: `${num(s.recentRed + s.recentOrange)} more ${v(s.recentRed + s.recentOrange, "event", "events")} with an Orange or Red alert ${v(s.recentRed + s.recentOrange, "is", "are")} no longer current, with an end date in the ${GDACS_RECENT_DAYS} days before the data time.`, numbers: [s.recentRed + s.recentOrange, GDACS_RECENT_DAYS] });
   const types = [...s.currentByType].filter((t) => t.total).sort((a, b) => b.total - a.total || GDACS_TYPE_ORDER.indexOf(a.type) - GDACS_TYPE_ORDER.indexOf(b.type));
   if (types.length && s.current) {
@@ -294,30 +320,46 @@ export function disasterFindings(s, previous = null) {
       ? { text: `${and(tied.map((x) => GDACS_PLURAL[x.type]))} are listed most among current events, with ${num(t.total)} each of ${num(s.current)}.`, numbers: [t.total, s.current] }
       : { text: `${GDACS_PLURAL[t.type].charAt(0).toUpperCase()}${GDACS_PLURAL[t.type].slice(1)} are the most listed type among current events: ${num(t.total)} of ${num(s.current)} (${percentText(t.total, s.current)} percent).`, numbers: [t.total, s.current, percentText(t.total, s.current)] });
   }
-  const c = s.countries[0];
-  if (c && c.count >= 2) out.push({ text: `The place GDACS names most often among current events is ${c.name}, in ${num(c.count)} events (the names are as GDACS writes them).`, numbers: [c.count], quoted: [c.name] });
+  const pt = topWithTies(s.countries, 1), c = pt[0];
+  if (c && c.count >= 2) {
+    const m = most(pt, (x) => x.name, "more places");
+    out.push(m.one ? { text: `The place GDACS names most often among current events is ${c.name}, in ${num(c.count)} events (the names are as GDACS writes them).`, numbers: [c.count], quoted: [c.name] }
+      : { text: `The places GDACS names most often among current events are ${m.names}, in ${num(c.count)} events each (the names are as GDACS writes them).`, numbers: [c.count, ...m.extra], quoted: pt.slice(0, 3).map((x) => x.name) });
+  }
   out.push({ text: `${num(s.current)} ${v(s.current, "event is", "events are")} current, and ${num(s.recent)} more ${v(s.recent, "is", "are")} no longer current, with an end date in the ${GDACS_RECENT_DAYS} days before the data time.`, numbers: [s.current, s.recent, GDACS_RECENT_DAYS] });
   const ch = changeText("Current events on this page", s.current, previous, "current");
-  if (ch) { ch.numbers.push(...(ch.text.match(/\d+/g) || []).map(Number)); out.push(ch); }
+  if (ch) out.push(ch);
   return out.slice(0, 6);
 }
 
+const dayText = (day) => dateLongUtc(Date.parse(`${day}T00:00:00Z`));
+const dayNums = (day) => { const [y, , d] = day.split("-").map(Number); return [d, y]; };
 export function starlinkFindings(s, previous = null) {
   const out = [];
   out.push({ text: `Starlink is ${percentText(s.starlink, s.active)} percent of the active satellites in our count: ${num(s.starlink)} of ${num(s.active)}.`, numbers: [percentText(s.starlink, s.active), s.starlink, s.active] });
   const tb = s.topBands, held = tb.reduce((a, b) => a + b.count, 0);
-  out.push({ text: `The ${num(tb.length)} busiest ${ALT_BAND_KM} km altitude ${v(tb.length, "band holds", "bands hold")} ${percentText(held, s.starlink)} percent of them: ${and(tb.map((b) => `${num(b.from)} to ${num(b.to)} km (${num(b.count)})`))}.`, numbers: [tb.length, ALT_BAND_KM, percentText(held, s.starlink), ...tb.flatMap((b) => [b.from, b.to, b.count])] });
-  const i0 = s.inclinations[0];
-  out.push({ text: `The largest inclination group is ${num(i0.deg)} degrees, with ${num(i0.count)} satellites (${percentText(i0.count, s.starlink)} percent), of ${num(s.inclinations.length)} groups.`, numbers: [i0.deg, i0.count, percentText(i0.count, s.starlink), s.inclinations.length] });
+  if (tb.length) {
+    const band = (b) => `${num(b.from)} to ${num(b.to)} km (${num(b.count)})`;
+    const shown = tb.slice(0, 3), named = tb.length > 3 ? `${shown.map(band).join(", ")} and ${num(tb.length - 3)} more ${v(tb.length - 3, "band", "bands")} with ${num(tb[tb.length - 1].count)} each` : and(shown.map(band));
+    out.push({ text: `The ${num(tb.length)} busiest ${ALT_BAND_KM} km altitude ${v(tb.length, "band", "bands")}${tb.length > 3 ? ", counting a tie for third place," : ""} ${v(tb.length, "holds", "hold")} ${percentText(held, s.starlink)} percent of them: ${named}.`,
+      numbers: [tb.length, ALT_BAND_KM, percentText(held, s.starlink), ...shown.flatMap((b) => [b.from, b.to, b.count]), ...(tb.length > 3 ? [tb.length - 3, tb[tb.length - 1].count] : [])] });
+  }
+  const it = topWithTies(s.inclinations, 1), i0 = it[0];
+  if (i0) {
+    const m = most(it, (x) => num(x.deg), "more groups"), p = percentText(i0.count, s.starlink);
+    out.push(m.one ? { text: `The largest inclination group is ${num(i0.deg)} degrees, with ${num(i0.count)} satellites (${p} percent), of ${num(s.inclinations.length)} groups.`, numbers: [i0.deg, i0.count, p, s.inclinations.length] }
+      : { text: `The largest inclination groups are ${m.names} degrees, with ${num(i0.count)} satellites each (${p} percent each), of ${num(s.inclinations.length)} groups.`, numbers: [...it.slice(0, 3).map((x) => x.deg), i0.count, p, s.inclinations.length, ...m.extra] });
+  }
   const avg = meanAndRange(s.completeMonths.map((m) => m.count));
   if (avg && avg.n === 12) {
     const mean = Math.round(avg.mean), word = direction(s.last30, avg.mean);
-    out.push({ text: `${num(s.last30)} of the active Starlink satellites were launched in the 30 days before the data time; in the 12 complete months before, an average of ${num(mean)} a month are still active (from ${num(avg.min)} to ${num(avg.max)}), so the last 30 days are ${word === "about the same as" ? "about the same as" : `${word}`} that average.`, numbers: [s.last30, 30, 12, mean, avg.min, avg.max] });
+    out.push({ text: `${num(s.last30)} of the active Starlink satellites were launched in the 30 days to the data day (${dayText(s.dataTime.slice(0, 10))}, included); in the 12 complete months before, an average of ${num(mean)} a month are still active (from ${num(avg.min)} to ${num(avg.max)}), so those 30 days are ${word} that average.`, numbers: [s.last30, 30, ...dayNums(s.dataTime.slice(0, 10)), 12, mean, avg.min, avg.max] });
   }
   const ch = changeText("Active Starlink satellites", s.starlink, previous, "starlink");
-  if (ch) { ch.numbers.push(...(ch.text.match(/\d+/g) || []).map(Number)); out.push(ch); }
-  const d = s.topDays[0];
-  if (d) out.push({ text: `The launch day with the most active Starlink satellites is ${dateLongUtc(Date.parse(`${d.day}T00:00:00Z`))}, with ${num(d.count)}.`, numbers: [d.count, ...d.day.split("-").map(Number)] });
+  if (ch) out.push(ch);
+  const dt = topWithTies(s.topDays, 1), d = dt[0];
+  if (d) out.push(dt.length === 1 ? { text: `The launch day with the most active Starlink satellites is ${dayText(d.day)}, with ${num(d.count)}.`, numbers: [d.count, ...dayNums(d.day)] }
+    : { text: `The launch days with the most active Starlink satellites are ${namesCapped(dt.map((x) => dayText(x.day)), 3, "more days")}, with ${num(d.count)} each.`, numbers: [d.count, ...dt.slice(0, 3).flatMap((x) => dayNums(x.day)), ...(dt.length > 3 ? [dt.length - 3] : [])] });
   return out.slice(0, 6);
 }
 

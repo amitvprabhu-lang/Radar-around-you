@@ -2,14 +2,15 @@
 // 2026-10-06-more-live-pages-design.md). Pure: each page function takes a summary from site/events.mjs and returns a page object for
 // renderPage, so the lead, the description, the findings, the tables, the figures and the structured data cannot disagree. The typed
 // text is method, caveats and definitions, each traced in docs/events-pages-sources.md. Nothing here forecasts or advises.
-import { esc, sources, href } from "./layout.mjs";
+import { esc, sources, href, table } from "./layout.mjs";
 import { barChartSvg, columnChartSvg, num, dateLong, timeUtc } from "./pages-satcount.mjs";
 import { worldMapSvg, coastPath, uniqueDots } from "./svgmap.mjs";
 import { LIVE_FILES, SATCOUNT_FILE, RIGHT_NOW_FILE } from "./livepages.mjs";
 import { EVENT_PAGES, EVENT_MAX_AGE_HOURS, LAUNCH_WINDOW_DAYS, LAUNCH_TABLE_ROWS, GDACS_TYPES, GDACS_PLURAL, GDACS_TYPE_ORDER, GDACS_RECENT_DAYS, GDACS_MAX_EVENTS,
   STARLINK_MIN, ALT_BAND_KM, MONTHS_SHOWN, STORMS_FOR_DEDUPE_MAX_HOURS, countryName, launchFindings, disasterFindings, starlinkFindings } from "./events.mjs";
-import { SAME_WITHIN_TEXT, percentText, and } from "./insight.mjs";
-import { webPageLd, scopedTable, figureHtml, timeTagUtc, liveScriptParts } from "./liveseo.mjs";
+import { SAME_WITHIN_TEXT, percentText, and, topWithTies, namesCapped } from "./insight.mjs";
+import { webPageLd, figureHtml, timeTagUtc, liveScriptParts } from "./liveseo.mjs";
+import { nextLaunchFields, launchPrecisionText } from "./live-pages-js.mjs";
 import { ORBIT_BOUNDS } from "./satcount.mjs";
 
 const page = (key) => EVENT_PAGES.find((p) => p.key === key);
@@ -126,39 +127,47 @@ export function eventMapSvg({ coast, events, id, title, desc }) {
 export function launchTimeEl(l) {
   const iso = l.net;
   const dt = ["SEC", "MIN", "HR"].includes(l.precision) ? iso : l.precision === "M" ? iso.slice(0, 7) : /^Q[1-4]$/.test(l.precision) ? iso.slice(0, 4) : iso.slice(0, 10);
-  return `<time datetime="${esc(dt)}">${esc(l.when)}</time>`;
+  // sorted by the feed's own planned time: for a month or a quarter that is a date the source sets inside the period
+  return `<time datetime="${esc(dt)}" data-sort="${esc(iso)}">${esc(l.when)}</time>`;
 }
-const PRECISION_WORDS = { SEC: "to the second", MIN: "to the minute", HR: "to the hour", M: "only to the month", Q1: "only to the quarter", Q2: "only to the quarter", Q3: "only to the quarter", Q4: "only to the quarter" };
-const precisionText = (l) => PRECISION_WORDS[l.precision] || (l.precisionName ? `only as "${l.precisionName}" (the source's word)` : "not given");
+// a date cell that sorts by its ISO value (site/live-pages-js.mjs, cellSortKey)
+const dateCell = (iso, text) => `<time datetime="${esc(iso)}" data-sort="${esc(iso)}">${esc(text)}</time>`;
+// the same for the many GDACS date cells, kept short so the page stays small: the time to the minute as the sort value
+const daySort = (iso, text) => `<span data-sort="${esc(iso.slice(0, 16))}">${esc(text)}</span>`;
+// a share cell that sorts by the share itself, so "under 1" and "over 99" sort in place
+const shareCell = (part, whole) => `<span data-sort="${whole ? (part / whole).toFixed(6) : "0"}">${percentText(part, whole)}</span>`;
+const precisionText = launchPrecisionText;
 
 export function launchesPage(s, { built = LIVE_FILES, coast = [], previous = null } = {}) {
   const p = page("launches"), file = p.file, date = dateLong(s.dataTime), nx = s.next;
+  // the next launch's fields, as the live refresh writes them (nextLaunchFields), each in a span the refresh can update
+  const K = nx ? nextLaunchFields(nx) : {};
+  const key = (k) => `<span data-live-key="${k}">${esc(K[k])}</span>`;
   const title = `Rocket launches: the next launches, ${date}`;
   const lead = `As of ${timeEl(s.dataTime)}, when our collector read Launch Library 2, the next launch in its list is ` +
-    (nx ? `<strong><span data-live-key="next-name">${esc(nx.name)}</span></strong>, planned for <span data-live-key="next-when">${esc(nx.when)}</span>${nx.provider ? ` by ${esc(nx.provider)}` : ""}, status "${esc(nx.statusName || nx.status || "not given")}".`
+    (nx ? `<strong>${key("next-name")}</strong>, planned for ${key("next-when")} by ${key("next-provider")}, status "${key("next-status")}".`
       : `<strong><span data-live-key="next-name">none in the list</span></strong>: no launch is planned at or after that time.`) +
     ` <strong><span data-live-key="launches-30">${num(s.in30)}</span> ${v(s.in30, "launch is", "launches are")}</strong> planned in the ${LAUNCH_WINDOW_DAYS} days after it.`;
   const description = (nx ? [
     `Next launch: ${nx.name}, ${nx.when}. ${num(s.in30)} launches planned in the 30 days to come, by provider, country and pad. Data as of ${date}.`,
     `Next launch: ${nx.name}. ${num(s.in30)} launches planned in the next 30 days, by provider, country and pad, as of ${date}.`,
     `${num(s.in30)} rocket launches planned in the 30 days after ${date}, with the next one, providers, countries, pads and how exact each time is.`,
-  ] : [`No rocket launch is planned after ${date} in the Launch Library 2 list. Counts by provider and country, the pads, and how exact each time is.`]).find((d) => d.length <= 160);
+  ] : [`No rocket launch is planned after ${date} in the Launch Library 2 list. Counts by provider and country, the pads, and how exact each time is.`]).find((d) => d.length < 160);
   const findings = launchFindings(s, previous);
   const next15 = s.upcoming.slice(0, LAUNCH_TABLE_ROWS);
   const providers = s.byProvider.slice(0, 12), countries = s.byCountry.slice(0, 12);
   const siteDots = s.sites.map((x) => [x.lat, x.lon]);
   const nextHtml = nx ? `
 <h2 id="next">The next launch</h2>
-${nx.exact && (nx.precision === "SEC" || nx.precision === "MIN") ? `<p data-countdown="${esc(nx.net)}" data-precision="${esc(nx.precision)}" data-status="${esc(nx.statusName || nx.status || "not given")}">Planned for <time datetime="${esc(nx.net)}">${esc(nx.when)}</time>, a time the source gives ${esc(precisionText(nx))}.</p>`
-    : `<p>Planned for ${esc(nx.when)}; the source gives this time ${esc(precisionText(nx))}.</p>`}
-${scopedTable({ caption: "The next launch in the list", head: ["Detail", "As Launch Library 2 gives it"], rows: [
-    ["Name", esc(nx.name)], ["Provider", esc(nx.provider || "Not given")], ["Rocket", esc(nx.rocket || "Not given")], ["Mission", esc(nx.mission || "Not given")], ["Mission type", esc(nx.missionType || "Not given")],
-    ["Orbit", esc(nx.orbit || "Not given")], ["Pad", esc(nx.pad || "Not given")], ["Location", esc(nx.location || "Not given")], ["Country of the pad", esc(countryName(nx.country))],
-    ["Planned time (NET, no earlier than)", esc(nx.when)], ["How exact", esc(cap(precisionText(nx)))], ["Status", esc(nx.statusName || nx.status || "Not given")]] })}` : `
+<p data-countdown="${esc(K["next-net"])}" data-precision="${esc(K["next-precision-code"])}" data-status="${esc(K["next-status-text"])}">Planned for ${key("next-when")}; the source gives this time ${key("next-precision-words")}.</p>
+${table({ caption: "The next launch in the list", head: ["Detail", "As Launch Library 2 gives it"], rows: [
+    ["Name", key("next-name")], ["Provider", key("next-provider-name")], ["Rocket", key("next-rocket")], ["Mission", key("next-mission")], ["Mission type", key("next-mission-type")],
+    ["Orbit", key("next-orbit")], ["Pad", key("next-pad")], ["Location", key("next-location")], ["Country of the pad", key("next-country")],
+    ["Planned time (NET, no earlier than)", key("next-when")], ["How exact", key("next-precision")], ["Status", key("next-status")]] })}` : `
 <h2 id="next">The next launch</h2>
 <p>The list our collector read at ${timeEl(s.dataTime)} has no launch planned at or after that time.</p>`;
   const faq = [
-    ["When is the next rocket launch?", nx ? `In the list as our collector read it at ${esc(when(s.dataTime))}: ${esc(nx.name)}, ${esc(nx.when)}. Launch times often change; check the provider for the latest.` : "The list has no launch planned after its own time."],
+    ["When is the next rocket launch?", nx ? `In the list as our collector read it at ${esc(when(s.dataTime))}: ${key("next-name")}, ${key("next-when")}. Launch times often change; check the provider for the latest.` : "The list has no launch planned after its own time."],
     [`How many launches are planned in the next ${LAUNCH_WINDOW_DAYS} days?`, `${num(s.in30)} in the ${LAUNCH_WINDOW_DAYS} days after ${esc(when(s.dataTime))}, by their planned times in the list${s.windowShort ? "; the list ends inside that window, so the count can be low" : ""}.`],
     ["Why do some launches have only a month or a quarter?", "Launch Library 2 says how exact each planned time is. A month or a quarter means the day is not set yet, so this page prints the month or the quarter and not a day."],
     ["Does this page count down to the launch?", "The page itself prints the planned time in UTC. With JavaScript on, it also shows a countdown for a time given to the minute or second, marked if the time holds, and after the planned time it shows the status the page was built with. It never says that a launch happened."],
@@ -166,34 +175,34 @@ ${scopedTable({ caption: "The next launch in the list", head: ["Detail", "As Lau
   const body = `${staleNote(s, EVENT_MAX_AGE_HOURS.launches)}<p class="note">Data: <a href="${esc(EVENT_SRC.ll2.url)}" rel="noopener">The Space Devs, Launch Library 2</a>. Launch times change often; check the provider for the latest. We add the counts, the map and the comparisons; the list is theirs.</p>
 ${findingsHtml(findings)}
 ${liveStatus("With JavaScript on, this page checks the live data every 5 minutes and updates the next launch and the 30 day count in place.")}
-${cards([[nx ? esc(nx.when) : "None", "Next planned launch time in the list"], [num(s.in30), `Launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time`], [num(s.exactUpcoming), "Launches still to come with a time to the hour or better"]])}
+${cards([[nx ? key("next-when") : "None", "Next planned launch time in the list"], [`<span data-live-key="launches-30">${num(s.in30)}</span>`, `Launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time`], [`<span data-live-key="exact-upcoming">${num(s.exactUpcoming)}</span>`, "Launches still to come with a time to the hour or better"]])}
 ${seeAlso(file, built)}
 ${nextHtml}
 
 <h2 id="list">The next ${num(Math.min(LAUNCH_TABLE_ROWS, s.upcoming.length))} launches</h2>
-${next15.length ? scopedTable({ caption: `The next ${next15.length} launches in the list, soonest first`, head: ["Planned time (UTC)", "How exact", "Launch", "Provider", "Pad and location", "Status"],
+${next15.length ? table({ caption: `The next ${next15.length} launches in the list, soonest first`, head: ["Planned time (UTC)", "How exact", "Launch", "Provider", "Pad and location", "Status"],
     rows: next15.map((l) => [launchTimeEl(l), esc(cap(precisionText(l))), esc(l.name), esc(l.provider || "Not given"), esc([l.pad, l.location].filter(Boolean).join(", ") || "Not given"), esc(l.statusName || l.status || "Not given")]) }) : "<p>The list has no launch still to come.</p>"}
 <p>Times are printed in UTC with the precision the source gives. A planned time is "no earlier than": the launch can move later.</p>
 
 <h2 id="by-provider">Launches in the next ${LAUNCH_WINDOW_DAYS} days by provider and by country</h2>
 ${s.in30 ? `${figureHtml(barChartSvg({ id: "chart-providers", title: `Launches in the ${LAUNCH_WINDOW_DAYS} days after ${when(s.dataTime)}, by provider`, desc: `${providers.map((x) => `${x.name} ${num(x.count)}`).join(", ")}.`, rows: providers.map((x) => ({ label: x.name, value: x.count })) }), `Launches planned in the ${LAUNCH_WINDOW_DAYS} days after ${when(s.dataTime)}, by provider, ${num(s.in30)} in all; the table below gives the numbers.`)}
-${scopedTable({ caption: `Launches in the ${LAUNCH_WINDOW_DAYS} days after the data time, by provider`, head: ["Provider", "Launches", "Share (percent)"], numeric: [1, 2], rows: s.byProvider.map((x) => [esc(x.name), num(x.count), percentText(x.count, s.in30)]) })}
+${table({ caption: `Launches in the ${LAUNCH_WINDOW_DAYS} days after the data time, by provider`, head: ["Provider", "Launches", "Share (percent)"], numeric: [1, 2], rows: s.byProvider.map((x) => [esc(x.name), num(x.count), shareCell(x.count, s.in30)]) })}
 ${figureHtml(barChartSvg({ id: "chart-countries", title: `Launches in the ${LAUNCH_WINDOW_DAYS} days after ${when(s.dataTime)}, by country of the pad`, desc: `${countries.map((x) => `${countryName(x.name)} ${num(x.count)}`).join(", ")}.`, rows: countries.map((x) => ({ label: countryName(x.name), value: x.count })) }), `Launches planned in the ${LAUNCH_WINDOW_DAYS} days after ${when(s.dataTime)}, by the country of the pad; the table below gives the numbers.`)}
-${scopedTable({ caption: `Launches in the ${LAUNCH_WINDOW_DAYS} days after the data time, by country of the pad`, head: ["Country of the pad", "Launches", "Share (percent)"], numeric: [1, 2], rows: s.byCountry.map((x) => [esc(countryName(x.name)), num(x.count), percentText(x.count, s.in30)]) })}` : `<p>No launch in the list is planned in the ${LAUNCH_WINDOW_DAYS} days after the data time.</p>`}
+${table({ caption: `Launches in the ${LAUNCH_WINDOW_DAYS} days after the data time, by country of the pad`, head: ["Country of the pad", "Launches", "Share (percent)"], numeric: [1, 2], rows: s.byCountry.map((x) => [esc(countryName(x.name)), num(x.count), shareCell(x.count, s.in30)]) })}` : `<p>No launch in the list is planned in the ${LAUNCH_WINDOW_DAYS} days after the data time.</p>`}
 <p>The country is the country of the pad as Launch Library 2 records it, not the country of the provider.${s.windowShort ? ` Our collector keeps the next ${num(s.listed)} launches of the ${s.total === null ? "upcoming list" : `${num(s.total)} upcoming launches Launch Library 2 counted`}, and the last of them is on ${esc(dayOnly(s.last))}, inside the ${LAUNCH_WINDOW_DAYS} days, so these counts can be low.` : ""}</p>
 
 <h2 id="pads">Where they launch from</h2>
 ${s.sites.length ? `${figureHtml(fleetMapSvg({ coast, points: siteDots, id: "map", title: `Launch pads with a launch planned in the ${LAUNCH_WINDOW_DAYS} days after ${when(s.dataTime)}`, desc: `${num(s.sites.length)} ${v(s.sites.length, "pad", "pads")} with pad coordinates in the list, ${num(uniqueDots(siteDots))} dots on the map.` }), `The pads of the launches planned in the ${LAUNCH_WINDOW_DAYS} days after ${when(s.dataTime)}, one dot each; the table below names them.`)}
-${scopedTable({ caption: `Pads with a launch in the ${LAUNCH_WINDOW_DAYS} days after the data time`, head: ["Pad", "Location", "Position", "Launches"], numeric: [3], rows: s.sites.map((x) => [esc(x.pad || "Not given"), esc(x.location || "Not given"), esc(`${latText(x.lat)}, ${lonText(x.lon)}`), num(x.count)]) })}` : `<p>No launch in the ${LAUNCH_WINDOW_DAYS} days has pad coordinates in the list, so there is no map.</p>`}
+${table({ caption: `Pads with a launch in the ${LAUNCH_WINDOW_DAYS} days after the data time`, head: ["Pad", "Location", "Position", "Launches"], numeric: [3], rows: s.sites.map((x) => [esc(x.pad || "Not given"), esc(x.location || "Not given"), esc(`${latText(x.lat)}, ${lonText(x.lon)}`), num(x.count)]) })}` : `<p>No launch in the ${LAUNCH_WINDOW_DAYS} days has pad coordinates in the list, so there is no map.</p>`}
 ${s.noCoords ? `<p>${num(s.noCoords)} ${v(s.noCoords, "launch has", "launches have")} no usable pad coordinates in the list and ${v(s.noCoords, "is", "are")} not on the map.</p>` : ""}
 
 <h2 id="precision">How exact the times are</h2>
-${scopedTable({ caption: "Launches still to come, by how exact the source says the time is", head: ["Precision (the source's name)", "Launches"], numeric: [1], rows: s.precisions.map((x) => [esc(x.name), num(x.count)]) })}
-${scopedTable({ caption: "Launches still to come, by status", head: ["Status (the source's words)", "Launches"], numeric: [1], rows: s.statuses.map((x) => [esc(x.name), num(x.count)]) })}
+${table({ caption: "Launches still to come, by how exact the source says the time is", head: ["Precision (the source's name)", "Launches"], numeric: [1], rows: s.precisions.map((x) => [esc(x.name), num(x.count)]) })}
+${table({ caption: "Launches still to come, by status", head: ["Status (the source's words)", "Launches"], numeric: [1], rows: s.statuses.map((x) => [esc(x.name), num(x.count)]) })}
 
 <h2 id="passed">Launches whose planned time has passed</h2>
 ${s.passed.length ? `<p>These are in the list with a planned time before the data time. The list does not say whether they launched; the status is the source's.</p>
-${scopedTable({ caption: "Launches in the list planned before the data time", head: ["Planned time (UTC)", "Launch", "Status"], rows: s.passed.map((l) => [launchTimeEl(l), esc(l.name), esc(l.statusName || l.status || "Not given")]) })}` : "<p>None. Our collector asks Launch Library 2 for its upcoming list with recent launches left out, so this page has no history of past launches.</p>"}
+${table({ caption: "Launches in the list planned before the data time", head: ["Planned time (UTC)", "Launch", "Status"], rows: s.passed.map((l) => [launchTimeEl(l), esc(l.name), esc(l.statusName || l.status || "Not given")]) })}` : "<p>None. Our collector asks Launch Library 2 for its upcoming list with recent launches left out, so this page has no history of past launches.</p>"}
 
 <h2 id="how">How this page is made</h2>
 <ul>
@@ -217,19 +226,21 @@ ${sources([EVENT_SRC.ll2, EVENT_SRC.ll2faq])}`;
 // ------------------------------------------------------------------ natural disasters
 const typeOf = (t) => GDACS_TYPES[t] || t;
 const eventRows = (list) => list.map((e) => ({
-  cells: [esc(typeOf(e.type)), esc(e.name), esc(e.alert), esc(e.country || "Not given"), esc(dayOnly(e.from)), esc(dayOnly(e.to)), e.current ? "Current" : "No longer current", esc(e.severity || "Not given"), e.url ? `<a href="${esc(e.url)}" rel="noopener">GDACS report</a>` : "None"],
+  cells: [esc(typeOf(e.type)), esc(e.name), esc(e.alert), esc(e.country || "Not given"), daySort(e.from, dayOnly(e.from)), daySort(e.to, dayOnly(e.to)), e.current ? "Current" : "No longer current", esc(e.severity || "Not given"), e.url ? `<a href="${esc(e.url)}" rel="noopener">GDACS report</a>` : "None"],
 }));
+// a number the live refresh may update in place
+const lk = (k, n) => `<span data-live-key="${k}">${num(n)}</span>`;
 const EVENT_HEAD = ["Type", "Name (GDACS)", "Alert", "Country (GDACS)", "From", "To", "Now", "Severity (GDACS's words)", "GDACS page"];
 
 export function disastersPage(s, { built = LIVE_FILES, coast = [], previous = null } = {}) {
   const p = page("disasters"), file = p.file, date = dateLong(s.dataTime);
   const title = `Natural disasters now: GDACS alerts, ${date}`;
-  const lead = `As of ${timeEl(s.dataTime)}, the time of GDACS's newest update, the Global Disaster Alert and Coordination System lists <strong><span data-live-key="current">${num(s.current)}</span> current ${v(s.current, "event", "events")}</strong> that are not earthquakes: <span data-live-key="orange">${num(s.currentOrange)}</span> with an Orange alert, <span data-live-key="red">${num(s.currentRed)}</span> with a Red alert and the rest Green. ${num(s.recent)} more are no longer current, with an end date in the ${GDACS_RECENT_DAYS} days before.`;
+  const lead = `As of ${timeEl(s.dataTime)}, the time of GDACS's newest update, the Global Disaster Alert and Coordination System lists <strong><span data-live-key="current">${num(s.current)}</span> current ${v(s.current, "event", "events")}</strong> that are not earthquakes: <span data-live-key="orange">${num(s.currentOrange)}</span> with an Orange alert, <span data-live-key="red">${num(s.currentRed)}</span> with a Red alert and the rest Green. <span data-live-key="recent">${num(s.recent)}</span> more are no longer current, with an end date in the ${GDACS_RECENT_DAYS} days before.`;
   const description = `${num(s.current)} current floods, cyclones, wildfires, droughts and volcanoes in GDACS on ${date}: ${num(s.currentOrange)} Orange and ${num(s.currentRed)} Red alerts. Table and map.`;
   const findings = disasterFindings(s, previous);
   const tallyRows = (rows) => rows.map((r) => [esc(r.name), num(r.Red), num(r.Orange), num(r.Green), num(r.total)]);
   const sum = (rows, k) => rows.reduce((a, r) => a + r[k], 0);
-  const tallyTable = (caption, rows) => scopedTable({ caption, head: ["Type", "Red", "Orange", "Green", "All"], numeric: [1, 2, 3, 4], rows: tallyRows(rows).concat([["All types", num(sum(rows, "Red")), num(sum(rows, "Orange")), num(sum(rows, "Green")), num(sum(rows, "total"))]]) });
+  const tallyTable = (caption, rows) => table({ caption, head: ["Type", "Red", "Orange", "Green", "All"], numeric: [1, 2, 3, 4], rows: tallyRows(rows).concat([["All types", num(sum(rows, "Red")), num(sum(rows, "Orange")), num(sum(rows, "Green")), num(sum(rows, "total"))]]) });
   const shownN = s.points.length;
   const byTypeText = GDACS_TYPE_ORDER.map((t) => [t, s.points.filter((e) => e.type === t).length]).filter(([, n]) => n).map(([t, n]) => `${num(n)} ${n === 1 ? GDACS_TYPES[t].toLowerCase() : GDACS_PLURAL[t]}`);
   const map = shownN ? figureHtml(eventMapSvg({ coast, events: s.points, id: "map", title: `GDACS events, current or with an end date in the last ${GDACS_RECENT_DAYS} days, ${when(s.dataTime)}`,
@@ -245,7 +256,7 @@ export function disastersPage(s, { built = LIVE_FILES, coast = [], previous = nu
   const body = `${staleNote(s, EVENT_MAX_AGE_HOURS.events)}<p class="note">Data: <a href="${esc(EVENT_SRC.gdacs.url)}" rel="noopener">GDACS, the Global Disaster Alert and Coordination System</a> of the United Nations and the European Commission. GDACS says its information is purely indicative and should not be used for any decision making without alternate sources.</p>
 ${findingsHtml(findings)}
 ${liveStatus("With JavaScript on, this page checks the live data every 5 minutes and updates the current and Orange and Red counts in place.")}
-${cards([[num(s.current), "Current events, earthquakes left out"], [num(s.currentOrange), "Current events with an Orange alert"], [num(s.currentRed), "Current events with a Red alert"], [num(s.recent), `No longer current, end date in the last ${GDACS_RECENT_DAYS} days`]])}
+${cards([[lk("current", s.current), "Current events, earthquakes left out"], [lk("orange", s.currentOrange), "Current events with an Orange alert"], [lk("red", s.currentRed), "Current events with a Red alert"], [lk("recent", s.recent), `No longer current, end date in the last ${GDACS_RECENT_DAYS} days`]])}
 ${seeAlso(file, built, ["tropical-storms-now/index.html", "earthquakes-today/index.html", "wildfires-today/index.html"])}
 
 <h2 id="counts">Events by type and alert level</h2>
@@ -253,14 +264,14 @@ ${tallyTable("Current events by type and GDACS alert level", s.currentByType)}
 ${tallyTable(`Events no longer current, with an end date in the ${GDACS_RECENT_DAYS} days before the data time, by type and alert level`, s.recentByType)}
 
 <h2 id="alerts">Events with an Orange or Red alert</h2>
-${s.alerted.length ? scopedTable({ caption: "Events with an Orange or Red alert, Red first, current first", head: EVENT_HEAD, rows: eventRows(s.alerted) }) : `<p>None of the events on this page has an Orange or Red alert as of ${timeEl(s.dataTime)}.</p>`}
+${s.alerted.length ? table({ caption: "Events with an Orange or Red alert, Red first, current first", head: EVENT_HEAD, rows: eventRows(s.alerted) }) : `<p>None of the events on this page has an Orange or Red alert as of ${timeEl(s.dataTime)}.</p>`}
 ${dupNote}
 
 <h2 id="map">Map of the events</h2>
 ${map || "<p>There is no event to map.</p>"}
 
 <h2 id="green">Events with a Green alert, by type</h2>
-${s.greenByType.length ? s.greenByType.map((g) => `<h3 id="green-${g.type.toLowerCase()}">${esc(cap(GDACS_PLURAL[g.type]))}: ${num(g.events.length)}</h3>\n${scopedTable({ caption: `${GDACS_TYPES[g.type]} events with a Green alert`, head: EVENT_HEAD, rows: eventRows(g.events) })}`).join("\n") : "<p>No event on this page has a Green alert.</p>"}
+${s.greenByType.length ? s.greenByType.map((g) => `<h3 id="green-${g.type.toLowerCase()}">${esc(cap(GDACS_PLURAL[g.type]))}: ${num(g.events.length)}</h3>\n${table({ caption: `${GDACS_TYPES[g.type]} events with a Green alert`, head: EVENT_HEAD, rows: eventRows(g.events) })}`).join("\n") : "<p>No event on this page has a Green alert.</p>"}
 ${s.noCountry ? `<p>GDACS gives no country for ${num(s.noCountry)} ${v(s.noCountry, "event", "events")} on this page; the tables say Not given.</p>` : ""}
 
 <h2 id="levels">What the alert levels mean</h2>
@@ -292,6 +303,7 @@ const monthLabel = (key) => { const [y, m] = key.split("-").map(Number); return 
 
 export function starlinkPage(s, { built = LIVE_FILES, coast = [], previous = null } = {}) {
   const p = page("starlink"), file = p.file, date = dateLong(s.dataTime);
+  const busiest = topWithTies(s.topBands, 1);
   const title = `Starlink tracker: active satellites, ${date}`;
   const share = percentText(s.starlink, s.active);
   const lead = `As of ${timeEl(s.dataTime)}, the time of the satellite data, CelesTrak's active list holds <strong>${num(s.starlink)} active Starlink satellites</strong>, ${share} percent of the ${num(s.active)} active satellites in our count. A Starlink satellite here is one whose catalogue name contains STARLINK.`;
@@ -303,32 +315,32 @@ export function starlinkPage(s, { built = LIVE_FILES, coast = [], previous = nul
   const dots = uniqueDots(s.points);
   const faq = [
     ["How many Starlink satellites are in orbit?", `${num(s.starlink)} active ones as of ${esc(when(s.dataTime))}, on CelesTrak's active list and our definition of active, which is ${share} percent of all active satellites in our count.`],
-    ["How high do Starlink satellites fly?", `The busiest ${ALT_BAND_KM} km band of mean altitude is ${num(s.topBands[0].from)} to ${num(s.topBands[0].to)} km, with ${num(s.topBands[0].count)} satellites. The fleet spans ${num(s.lowest)} to ${num(s.highest)} km, counting satellites still being raised or lowered.`],
-    ["How many Starlink satellites were launched recently?", `${num(s.last30)} of the active ones were launched in the 30 days before the data time.`],
+    ["How high do Starlink satellites fly?", `${busiest.length === 1 ? `The busiest ${ALT_BAND_KM} km band of mean altitude is ${num(busiest[0].from)} to ${num(busiest[0].to)} km, with ${num(busiest[0].count)} satellites.` : `The busiest ${ALT_BAND_KM} km bands of mean altitude are ${esc(namesCapped(busiest.map((b) => `${num(b.from)} to ${num(b.to)} km`), 3, "more bands"))}, with ${num(busiest[0].count)} satellites each.`} The fleet spans ${num(s.lowest)} to ${num(s.highest)} km, counting satellites still being raised or lowered.`],
+    ["How many Starlink satellites were launched recently?", `${num(s.last30)} of the active ones were launched in the 30 days to ${esc(dateLong(s.dataTime))}, that day included.`],
     ["Does this page track a single satellite?", "No. It counts the fleet. The live globe shows each satellite's position and its pass times over your place."],
   ];
   const body = `${staleNote(s, EVENT_MAX_AGE_HOURS.satellites)}<p class="note">Data: <a href="${esc(EVENT_SRC.celestrak.url)}" rel="noopener">CelesTrak</a>, its active list and satellite catalogue, read by our collector. The counts, bands, groups and the map are ours.</p>
 ${findingsHtml(findings)}
-${cards([[num(s.starlink), "Active Starlink satellites"], [`${share} percent`, "Share of all active satellites in our count"], [num(s.last30), "Launched in the 30 days before the data time and still active"]])}
+${cards([[num(s.starlink), "Active Starlink satellites"], [`${share} percent`, "Share of all active satellites in our count"], [num(s.last30), "Launched in the 30 days to the data day (included) and still active"]])}
 ${seeAlso(file, built, [SATCOUNT_FILE])}
 
 <h2 id="altitude">How high are the Starlink satellites?</h2>
 <p>Each satellite's mean altitude is worked out from its mean motion: the size of the orbit, less the Earth's equatorial radius. The chart groups them into bands of ${ALT_BAND_KM} km, from ${num(s.lowest)} to ${num(s.highest)} km; ${num(s.occupiedBands)} bands hold at least one satellite.</p>
 ${figureHtml(altitudeHistogramSvg({ id: "chart-altitude", title: `Active Starlink satellites by ${ALT_BAND_KM} km band of mean altitude, ${when(s.dataTime)}`, desc: `${num(s.starlink)} satellites from ${num(s.lowest)} to ${num(s.highest)} km. Busiest: ${s.topBands.map((b) => `${b.from} to ${b.to} km, ${b.count}`).join("; ")}.`, rows: s.bands }),
   `Active Starlink satellites by ${ALT_BAND_KM} km band of mean altitude, as of ${when(s.dataTime)}; the table below gives every band that holds a satellite.`)}
-${scopedTable({ caption: `Active Starlink satellites by ${ALT_BAND_KM} km band of mean altitude`, head: ["Mean altitude (km)", "Satellites", "Share (percent)"], numeric: [1, 2], rows: occupied.map((b) => ({ cells: [`${num(b.from)} to ${num(b.to)}`, num(b.count), percentText(b.count, s.starlink)] })) })}
+${table({ caption: `Active Starlink satellites by ${ALT_BAND_KM} km band of mean altitude`, head: ["Mean altitude (km)", "Satellites", "Share (percent)"], numeric: [1, 2], rows: occupied.map((b) => ({ cells: [`${num(b.from)} to ${num(b.to)}`, num(b.count), shareCell(b.count, s.starlink)] })) })}
 
 <h2 id="inclination">At which inclinations?</h2>
 <p>The inclination is the tilt of the orbit to the equator, from the satellite's own orbital elements, rounded to the nearest whole degree.</p>
 ${figureHtml(barChartSvg({ id: "chart-inclination", title: `Active Starlink satellites by inclination, ${when(s.dataTime)}`, desc: `${incl.map((x) => `${x.deg} degrees ${x.count}`).join(", ")}.`, rows: incl.map((x) => ({ label: `${x.deg} degrees`, value: x.count })) }), `Active Starlink satellites by orbit inclination, rounded to whole degrees, as of ${when(s.dataTime)}; the table below gives the numbers.`)}
-${scopedTable({ caption: "Active Starlink satellites by inclination", head: ["Inclination (degrees, rounded)", "Satellites", "Share (percent)"], numeric: [0, 1, 2], rows: incl.map((x) => [num(x.deg), num(x.count), percentText(x.count, s.starlink)]) })}
+${table({ caption: "Active Starlink satellites by inclination", head: ["Inclination (degrees, rounded)", "Satellites", "Share (percent)"], numeric: [0, 1, 2], rows: incl.map((x) => [num(x.deg), num(x.count), shareCell(x.count, s.starlink)]) })}
 
 <h2 id="launches">When were they launched?</h2>
 <p>The chart counts today's active Starlink satellites by the month they were launched, for the ${MONTHS_SHOWN} months to the data time. It is not a count of all Starlink satellites launched in each month, because those since retired are not in it. The last month is not over.${s.noLaunchDate ? ` ${num(s.noLaunchDate)} ${v(s.noLaunchDate, "satellite has", "satellites have")} no launch date in the catalogue.` : ""}</p>
 ${figureHtml(columnChartSvg({ id: "chart-months", title: `Active Starlink satellites by launch month, ${monthLabel(s.months[0].month)} to ${monthLabel(s.months.at(-1).month)}`, desc: `${num(s.monthsTotal)} of the ${num(s.starlink)} active Starlink satellites were launched in these ${MONTHS_SHOWN} months. Each value is printed above its column.`, rows: monthRows }),
   `Active Starlink satellites by launch month, ${monthLabel(s.months[0].month)} to ${monthLabel(s.months.at(-1).month)}, as of ${when(s.dataTime)}; the table below gives the numbers.`)}
-${scopedTable({ caption: "Active Starlink satellites by launch month", head: ["Launch month", "Satellites still active"], numeric: [1], rows: s.months.map((m) => ({ cells: [esc(monthLabel(m.month)), num(m.count)] })) })}
-${scopedTable({ caption: "The launch days with the most active Starlink satellites", head: ["Launch day", "Satellites still active"], numeric: [1], rows: s.topDays.map((d) => [esc(dateLong(`${d.day}T00:00:00Z`)), num(d.count)]) })}
+${table({ caption: "Active Starlink satellites by launch month", head: ["Launch month", "Satellites still active"], numeric: [1], rows: s.months.map((m) => ({ cells: [dateCell(m.month, monthLabel(m.month)), num(m.count)] })) })}
+${table({ caption: "The launch days with the most active Starlink satellites", head: ["Launch day", "Satellites still active"], numeric: [1], rows: s.topDays.map((d) => [dateCell(d.day, dateLong(`${d.day}T00:00:00Z`)), num(d.count)]) })}
 <p>A launch day can hold more than one launch. Ties are listed newest first.</p>
 
 <h2 id="where">Where is the fleet?</h2>

@@ -224,10 +224,10 @@ export function cityPage(s, { built = [], cities = [] } = {}) {
   const title = `Tonight's sky in ${c.name}: Moon, planets, ISS, clouds`;
   const moonWhen = `, and ${bodyDoes(eventsPhrase(m.events, m.upAtStart, L, first))}`;
   const zoneText = s.clock ? `Local times are ${esc(tz)}: ${esc(s.clock.before)} until the clocks change at ${esc(hm(s.clock.at, "UTC"))} UTC, ${esc(s.clock.after)} after; a time in the repeated or skipped hour carries its offset.` : `Local times are ${esc(tz)} (${esc(s.offset)}).`;
-  const answer = n.kind === "midnightSun" ? `the Sun does not set in ${esc(c.name)} in the 24 hours after the forecast time, so the sky does not get dark tonight`
-    : s.twilightOnly ? `the Sun sets in ${esc(c.name)} tonight but never gets 6° below the horizon, so the sky stays in twilight and no hour gets a viewing score`
+  const answer = n.kind === "midnightSun" ? `the Sun does not set in ${esc(c.name)} in the 24 hours after the forecast time, so there are <strong>no dark hours</strong> tonight`
+    : s.twilightOnly ? `the Sun sets in ${esc(c.name)} tonight but never gets 6° below the horizon, so the sky stays in twilight and <strong>no hour</strong> gets a viewing score`
     : b ? `the best window for looking up tonight in ${esc(c.name)} is <strong>${L(b.start)} to ${L(b.end)}</strong> local time${b.cloud !== null ? `, with ${b.cloud} percent cloud in MET Norway's forecast` : ""}`
-    : `no stretch of tonight in ${esc(c.name)} reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${s.strip.cloudAvg !== null ? `, with ${s.strip.cloudAvg} percent cloud on average in MET Norway's forecast` : ""}`;
+    : `<strong>no stretch</strong> of tonight in ${esc(c.name)} reaches ${BEST_WINDOW_THRESHOLD} out of 100 on our viewing score${s.strip.cloudAvg !== null ? `, with ${s.strip.cloudAvg} percent cloud on average in MET Norway's forecast` : ""}`;
   const lead = `As of ${timeEl(s.dataTime)}, the time of MET Norway's forecast, ${answer}. The Moon is ${esc(moonPhrase(m.phaseName))}, ${m.illumPct} percent lit${moonWhen}. ${placed.length ? `${and(placed.map((p) => esc(p.name)))} ${v(placed.length, "is", "are")} well placed in the dark` : "No naked-eye planet is well placed in the dark"}${s.iss.status === "ok" ? `, and ${vis.length ? `${vis.length} ISS ${v(vis.length, "pass is", "passes are")} sunlit while the sky is dark` : "no ISS pass is sunlit while the sky is dark"}` : ""}. ${zoneText}`;
   const descOptions = [
     b ? `${nightDate} in ${c.name}: best window ${T(b.start)} to ${T(b.end)}${b.cloud !== null ? ` with ${b.cloud}% cloud` : ""}, ${m.phaseName.toLowerCase()} Moon ${m.illumPct}% lit, ${placed.length} planets placed, ISS passes.` : null,
@@ -321,8 +321,8 @@ export function skyHubPage(summaries, findings, { built = [], cities = [], missi
   const withBest = summaries.filter((s) => s.strip.best && s.strip.best.cloud !== null).sort((a, b) => a.strip.best.cloud - b.strip.best.cloud || a.city.name.localeCompare(b.city.name));
   const title = "Tonight's sky in six cities: the best viewing windows";
   const top = withBest[0];
-  const lead = top ? `As of ${timeEl(newest)}, the newest MET Norway forecast time among the six cities, the clearest best window tonight is in <strong>${esc(top.city.name)}</strong>: ${localEl(top.strip.best.start, top.night.start, top.tz)} to ${localEl(top.strip.best.end, top.night.start, top.tz)} local time, with ${top.strip.best.cloud} percent cloud. Each row below has its own forecast time.`
-    : `As of ${timeEl(newest)}, the newest MET Norway forecast time among the six cities, none of them has a best window tonight on our viewing score. Each row below has its own forecast time.`;
+  const lead = top ? `As of ${timeEl(newest)}, the newest MET Norway forecast time among the six cities, the clearest best window tonight is in ${esc(top.city.name)}: ${localEl(top.strip.best.start, top.night.start, top.tz)} to ${localEl(top.strip.best.end, top.night.start, top.tz)} local time, with <strong>${top.strip.best.cloud} percent cloud</strong>. Each row below has its own forecast time.`
+    : `As of ${timeEl(newest)}, the newest MET Norway forecast time among the six cities, <strong>none of them</strong> has a best window tonight on our viewing score. Each row below has its own forecast time.`;
   const description = "Tonight's best stargazing window, cloud, Moon and ISS passes for Pune, New York, London, Tromsø, Tokyo and Sydney, computed from MET Norway's forecast.";
   const rows = cities.map((c) => {
     const s = byId.get(c.id), f = skyCityFile(c.id);

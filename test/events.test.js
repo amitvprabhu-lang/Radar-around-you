@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { summariseLaunches, summariseDisasters, summariseStarlink, launchFindings, disasterFindings, starlinkFindings, EVENT_PAGES, EVENT_MAX_AGE_HOURS, EVENT_TERMS_VERIFIED, STARLINK_MIN, meanAltitudeKm, countryName } from "../site/events.mjs";
-import { launchesHeadline, disastersHeadline } from "../site/live-pages-js.mjs";
+import { launchesHeadline, disastersHeadline, nextLaunchFields } from "../site/live-pages-js.mjs";
 import { countSatellites } from "../site/satcount.mjs";
 import { buildFixture, STANDARD, countryFixture, nAtAltitude } from "./helpers/satfixture.mjs";
 import { launchesDoc, eventsList, stormsNow, EV_TIME, realLaunches, realEvents, realStorms, EVENTS_TIME, EVENTS_NOW } from "./helpers/eventsfixture.mjs";
@@ -48,7 +48,9 @@ test("launches: the next launch, the 30 day counts by provider and country, pads
   assert.equal(s.total, 321);
   // the live refresh works out the same headline from the same file
   const h = launchesHeadline(launchesDoc());
-  assert.deepEqual(h, { "next-name": s.next.name, "next-when": s.next.when, "launches-30": String(s.in30) });
+  assert.deepEqual(h, { "next-name": s.next.name, "next-when": s.next.when, "launches-30": String(s.in30), "exact-upcoming": String(s.exactUpcoming), ...nextLaunchFields(s.next) });
+  assert.equal(h["next-provider"], "SpaceX");
+  assert.equal(h["next-status"], "Go for Launch");
 });
 
 test("launches: no launch in the next 30 days, a list that ends inside the window, stale and broken lists", () => {
@@ -106,8 +108,8 @@ test("disasters: earthquakes left out, NHC's storm not shown twice, current and 
   const oldStorms = summariseDisasters(eventsList(), { now, dataTime: EV_TIME, storms: { ...stormsNow, generated: "2026-10-05T10:00:00Z" } });
   assert.match(oldStorms.stormsNote, /older than 12 hours/);
   // the live refresh counts the same way
-  const h = disastersHeadline(eventsList(), stormsNow);
-  assert.deepEqual(h, { current: "4", orange: "1", red: "0" });
+  const h = disastersHeadline(eventsList(), stormsNow, EV_TIME);
+  assert.deepEqual(h, { current: "4", orange: "1", red: "0", recent: "1" });
 });
 
 test("disasters: zero Orange or Red events, stale data and broken records", () => {
@@ -131,7 +133,8 @@ test("disasters: the real GDACS list of 6 October", () => {
   assert.equal(s.atCap, true);
   assert.deepEqual(s.duplicates.map((d) => d.nhc), ["Rachel"]);
   assert.equal(s.current, realEvents().filter((e) => e.type !== "EQ" && e.current).length - 1);
-  assert.equal(String(s.current), disastersHeadline(realEvents(), realStorms()).current);
+  assert.equal(String(s.current), disastersHeadline(realEvents(), realStorms(), EVENTS_TIME()).current);
+  assert.equal(String(s.recent), disastersHeadline(realEvents(), realStorms(), EVENTS_TIME()).recent);
   assert.equal(s.currentOrange, 1);
   const f = disasterFindings(s);
   assert.ok(f.length >= 3 && f.length <= 6);
@@ -152,7 +155,8 @@ test("Starlink: count, share, bands, inclinations, launch months and days, posit
   assert.equal(s.starlink, 10);
   assert.equal(s.starlink, countSatellites(fx).starlink, "the count page's Starlink number");
   assert.equal(s.active, 11);
-  assert.equal(s.last30, 3, "new and active and Starlink");
+  assert.equal(s.last30, 6, "active and Starlink and launched in the 30 days to the data day (5 October): the six of 20 September");
+  assert.equal(s.last30From, "2026-09-06T00:00:00Z");
   assert.deepEqual(s.topBands.map((b) => [b.from, b.count]), [[460, 6], [550, 3], [300, 1]]);
   assert.equal(s.bands[0].from, 300);
   assert.equal(s.bands.at(-1).from, 550);

@@ -182,9 +182,10 @@ async function runScript(files, now = NOW) {
 }
 
 test("the inline script is small, loads nothing but the live folder, and carries the tested functions' own source", () => {
-  // OURS: 5 KB since the review round of 2026-10-06 (was 4 KB): the strip now carries the launches page's own wording function
-  // (launchWhenText, about 1 KB) so the two print the same next launch
-  assert.ok(Buffer.byteLength(STRIP_SCRIPT) < 5120, `${Buffer.byteLength(STRIP_SCRIPT)} bytes`);
+  // OURS: 6 KB since the merge of 2026-10-06 (4 KB at first, 5 KB when the strip took on the launches page's own wording function
+  // launchWhenText, 6 KB when the events branch's review round grew that function to about 1.4 KB without its comments)
+  assert.ok(Buffer.byteLength(STRIP_SCRIPT) < 6144, `${Buffer.byteLength(STRIP_SCRIPT)} bytes`);
+  assert.ok(!/\n\/\//.test(STRIP_SCRIPT), "no comment lines are sent");
   assert.ok(STRIP_SCRIPT.includes("function launchWhenText("));
   assert.match(STRIP_SCRIPT, /^<script id="home-strip-js">\(function \(\) \{\n/);
   assert.ok(STRIP_SCRIPT.endsWith("})();</script>\n"));

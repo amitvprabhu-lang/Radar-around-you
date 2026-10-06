@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SAME_WITHIN, direction, ordinal, rankOf, rankPhrase, percentText, topShare, meanAndRange, and, changeSince, readHistory, historyAdd, previousEntry, HISTORY_KEEP } from "../site/insight.mjs";
+import { topWithTies, namesCapped, SAME_WITHIN, direction, ordinal, rankOf, rankPhrase, percentText, topShare, meanAndRange, and, changeSince, readHistory, historyAdd, previousEntry, HISTORY_KEEP } from "../site/insight.mjs";
 
 test("one threshold decides the direction words: within 15 percent is about the same", () => {
   assert.equal(SAME_WITHIN, 0.15);
@@ -62,4 +62,25 @@ test("history keeps the last 48 entries per page in data time order, replaces a 
   assert.equal(previousEntry(h, "launches", last).values.n, 58, "the entry before, never the page's own");
   assert.equal(previousEntry(h, "starlink", last), null);
   assert.equal(previousEntry({ schema: 1, pages: {} }, "launches", last), null);
+});
+
+test("review fixes: ties at the top or at the edge are kept whole, names are capped, and shares near 100 percent never round up to all", () => {
+  const r = (counts) => counts.map((count, i) => ({ name: String.fromCharCode(97 + i), count }));
+  assert.deepEqual(topWithTies(r([5, 3, 2])).map((x) => x.name), ["a"], "no tie");
+  assert.deepEqual(topWithTies(r([5, 5, 2])).map((x) => x.name), ["a", "b"], "a tie of two");
+  assert.deepEqual(topWithTies(r([5, 5, 5, 1])).map((x) => x.name), ["a", "b", "c"], "a tie of three");
+  assert.deepEqual(topWithTies([]), [], "empty");
+  assert.deepEqual(topWithTies(r([9, 5, 4, 4, 4, 1]), 3).map((x) => x.name), ["a", "b", "c", "d", "e"], "a tie for third place");
+  assert.deepEqual(topWithTies(r([9, 5]), 3).map((x) => x.name), ["a", "b"], "fewer rows than asked");
+  assert.equal(namesCapped(["a", "b"]), "a and b");
+  assert.equal(namesCapped(["a", "b", "c", "d", "e"], 3, "more days"), "a, b, c and 2 more days");
+  assert.equal(percentText(249, 250), "over 99");
+  assert.equal(percentText(250, 250), "100");
+  assert.equal(percentText(199, 200), "over 99", "99.5 percent is not all");
+});
+
+test("review fixes: history drops malformed old entries", () => {
+  const bad = { schema: 1, pages: { k: [null, { dataTime: "nonsense", values: { n: 1 } }, { dataTime: "2026-10-01T00:00:00Z", values: [1] }, { dataTime: "2026-10-02T00:00:00Z", values: { n: 2, s: "x" } }, { dataTime: "2026-10-03T00:00:00Z" }] } };
+  const h = historyAdd(bad, "k", { dataTime: "2026-10-04T00:00:00Z", values: { n: 3 } });
+  assert.deepEqual(h.pages.k, [{ dataTime: "2026-10-02T00:00:00Z", values: { n: 2 } }, { dataTime: "2026-10-04T00:00:00Z", values: { n: 3 } }]);
 });

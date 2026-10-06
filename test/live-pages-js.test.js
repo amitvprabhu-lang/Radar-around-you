@@ -55,7 +55,13 @@ test("launch times are worded by the source's precision, in UTC with the year", 
   assert.equal(launchWhenText({ net: "2026-10-07T03:23:00Z", precision: "HR" }), "7 October 2026, in the hour from 03:00 UTC");
   assert.equal(at("M"), "October 2026, day not set");
   assert.equal(at("Q4"), "the fourth quarter of 2026, day not set");
-  assert.equal(at("D", "Day"), '31 October 2026, not an exact date (the source calls it "Day")');
+  assert.equal(at("D", "Day"), "31 October 2026, time not set");
+  // review fix: the placeholder day of a year, half year or unknown precision is not printed
+  assert.equal(at("Y", "Year"), "2026, day not set");
+  assert.equal(at("H2", "Half Year 2"), "the second half of 2026, day not set");
+  assert.equal(at("H1", "Half Year 1"), "the first half of 2026, day not set");
+  assert.equal(at("X", "Fortnight"), '2026, not an exact date (the source calls its precision "Fortnight")');
+  assert.ok(!/31/.test(at("Y", "Year") + at("H2", "Half Year 2") + at("X", "Fortnight")));
   assert.equal(launchWhenText({ net: "x" }), "time not given");
 });
 
@@ -65,8 +71,9 @@ test("the refresh headlines: the next launch and the 30 day count, and the curre
   assert.equal(h["next-when"], "7 October 2026, 03:23 UTC");
   assert.equal(h["launches-30"], String(LAUNCHES.launches.filter((l) => Date.parse(l.net) >= Date.parse(LAUNCHES.generated) && Date.parse(l.net) < Date.parse(LAUNCHES.generated) + 30 * 86400e3).length));
   assert.equal(launchesHeadline({ generated: "x", launches: [] }), null);
-  assert.deepEqual(launchesHeadline({ generated: "2026-10-06T00:00:00Z", launches: [] }), { "next-name": "none in the list", "next-when": "", "launches-30": "0" });
+  assert.deepEqual(launchesHeadline({ generated: "2026-10-06T00:00:00Z", launches: [] }), { "next-name": "none in the list", "next-when": "", "launches-30": "0", "exact-upcoming": "0" });
   const d = disastersHeadline(EVENTS, null);
+  assert.ok(!("recent" in d), "no data time, no recent count");
   assert.equal(d.orange, String(EVENTS.filter((e) => e.type !== "EQ" && e.current && e.alert === "Orange").length));
   assert.equal(d.red, "0");
   const storms = { storms: [{ name: "Rachel", lat: 20.4, lon: -116.2 }] };

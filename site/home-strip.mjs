@@ -131,4 +131,6 @@ ${FUNCTIONS.map((f) => f.toString()).join("\n")}
 var root = document.getElementById("home-strip");
 if (root && window.fetch) stripLoad("live/", (u, fresh) => fetch(u, fresh ? { cache: "no-store" } : {}).then((r) => { if (!r.ok) throw r.status; return r.json(); }), Date.now(), L).then((r) => stripApply(root, r, L), () => 0);`;
 // leading indentation removed to keep the script small; no line of the source relies on it
-export const STRIP_SCRIPT = `<script id="home-strip-js">(function () {\n${body.replace(/\n[ \t]+/g, "\n")}\n})();</script>\n`;
+// whole-line comments inside the copied functions (launchWhenText has some) are dropped too; no line of the copied code starts with "//"
+// inside a string
+export const STRIP_SCRIPT = `<script id="home-strip-js">(function () {\n${body.replace(/\n[ \t]+/g, "\n").replace(/\n\/\/[^\n]*/g, "")}\n})();</script>\n`;

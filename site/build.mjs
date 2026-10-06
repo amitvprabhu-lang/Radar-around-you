@@ -220,8 +220,6 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
     if (indexnowKey) fs.writeFileSync(path.join(outDir, `${indexnowKey}.txt`), indexnowKey, "utf8");
   }
   fs.writeFileSync(path.join(outDir, "robots.txt"), robots({ noindex }));
-  // the live pages' shared script (design section 8.1), at the site root where every live page's scriptSrc points
-  fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
   // the share image every page names in og:image (written for a noindex build too: harmless, and the tags stay the same)
   fs.copyFileSync(OG_IMAGE_SOURCE, path.join(outDir, OG_IMAGE.file));
   return { outDir, pages: files.length, checks, noindex, skipped: country.skipped, liveSkipped: live.skipped };

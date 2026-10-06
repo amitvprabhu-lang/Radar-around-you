@@ -1,7 +1,8 @@
 // Small shared parts for live pages that meet the Google readiness checklist (docs/superpowers/specs/2026-10-06-more-live-pages-design.md,
-// section 7) without changing the shared page shell: the WebPage structured data with inLanguage, isPartOf and breadcrumb, tables with
-// header scopes, figures with captions and the time element. A later pass can move them into site/layout.mjs for every page.
-import { SITE, urlPath, esc, table, href } from "./layout.mjs";
+// section 7) without changing the shared page shell: the WebPage structured data with inLanguage, isPartOf and breadcrumb, figures with
+// captions and the time element (tables get their header scopes from site/layout.mjs's table). A later pass can move them into
+// site/layout.mjs for every page.
+import { SITE, urlPath, esc, href } from "./layout.mjs";
 import { LIVE_SCRIPT_FILE, LIVE_SCRIPT_VERSION } from "./live-pages-js.mjs";
 
 // WebPage JSON-LD: name, description, url, inLanguage, dateModified (the data time), isPartOf the WebSite, and the same breadcrumb the
@@ -15,8 +16,6 @@ export function webPageLd({ file, title, description, dataTime, crumbTitle }) {
   };
 }
 
-// The shared table with scope="col" on every header cell (layout.mjs's table puts header cells only in the head row).
-export const scopedTable = (opts) => table(opts).replace(/<th(?=[ >])(?![^>]*\bscope=)/g, '<th scope="col"');
 
 // A chart or map in a figure with a one-sentence caption (what it shows and its data time); the SVG keeps its own title and desc.
 export const figureHtml = (svg, caption) => `<figure style="margin:18px 0">${svg}<figcaption style="color:var(--muted);font-size:14px;margin-top:6px">${esc(caption)}</figcaption></figure>`;
