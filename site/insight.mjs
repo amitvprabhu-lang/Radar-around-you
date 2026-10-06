@@ -57,9 +57,12 @@ export function topWithTies(rows, n = 1, count = (r) => r.count) {
   return rows.filter((r, i) => i < n || count(r) === edge);
 }
 
-// "a", "a and b", "a, b and c", "a, b, c and 2 more" (more: the word after the count, "more" unless given)
+// "a", "a and b", "a, b and c", "a, b, c and 2 more" (more: the words after the count, "more" unless given; a pair [one, many] gives the
+// singular when one name is left: "and 1 more provider", "and 2 more providers")
 export function namesCapped(names, cap = 3, more = "more") {
-  return names.length > cap ? `${names.slice(0, cap).join(", ")} and ${names.length - cap} ${more}` : and(names);
+  if (names.length <= cap) return and(names);
+  const left = names.length - cap, word = Array.isArray(more) ? more[left === 1 ? 0 : 1] : more;
+  return `${names.slice(0, cap).join(", ")} and ${left} ${word}`;
 }
 
 // The first n rows of a list already sorted by count, and their share of total: { rows, count, total, share }.

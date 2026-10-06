@@ -40,7 +40,7 @@ test("launch findings: the country of the pad with the most, with ties", () => {
   const f = (byCountry) => texts(launchFindings({ ...L, byCountry }));
   assert.match(f(rows([2, 1, 1], (i) => ["US", "CN", "NZ"][i])), /the country with the most is United States, with 2 \(50 percent\)\./);
   assert.match(f(rows([2, 2], (i) => ["US", "CN"][i])), /the countries with the most are United States and China, with 2 each \(50 percent each\)\./);
-  assert.match(f(rows([1, 1, 1, 1], (i) => ["US", "CN", "NZ", "IN"][i])), /the countries with the most are United States, China, New Zealand and 1 more countries, with 1 each/);
+  assert.match(f(rows([1, 1, 1, 1], (i) => ["US", "CN", "NZ", "IN"][i])), /the countries with the most are United States, China, New Zealand and 1 more country, with 1 each/);
   assert.match(f(rows([4], () => "US")), /By the country of the pad, all of them are planned from United States\./);
 });
 
@@ -57,8 +57,8 @@ test("Starlink findings: the inclination group, the busiest bands and the launch
   const f = (o) => texts(starlinkFindings({ ...S, ...o }));
   const inc = (counts) => counts.map((count, i) => ({ deg: [53, 43, 97, 70][i], count }));
   assert.match(f({ inclinations: inc([5, 3]) }), /The largest inclination group is 53 degrees, with 5 satellites/);
-  assert.match(f({ inclinations: inc([5, 5, 1]) }), /The largest inclination groups are 53 and 43 degrees, with 5 satellites each \(\d+ percent each\), of 3 groups\./);
-  assert.match(f({ inclinations: inc([4, 4, 4]) }), /groups are 53, 43 and 97 degrees, with 4 satellites each/);
+  assert.match(f({ inclinations: inc([5, 5, 1]) }), /The largest inclination groups are 53 degrees and 43 degrees, with 5 satellites each \(\d+ percent each\), of 3 groups\./);
+  assert.match(f({ inclinations: inc([4, 4, 4]) }), /groups are 53 degrees, 43 degrees and 97 degrees, with 4 satellites each/);
   assert.ok(!/inclination group/.test(f({ inclinations: [] })));
   const b = (counts) => counts.map((count, i) => ({ from: 400 + i * 10, to: 410 + i * 10, count }));
   assert.match(f({ topBands: b([9, 5, 3]) }), /The 3 busiest 10 km altitude bands hold \d+ percent of them: 400 to 410 km \(9\), 410 to 420 km \(5\) and 420 to 430 km \(3\)\./);
@@ -69,7 +69,7 @@ test("Starlink findings: the inclination group, the busiest bands and the launch
   assert.match(f({ topDays: d([56, 40]) }), /The launch day with the most active Starlink satellites is 10 September 2026, with 56\./);
   assert.match(f({ topDays: d([56, 56, 40]) }), /The launch days with the most active Starlink satellites are 10 September 2026 and 11 September 2026, with 56 each\./);
   assert.match(f({ topDays: d([56, 56, 56]) }), /are 10 September 2026, 11 September 2026 and 12 September 2026, with 56 each\./);
-  assert.match(f({ topDays: d([56, 56, 56, 56]) }), /12 September 2026 and 1 more days, with 56 each\./);
+  assert.match(f({ topDays: d([56, 56, 56, 56]) }), /12 September 2026 and 1 more day, with 56 each\./);
   assert.ok(!/launch day/.test(f({ topDays: [] })));
 });
 

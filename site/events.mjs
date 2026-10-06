@@ -269,15 +269,16 @@ const changeText = (what, nowV, prev, key) => {
   return { text: `${what}: ${num(c.now)}, against ${num(c.before)} in the previous build of this page (data as of ${at(prev.dataTime)}), ${c.word === "about the same as" ? "about the same" : c.word === "above" ? "more" : "fewer"}.`, numbers: [c.now, c.before, ...atNums(prev.dataTime)] };
 };
 // "X has the most ..." or "X and Y have the joint most ..., N each"; tied: the rows that share the top count (topWithTies), label: a name
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const most = (tied, label, more) => ({ names: namesCapped(tied.map(label), 3, more), one: tied.length === 1, extra: tied.length > 3 ? [tied.length - 3] : [] });
 
 export function launchFindings(s, previous = null) {
   const out = [];
   if (!s.in30) out.push({ text: `No launch in the list is planned in the ${LAUNCH_WINDOW_DAYS} days after the data time.`, numbers: [LAUNCH_WINDOW_DAYS] });
   else {
-    const tied = topWithTies(s.byProvider, 1), top = tied[0], m = most(tied, (x) => x.name, "more providers"), pct = percentText(top.count, s.in30);
+    const tied = topWithTies(s.byProvider, 1), top = tied[0], m = most(tied, (x) => x.name, ["more provider", "more providers"]), pct = percentText(top.count, s.in30);
     const quoted = tied.slice(0, 3).map((x) => x.name);
-    if (s.byProvider.length === 1) out.push({ quoted, text: `All ${num(s.in30)} ${v(s.in30, "launch", "launches")} planned in the ${LAUNCH_WINDOW_DAYS} days after the data time ${v(s.in30, "comes", "come")} from ${top.name}.`, numbers: [s.in30, LAUNCH_WINDOW_DAYS] });
+    if (s.byProvider.length === 1) out.push({ quoted, text: s.in30 === 1 ? `The one launch planned in the ${LAUNCH_WINDOW_DAYS} days after the data time comes from ${top.name}.` : `All ${num(s.in30)} launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time come from ${top.name}.`, numbers: s.in30 === 1 ? [LAUNCH_WINDOW_DAYS] : [s.in30, LAUNCH_WINDOW_DAYS] });
     else {
       const first = m.one ? `${top.name} has the most launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time: ${num(top.count)} of ${num(s.in30)} (${pct} percent).`
         : `${m.names} have the joint most launches planned in the ${LAUNCH_WINDOW_DAYS} days after the data time: ${num(top.count)} each of ${num(s.in30)} (${pct} percent each).`;
@@ -292,9 +293,9 @@ export function launchFindings(s, previous = null) {
       }
       out.push({ quoted, text: first + second, numbers });
     }
-    const ct = topWithTies(s.byCountry, 1), c = ct[0], cm = most(ct, (x) => countryName(x.name), "more countries"), cp = percentText(c.count, s.in30);
+    const ct = topWithTies(s.byCountry, 1), c = ct[0], cm = most(ct, (x) => countryName(x.name), ["more country", "more countries"]), cp = percentText(c.count, s.in30);
     out.push(s.byCountry.length === 1
-      ? { text: `By the country of the pad, all of them are planned from ${countryName(c.name)}.`, numbers: [] }
+      ? { text: `By the country of the pad, ${s.in30 === 1 ? "it is" : "all of them are"} planned from ${countryName(c.name)}.`, numbers: [] }
       : { text: `By the country of the pad, they are planned from ${num(s.byCountry.length)} ${v(s.byCountry.length, "country", "countries")}; ${cm.one ? `the country with the most is ${countryName(c.name)}, with ${num(c.count)} (${cp} percent)` : `the countries with the most are ${cm.names}, with ${num(c.count)} each (${cp} percent each)`}.`, numbers: [s.byCountry.length, c.count, cp, ...cm.extra] });
     const rough = s.in30 - s.exact30;
     out.push({ text: `${num(s.exact30)} of these ${num(s.in30)} ${v(s.exact30, "has", "have")} a time to the hour or better; ${rough ? `the other ${num(rough)} ${v(rough, "has", "have")} only a month, a quarter or another rough date, so ${v(rough, "its day is", "their days are")} not set and ${v(rough, "it", "they")} can fall later` : "none has only a month or a quarter"}.`, numbers: [s.exact30, s.in30, ...(rough ? [rough] : [])] });
@@ -317,12 +318,12 @@ export function disasterFindings(s, previous = null) {
   if (types.length && s.current) {
     const t = types[0], tied = types.filter((x) => x.total === t.total);
     out.push(tied.length > 1
-      ? { text: `${and(tied.map((x) => GDACS_PLURAL[x.type]))} are listed most among current events, with ${num(t.total)} each of ${num(s.current)}.`, numbers: [t.total, s.current] }
+      ? { text: `${cap(and(tied.map((x) => GDACS_PLURAL[x.type])))} are listed most among current events, with ${num(t.total)} each of ${num(s.current)}.`, numbers: [t.total, s.current] }
       : { text: `${GDACS_PLURAL[t.type].charAt(0).toUpperCase()}${GDACS_PLURAL[t.type].slice(1)} are the most listed type among current events: ${num(t.total)} of ${num(s.current)} (${percentText(t.total, s.current)} percent).`, numbers: [t.total, s.current, percentText(t.total, s.current)] });
   }
   const pt = topWithTies(s.countries, 1), c = pt[0];
   if (c && c.count >= 2) {
-    const m = most(pt, (x) => x.name, "more places");
+    const m = most(pt, (x) => x.name, ["more place", "more places"]);
     out.push(m.one ? { text: `The place GDACS names most often among current events is ${c.name}, in ${num(c.count)} events (the names are as GDACS writes them).`, numbers: [c.count], quoted: [c.name] }
       : { text: `The places GDACS names most often among current events are ${m.names}, in ${num(c.count)} events each (the names are as GDACS writes them).`, numbers: [c.count, ...m.extra], quoted: pt.slice(0, 3).map((x) => x.name) });
   }
@@ -346,9 +347,9 @@ export function starlinkFindings(s, previous = null) {
   }
   const it = topWithTies(s.inclinations, 1), i0 = it[0];
   if (i0) {
-    const m = most(it, (x) => num(x.deg), "more groups"), p = percentText(i0.count, s.starlink);
+    const m = most(it, (x) => `${num(x.deg)} degrees`, ["more group", "more groups"]), p = percentText(i0.count, s.starlink);
     out.push(m.one ? { text: `The largest inclination group is ${num(i0.deg)} degrees, with ${num(i0.count)} satellites (${p} percent), of ${num(s.inclinations.length)} groups.`, numbers: [i0.deg, i0.count, p, s.inclinations.length] }
-      : { text: `The largest inclination groups are ${m.names} degrees, with ${num(i0.count)} satellites each (${p} percent each), of ${num(s.inclinations.length)} groups.`, numbers: [...it.slice(0, 3).map((x) => x.deg), i0.count, p, s.inclinations.length, ...m.extra] });
+      : { text: `The largest inclination groups are ${m.names}, with ${num(i0.count)} satellites each (${p} percent each), of ${num(s.inclinations.length)} groups.`, numbers: [...it.slice(0, 3).map((x) => x.deg), i0.count, p, s.inclinations.length, ...m.extra] });
   }
   const avg = meanAndRange(s.completeMonths.map((m) => m.count));
   if (avg && avg.n === 12) {
@@ -359,7 +360,7 @@ export function starlinkFindings(s, previous = null) {
   if (ch) out.push(ch);
   const dt = topWithTies(s.topDays, 1), d = dt[0];
   if (d) out.push(dt.length === 1 ? { text: `The launch day with the most active Starlink satellites is ${dayText(d.day)}, with ${num(d.count)}.`, numbers: [d.count, ...dayNums(d.day)] }
-    : { text: `The launch days with the most active Starlink satellites are ${namesCapped(dt.map((x) => dayText(x.day)), 3, "more days")}, with ${num(d.count)} each.`, numbers: [d.count, ...dt.slice(0, 3).flatMap((x) => dayNums(x.day)), ...(dt.length > 3 ? [dt.length - 3] : [])] });
+    : { text: `The launch days with the most active Starlink satellites are ${namesCapped(dt.map((x) => dayText(x.day)), 3, ["more day", "more days"])}, with ${num(d.count)} each.`, numbers: [d.count, ...dt.slice(0, 3).flatMap((x) => dayNums(x.day)), ...(dt.length > 3 ? [dt.length - 3] : [])] });
   return out.slice(0, 6);
 }
 

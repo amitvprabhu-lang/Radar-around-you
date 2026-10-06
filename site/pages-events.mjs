@@ -126,9 +126,13 @@ export function eventMapSvg({ coast, events, id, title, desc }) {
 // the year for a quarter, the day otherwise. Tables sort by it (site/live-pages-js.mjs).
 export function launchTimeEl(l) {
   const iso = l.net;
-  const dt = ["SEC", "MIN", "HR"].includes(l.precision) ? iso : l.precision === "M" ? iso.slice(0, 7) : /^Q[1-4]$/.test(l.precision) ? iso.slice(0, 4) : iso.slice(0, 10);
+  // a year or half year (matched by the source's name for the precision, as launchWhenText does) gets the year only, so the source's
+  // placeholder day is never in the machine-readable time; an unknown precision gets no machine-readable time at all
+  const name = String(l.precisionName || "");
+  const dt = ["SEC", "MIN", "HR"].includes(l.precision) ? iso : l.precision === "M" ? iso.slice(0, 7) : /^Q[1-4]$/.test(l.precision) ? iso.slice(0, 4)
+    : /^day$/i.test(name) ? iso.slice(0, 10) : /year|half/i.test(name) ? iso.slice(0, 4) : null;
   // sorted by the feed's own planned time: for a month or a quarter that is a date the source sets inside the period
-  return `<time datetime="${esc(dt)}" data-sort="${esc(iso)}">${esc(l.when)}</time>`;
+  return dt === null ? `<span data-sort="${esc(iso)}">${esc(l.when)}</span>` : `<time datetime="${esc(dt)}" data-sort="${esc(iso)}">${esc(l.when)}</time>`;
 }
 // a date cell that sorts by its ISO value (site/live-pages-js.mjs, cellSortKey)
 const dateCell = (iso, text) => `<time datetime="${esc(iso)}" data-sort="${esc(iso)}">${esc(text)}</time>`;

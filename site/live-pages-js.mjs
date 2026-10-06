@@ -233,6 +233,19 @@ export function mergeRefresh(current, fresh) {
   return { values: values, changed: changed };
 }
 
+// What a refresh of the launches page writes. When the page and the fresh data disagree on whether there is a next launch (the page was
+// built with none and one appears, or the reverse), the next-launch fields ("next-...") are left as they are, nextChanged is true and the
+// countdown is not moved, so the lead never mixes "none in the list" with a launch's time or provider; the status line then asks for a
+// reload. Otherwise every field follows the fresh data, and countdown holds the countdown's new attributes.
+export function applyRefresh(current, fresh) {
+  var has = function (o) { return !!(o && typeof o["next-when"] === "string" && o["next-when"]); };
+  var nextChanged = has(current) !== has(fresh), use = fresh;
+  if (nextChanged) { use = {}; Object.keys(fresh || {}).forEach(function (k) { if (k.indexOf("next-") !== 0) use[k] = fresh[k]; }); }
+  var m = mergeRefresh(current, use);
+  m.nextChanged = nextChanged;
+  m.countdown = !nextChanged && fresh && fresh["next-net"] ? { "data-countdown": fresh["next-net"], "data-precision": fresh["next-precision-code"], "data-status": fresh["next-status-text"] } : null;
+  return m;
+}
 
 // ------------------------------------------------------------------ browser parts (each wrapped so a failure stays silent)
 
@@ -363,18 +376,18 @@ function liveRefresh(d, w) {
         if (!fresh) throw new Error("unreadable");
         var els = d.querySelectorAll("[data-live-key]"), current = {};
         Array.prototype.forEach.call(els, function (el) { current[el.getAttribute("data-live-key")] = el.textContent; });
-        var merged = mergeRefresh(current, fresh);
+        var merged = applyRefresh(current, fresh);
         Array.prototype.forEach.call(els, function (el) {
           var k = el.getAttribute("data-live-key");
           el.textContent = merged.values[k];
           if (merged.changed.indexOf(k) >= 0) el.classList.add("live-new");
         });
-        if (fresh["next-net"]) Array.prototype.forEach.call(d.querySelectorAll("[data-countdown]"), function (el) {
-          el.setAttribute("data-countdown", fresh["next-net"]); el.setAttribute("data-precision", fresh["next-precision-code"]); el.setAttribute("data-status", fresh["next-status-text"]);
+        if (merged.countdown) Array.prototype.forEach.call(d.querySelectorAll("[data-countdown]"), function (el) {
+          Object.keys(merged.countdown).forEach(function (a) { el.setAttribute(a, merged.countdown[a]); });
         });
         built = entry.sourceTime || entry.fetchedAt;
         shownAt = Date.parse(built);
-        say("Updated in place from the live data of " + (localTimeText(built) || built) + ", " + minutesAgoText(shownAt, Date.now()) + ". Marked numbers changed since the page was built; the rest of the page is from its data time.");
+        say("Updated in place from the live data of " + (localTimeText(built) || built) + ", " + minutesAgoText(shownAt, Date.now()) + ". Marked numbers changed since the page was built; the rest of the page is from its data time." + (merged.nextChanged ? " The next launch changed: reload for the full update." : ""));
         return null;
       });
     }).catch(function () { say("Could not read the live data, so " + keeps() + "."); });
@@ -391,7 +404,7 @@ function liveMain(d, w, version) {
 }
 
 // The pure functions the browser parts use, in the order they are written into the script.
-const PURE = [cellSortValue, cellSortKey, compareSortValues, sortOrder, filterMatch, localTimeText, countdownText, minutesAgoText, launchWhenText, launchPrecisionText, regionName, isoMs, launchesHeadline, nextLaunchFields, stormNameToken, sameStormRule, disastersHeadline, feedState, mergeRefresh];
+const PURE = [cellSortValue, cellSortKey, compareSortValues, sortOrder, filterMatch, localTimeText, countdownText, minutesAgoText, launchWhenText, launchPrecisionText, regionName, isoMs, launchesHeadline, nextLaunchFields, stormNameToken, sameStormRule, disastersHeadline, feedState, mergeRefresh, applyRefresh];
 const DOM = [liveStyle, liveTimes, liveTables, liveTips, liveCountdown, liveRefresh, liveMain];
 
 // The text of live-pages.js. Deterministic: the same code gives the same bytes.

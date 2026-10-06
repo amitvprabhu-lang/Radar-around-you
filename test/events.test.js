@@ -214,3 +214,41 @@ test("findings: change since the previous build, both directions and about the s
     for (const x of f) assert.ok(!/[–—]/.test(x.text) && !/\bsafe\b|danger|you should|will (launch|happen)/i.test(x.text), x.text);
   }
 });
+
+// ------------------------------------------------------------------ scoped re-review (2026-10-06): wording of ties and single entries
+test("re-review: a tie of four or more inclination groups names each in degrees, with the right number for the rest", () => {
+  const base = summariseStarlink(countryFixture(), { now: new Date("2026-10-05T09:00:00Z"), bounds: { min: 1, max: 1000 }, min: 1 });
+  const text = (inclinations) => starlinkFindings({ ...base, inclinations }).map((x) => x.text).find((t) => /inclination group/.test(t));
+  const four = text([{ deg: 53, count: 5 }, { deg: 43, count: 5 }, { deg: 70, count: 5 }, { deg: 97.6, count: 5 }, { deg: 33, count: 1 }]);
+  assert.match(four, /The largest inclination groups are 53 degrees, 43 degrees, 70 degrees and 1 more group, with 5 satellites each/);
+  assert.ok(!/groups degrees|group degrees/.test(four), four);
+  const five = text([{ deg: 53, count: 5 }, { deg: 43, count: 5 }, { deg: 70, count: 5 }, { deg: 97.6, count: 5 }, { deg: 33, count: 5 }]);
+  assert.match(five, /53 degrees, 43 degrees, 70 degrees and 2 more groups, with 5 satellites each/);
+  const two = text([{ deg: 53, count: 5 }, { deg: 43, count: 5 }, { deg: 70, count: 1 }]);
+  assert.match(two, /The largest inclination groups are 53 degrees and 43 degrees, with 5 satellites each/);
+  assert.match(text([{ deg: 53, count: 5 }, { deg: 43, count: 1 }]), /The largest inclination group is 53 degrees, with 5 satellites/);
+});
+
+test("re-review: one launch is worded in the singular, and 'and 1 more' takes the singular noun", () => {
+  const one = summariseLaunches(launchesDoc({ launches: [launchesDoc().launches[1]] }), { now, allowStale: true });
+  assert.equal(one.in30, 1);
+  const f = launchFindings(one).map((x) => x.text);
+  assert.ok(f.some((t) => t.startsWith("The one launch planned in the 30 days after the data time comes from ")), f.join(" | "));
+  assert.ok(!f.some((t) => /All 1 launch|all of them/.test(t)), f.join(" | "));
+  assert.ok(f.some((t) => /^By the country of the pad, it is planned from /.test(t)), f.join(" | "));
+  const four = [{ name: "A", count: 2 }, { name: "B", count: 2 }, { name: "C", count: 2 }, { name: "D", count: 2 }];
+  const p = launchFindings({ ...one, in30: 8, byProvider: four, byCountry: [{ name: "US", count: 8 }] }).map((x) => x.text)[0];
+  assert.match(p, /^A, B, C and 1 more provider have the joint most launches/);
+  const five = [...four, { name: "E", count: 2 }];
+  assert.match(launchFindings({ ...one, in30: 10, byProvider: five, byCountry: [{ name: "US", count: 10 }] }).map((x) => x.text)[0], /^A, B, C and 2 more providers have/);
+});
+
+test("re-review: a tie between disaster types starts the sentence with a capital", () => {
+  const s = summariseDisasters(realEvents(), { now: EVENTS_NOW, dataTime: EVENTS_TIME(), storms: realStorms() });
+  const tie = s.currentByType.map((t, i) => ({ ...t, total: i < 2 ? 4 : 0 }));
+  const t = disasterFindings({ ...s, currentByType: tie, current: 8 }).map((x) => x.text).find((x) => /listed most among current events/.test(x));
+  assert.ok(t, "the tie sentence is made");
+  assert.match(t, /^[A-Z]/, t);
+  const single = disasterFindings({ ...s, currentByType: s.currentByType.map((x, i) => ({ ...x, total: i === 0 ? 5 : 1 })), current: 8 }).map((x) => x.text).find((x) => /most listed type/.test(x));
+  assert.match(single, /^[A-Z]/);
+});
