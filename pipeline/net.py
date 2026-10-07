@@ -54,6 +54,11 @@ def _finish(status, hdrs, stream, url, max_bytes):
     if len(body) > max_bytes:
         raise FetchError(f"response larger than {max_bytes} bytes")
     headers = {k.lower(): v for k, v in hdrs.items()}
+    # A connection that ends early gives a short body without an error from read(). For a plain (not compressed) 200 answer that names its
+    # length, a body of any other length is refused like any other failed request (the caller keeps the last good copy; never a halt).
+    declared = headers.get("content-length", "").strip()
+    if status == 200 and declared.isdigit() and not headers.get("content-encoding") and len(body) != int(declared):
+        raise FetchError(f"body of {len(body)} bytes, but Content-Length says {declared} (the transfer was cut short)")
     if headers.get("content-encoding", "").lower() == "gzip" and body:
         try:
             body = gzip.decompress(body)

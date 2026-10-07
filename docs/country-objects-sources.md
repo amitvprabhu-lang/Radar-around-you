@@ -35,8 +35,9 @@ the CelesTrak usage policy) are in `docs/satcount-sources.md`. Anything marked N
   merge owners. "To Be Determined" is an owner code, not a place, and has no page.
 - **What a debris owner means**: SATCAT does not say. Measured on 2026-10-07: every one of the 12,527 debris objects in Earth orbit has a
   payload of the same launch (the first 8 characters of the international designator) somewhere in the catalogue, and 11,701 of them
-  (93.4 percent) carry the same owner as a payload of that launch. The pages state this share (recomputed every day as
-  `debrisOwnerCheck`) and say the owner records where a piece came from, not who or what broke it up. They make no claim about causes.
+  (93.4 percent) carry the same owner as a payload of that launch; 826 do not. The pages state only this share, computed at build time
+  from `debrisOwnerCheck` (`debrisOwnerSentence` in `site/pages-objects.mjs`), and that the catalogue does not record who or what broke a
+  piece off. They never say an owner caused or is responsible for debris (a unit test checks the text of the ranking page).
 - **Re-entries and launches of the last 12 months**: DECAY_DATE and LAUNCH_DATE on or after the source time minus 365 days.
 - **No public orbit data**: DATA_STATUS_CODE NEA. 801 objects in Earth orbit on 2026-10-07, the same number as the "Restricted" column of
   CelesTrak's statistics table; that NEA is what CelesTrak calls restricted is NOT CONFIRMED (only the totals match).
@@ -59,12 +60,34 @@ the CelesTrak usage policy) are in `docs/satcount-sources.md`. Anything marked N
 | Active and inactive satellites, rocket bodies, debris, unknown, totals, re-entries, every object row | satcat feed (`/pub/satcat.csv`) | collector once a day; CelesTrak updates it "once or twice a day", so these move daily, not every 10 minutes (the pages say so) |
 | Owner names | catalogue feed (source code table) | once a day |
 
-The pages are rebuilt by `site/build-live.mjs` when either feed has a new version and keep their bytes otherwise; the lead time, JSON-LD
-dateModified and sitemap lastmod are the later of the two data times, never the build time. So an owner page changes when the satellites
-feed changes (its "orbit data" time and number), about every 2 hours, and IndexNow is asked about it at most once in 6 hours
+The pages are rebuilt by `site/build-live.mjs` when either feed has a new version and keep their bytes otherwise. JSON-LD dateModified,
+the sitemap lastmod and the lead's first time ("Numbers last changed ...") move only when a number on the page changes (a hash of the
+page's numbers, `contentKey` in `pages/index.json`); the lead then names the orbit data time and the catalogue time. An owner page's bytes
+still change when only the orbit data time changes (about every 2 hours), and IndexNow is asked about it at most once in 6 hours
 (`RADAR_INDEXNOW_EVERY`). A catalogue more than 72 hours old (`OBJECTS_MAX_AGE_HOURS`, the feed's staleAfterSec) skips the ranking and the
-owner pages (their previous copy stays) and the country pages are rebuilt without the section, with a printed warning. Satellite data more
-than 30 hours old (`FAST_MAX_AGE_HOURS`) is left out of the "orbit data" lines.
+owner pages, and the five country pages keep their previous copy with the section (a country page that never had the section is built
+without it), each with a printed reason. Satellite data more than 30 hours old (`FAST_MAX_AGE_HOURS`) is left out of the "orbit data"
+lines.
+
+## Collector safety and versions (after review, 2026-10-07)
+- A transfer cut short: `pipeline/net.py` refuses a plain 200 answer whose body length differs from its Content-Length, for every feed
+  (a failure with the usual backoff, never a halt). The satcat feed also refuses a file that does not end with a line break (a body cut at
+  a line boundary with no Content-Length would still pass that check; the 30 percent drop guard is the remaining protection, NOT a full
+  guarantee). CelesTrak sent a Content-Length and no compression on 2026-10-07.
+- The owner name "European Organization for theExploitation ..." came from the catalogue feed's old reading of a line break. That feed
+  rebuilds its owner table from CelesTrak's page on every daily run (no conditional request, no "unchanged" shortcut), so its next run after
+  this change writes the corrected name; the satcat feed's "unchanged" check now covers the owner names as well as the CSV, so it publishes
+  again with the corrected name the same day. The committed test fixture `catalogue_sample.json` still holds the old spelling (fixtures are
+  real responses, never edited); EUME is not in the satcat sample, so no page built in the tests shows it.
+- Versions kept: 2 for satcat (about 3.1 MB each), 3 for every other feed. A pull that read the previous manifest still finds its files
+  (tested in `pipeline/tests/test_satcat.py` and `hosting/tests/run.php`).
+
+## The full table on large owners (after review)
+- The first version of "Show all" rebuilt number formatters and normalised text inside every sort comparison. The reviewer measured, on
+  the real `o-us.json` (18,356 rows): first draw 5.2 s, each filter keystroke 5.9 s, sort by launch 25 s, by name 82 s. Measured after the
+  rewrite in Node on this Mac on the same file: parse, prepare and first page 47.5 ms, a filter 1.3 to 1.4 ms, a sort 2.3 to 6.3 ms. A unit
+  test holds an 18,000-row synthetic file to 300 ms per step, and `e2e-country.mjs` loads an 18,356-row synthetic file on the United
+  States page and requires every long task during a filter keystroke and two sorts to stay under 200 ms.
 
 ## Accuracy checks (2026-10-07, real data)
 - **Against CelesTrak's own statistics** (the SATCAT page, Earth orbit, "Total" column): Active 17,193, Dead 2,908, Rocket Bodies 2,299,

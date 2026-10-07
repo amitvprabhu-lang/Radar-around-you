@@ -13,7 +13,9 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
-from .. import config, feeds, satcat as SC
+import io
+
+from .. import config, feeds, net, satcat as SC
 from .helpers import fx, fxj, resp
 from .test_policy import seed_catalogue
 from .test_runner import Base, http_date
@@ -122,6 +124,40 @@ class Summarise(unittest.TestCase):
                 self.assertEqual(f.read(), data, name)
 
 
+class Stream:
+    """What net._finish reads: an answer whose body may be cut short."""
+    def __init__(self, body):
+        self.f = io.BytesIO(body)
+
+    def read(self, n=-1):
+        return self.f.read(n)
+
+
+class Truncation(unittest.TestCase):
+    """A connection that closes early gives a short body without an error; net.fetch refuses it for every feed."""
+    BODY = CSV.encode("utf-8")
+
+    def finish(self, body, **headers):
+        return net._finish(200, headers, Stream(body), "https://example.org/x", 40_000_000)
+
+    def test_a_body_cut_at_half_nine_tenths_or_99_percent_is_refused(self):
+        for frac in (0.5, 0.9, 0.99):
+            cut = self.BODY[: int(len(self.BODY) * frac)]
+            with self.assertRaisesRegex(net.FetchError, "cut short"):
+                self.finish(cut, **{"Content-Length": str(len(self.BODY))})
+
+    def test_the_whole_body_passes_and_a_missing_length_is_not_checked(self):
+        self.assertEqual(self.finish(self.BODY, **{"Content-Length": str(len(self.BODY))}).body, self.BODY)
+        self.assertEqual(self.finish(self.BODY[:100]).body, self.BODY[:100], "without Content-Length the length cannot be checked here")
+
+    def test_only_a_plain_200_is_checked(self):
+        import gzip as gz
+        packed = gz.compress(self.BODY)
+        self.assertEqual(self.finish(packed, **{"Content-Length": str(len(packed)), "Content-Encoding": "gzip"}).body, self.BODY)
+        r = net._finish(304, {"Content-Length": "500"}, Stream(b""), "x", 1000)
+        self.assertEqual(r.status, 304, "a 304 may name the length of the full answer")
+
+
 class NameTable(unittest.TestCase):
     def test_a_line_break_in_a_name_is_a_space(self):
         from ..catalogue import name_table
@@ -215,6 +251,66 @@ class Feed(Base):
             s = self.run_(["satcat"])
         self.assertIn("fell from", s["failed"]["satcat"])
         self.assertEqual(self.manifest()["feeds"]["satcat"]["files"], good)
+
+    def test_a_cut_short_file_without_a_final_line_break_is_refused(self):
+        for frac in (0.5, 0.9, 0.99):
+            cut = self.body[: int(len(self.body) * frac)]
+            if cut.endswith(b"\n"):
+                cut = cut[:-1]
+            self.answer(resp(200, cut))
+            s = self.run_(["satcat"], force=True)
+            self.assertIn("does not end with a line break", s["failed"]["satcat"])
+            self.assertEqual(s["halted"], {}, "a failure, not a halt")
+        self.assertEqual(self.manifest()["feeds"]["satcat"]["files"], {}, "nothing was published")
+
+    def test_a_cut_short_transfer_is_a_failure_with_backoff_not_a_halt(self):
+        self.answer(net.FetchError("body of 3000000 bytes, but Content-Length says 6764885 (the transfer was cut short)"))
+        s = self.run_(["satcat"])
+        self.assertIn("cut short", s["failed"]["satcat"])
+        self.assertEqual(s["halted"], {})
+        self.assertEqual(self.net.count(URL), 1, "asked once, never repeated in the same run")
+        st = self.state()["feeds"]["satcat"]
+        self.assertEqual(st["status"], "failing")
+        self.assertEqual(st["nextTryAt"], "2026-10-08T05:00:00Z", "tried again after the normal interval, not in the next run")
+        self.assertNotIn("celestrak", self.state()["halts"])
+
+    def test_without_content_length_the_whole_file_still_passes_its_checks(self):
+        self.answer(resp(200, self.body))
+        s = self.run_(["satcat"])
+        self.assertEqual(s["ok"], ["satcat"])
+
+    def test_a_byte_order_mark_is_read_as_nothing(self):
+        self.answer(resp(200, b"\xef\xbb\xbf" + self.body, last_modified="Wed, 07 Oct 2026 04:04:48 GMT"))
+        s = self.run_(["satcat"])
+        self.assertEqual(s["ok"], ["satcat"])
+        self.assertEqual(self.jread(self.manifest()["feeds"]["satcat"]["files"]["summary.json"])["badRows"], 0)
+
+    def test_a_corrected_owner_name_publishes_again_with_the_same_file(self):
+        self.run_(["satcat"])
+        v1 = self.manifest()["feeds"]["satcat"]["version"]
+        cat = json.loads(fx("catalogue_sample.json"))
+        cat["owners"]["IND"] = "India (renamed)"
+        with open(os.path.join(self.data, "_state", "catalogue.json.gz"), "wb") as f:
+            f.write(gzip.compress(json.dumps(cat).encode()))
+        self.clock.advance(86400)
+        s = self.run_(["satcat"])
+        self.assertEqual(s["ok"], ["satcat"])
+        f = self.manifest()["feeds"]["satcat"]
+        self.assertNotEqual(f["version"], v1)
+        self.assertIn("India (renamed)", [o["name"] for o in self.jread(f["files"]["summary.json"])["owners"]])
+
+    def test_two_versions_are_kept_so_a_pull_of_the_previous_manifest_still_finds_its_files(self):
+        versions = []
+        for day in range(4):
+            self.answer(resp(200, self.body.replace(b",+,US,", b",-,US,", day), last_modified="Wed, 07 Oct 2026 04:04:48 GMT"))
+            self.run_(["satcat"], force=True)
+            versions.append(self.manifest()["feeds"]["satcat"]["version"])
+            self.clock.advance(86400)
+        self.assertEqual(len(set(versions)), 4)
+        self.assertEqual(self.versions("satcat"), versions[-2:], "the current version and the one before it")
+        for name in self.manifest()["feeds"]["satcat"]["files"]:
+            self.assertTrue(os.path.exists(self.path(f"satcat/{versions[-2]}/{name}")), name)
+        self.assertEqual(config.KEEP_VERSIONS, 3, "the other feeds keep three")
 
     def test_too_few_objects_is_refused(self):
         with mock.patch.object(feeds, "SATCAT_MIN_OBJECTS", 15000):

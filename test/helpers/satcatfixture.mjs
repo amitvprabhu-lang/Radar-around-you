@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { countryFixture } from "./satfixture.mjs";
+import { ROW_FIELDS } from "../../site/objects.mjs";
 
 export const SATCAT_DIR = fileURLToPath(new URL("../fixtures/satcat/", import.meta.url));
 export const SATCAT_TIME = "2026-10-07T04:04:48Z";
@@ -47,4 +48,17 @@ export function objectsDataDir({ satVersion = "S1", satcatVersion = "C1", taken 
     satcat,
   } }));
   return dir;
+}
+
+// A synthetic detail file as large as the largest real one (the United States had 18,356 objects in Earth orbit on 2026-10-07), with every
+// kind, missing heights and radar cross-sections, and accented names, for the speed checks of the full table (unit and browser).
+export function bigDetail(n = 18000, owner = "US", sourceTime = SATCAT_TIME) {
+  const types = ["P", "P", "D", "D", "D", "R", "U"], words = ["STARLINK", "COSMOS", "FENGYUN 1C DEB", "SL-8 R/B", "IRIDIUM", "NOAA", "Türksat"];
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const t = types[i % types.length], y = 1958 + (i * 7) % 68, alt = 200 + (i * 37) % 36000;
+    rows.push([100000 - i, `${words[(i * 13) % words.length]} ${i}`, `${y}-${String(1 + (i % 300)).padStart(3, "0")}${"ABCDEFGH"[i % 8]}`, t, t === "P" ? "+-PBSX?"[i % 7] : "", `${y}-${String(1 + (i % 12)).padStart(2, "0")}-${String(1 + (i % 28)).padStart(2, "0")}`,
+      95 + (i % 50), (i * 3) % 180, i % 11 ? alt + (i % 500) : null, i % 11 ? alt : null, i % 3 ? ((i * 7919) % 10000) / 1000 : null, ""]);
+  }
+  return { schema: 1, owner, name: "Big owner", sourceTime, count: n, fields: ROW_FIELDS, rows };
 }

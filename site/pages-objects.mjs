@@ -32,6 +32,28 @@ const when = (iso) => `${dateLong(iso)}, ${timeUtc(iso)}`;
 const timeEl = (iso) => timeTagUtc(iso, when(iso));
 const dayEl = (d) => (/^\d{4}-\d\d-\d\d$/.test(d || "") ? `<time datetime="${esc(d)}">${esc(dateLong(`${d}T00:00:00Z`))}</time>` : "Not recorded");
 const METHOD = "method";
+// "1 piece of debris", "2 pieces of debris": every count in a sentence goes through these
+const cnt = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
+const KIND_WORDS = { act: ["active satellite", "active satellites"], inact: ["inactive satellite", "inactive satellites"], rb: ["rocket body", "rocket bodies"], deb: ["piece of debris", "pieces of debris"], unk: ["unknown object", "unknown objects"], obj: ["object", "objects"] };
+export const kindCount = (k, n) => cnt(n, KIND_WORDS[k][0], KIND_WORDS[k][1]);
+// "12 active satellites, 3 inactive satellites, 1 rocket body, 4 pieces of debris and 2 unknown objects"; strong: kinds to put in <strong>
+export function kindList(o, { strong = [], unknownAlways = false } = {}) {
+  const part = (k) => (strong.includes(k) ? `<strong>${kindCount(k, o[k])}</strong>` : kindCount(k, o[k]));
+  const parts = ["act", "inact", "rb", "deb"].map(part);
+  return o.unk || unknownAlways ? `${parts.join(", ")} and ${part("unk")}` : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+// What the catalogue's owner of a piece of debris is, measured in this data (pipeline/satcat.py, debrisOwnerCheck): the share of debris in
+// Earth orbit whose owner is also the owner of a satellite from the same launch. Computed, never typed; "" when there is no check.
+export function debrisOwnerSentence(s) {
+  const c = s.debrisCheck;
+  if (!c || !c.checked) return "";
+  const not = c.checked - c.sameAsPayload, all = c.checked === s.totals.deb;
+  return `${pct(share(c.sameAsPayload, c.checked))} percent of the ${kindCount("deb", c.checked)} in Earth orbit${all ? "" : " whose launch has a satellite in the catalogue"} carry the owner of a satellite from the same launch${not ? `; ${num(not)} ${not === 1 ? "does" : "do"} not` : ""}`;
+}
+// "7 Oct, 04:20 UTC"
+const shortWhen = (iso) => `${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(iso))}, ${timeUtc(iso)}`;
+// the lead's opening: the time the numbers last changed (the page's dateModified), then the time of each source
+const changedLine = (s) => `Numbers last changed ${timeEl(s.dataTime)} (${s.fast ? `orbit data of ${timeTagUtc(s.satTime, shortWhen(s.satTime))}, ` : ""}catalogue of ${timeTagUtc(s.catTime, shortWhen(s.catTime))}).`;
 const KIND_ROWS = [["act", "Active satellites"], ["inact", "Inactive satellites"], ["rb", "Rocket bodies"], ["deb", "Debris"], ["unk", "Unknown objects"]];
 const ORBIT_ROW = { ...ORBIT_LABELS, none: "No heights in the catalogue" };
 // lower case orbit names for sentences, from the same groups as ORBIT_LABELS
@@ -41,8 +63,9 @@ const COLS = [["sat", "Satellites"], ["rb", "Rocket bodies"], ["deb", "Debris"],
 const said = (o, start = false) => { const p = ownerPage(o.code); const t = p ? p.phrase : o.name; return esc(start ? cap(t) : t); };
 const ownerLink = (from, o, built, text = o.name) => (o.page && built.includes(o.page.file) ? `<a href="${href(from, o.page.file)}">${esc(text)}</a>` : esc(text));
 // a plain, accessible table with a caption, header scopes, numeric columns and optional row header cells and footer
-function tbl({ caption, head, rows, numeric = [], id = null, foot = null, sort = false, rowHead = false }) {
-  const th = (h, i) => `<th scope="col"${numeric.includes(i) ? ' class="num"' : ""}${sort ? ` data-col="${i}" data-sort="${numeric.includes(i) ? "num" : "text"}"` : ""}>${esc(h)}</th>`;
+// sortedBy: [column, "ascending" | "descending"] for a sortable table already in that order (its header gets aria-sort)
+function tbl({ caption, head, rows, numeric = [], id = null, foot = null, sort = false, rowHead = false, sortedBy = null }) {
+  const th = (h, i) => `<th scope="col"${numeric.includes(i) ? ' class="num"' : ""}${sort ? ` data-col="${i}" data-sort="${numeric.includes(i) ? "num" : "text"}"` : ""}${sortedBy && sortedBy[0] === i ? ` aria-sort="${sortedBy[1]}"` : ""}>${esc(h)}</th>`;
   const td = (c, i) => (rowHead && i === 0 ? `<th scope="row">${c}</th>` : `<td${numeric.includes(i) ? ' class="num"' : ""}>${c}</td>`);
   const tr = (r) => `<tr${r.attrs || ""}>${(r.cells || r).map(td).join("")}</tr>`;
   return `<div class="tablewrap" role="region" tabindex="0" aria-label="${esc(caption)}"><table${id ? ` id="${id}"` : ""}><caption>${esc(caption)}</caption><thead><tr>${head.map(th).join("")}</tr></thead><tbody>${rows.map(tr).join("")}</tbody>${foot ? `<tfoot>${tr({ cells: foot })}</tfoot>` : ""}</table></div>`;
@@ -52,8 +75,8 @@ const timesMeta = (s) => [
   s.fast ? `Active satellites in the orbit data as of ${timeEl(s.satTime)} (CelesTrak's active list, read about every 2 hours).` : "",
   `Catalogue counts as of ${timeEl(s.catTime)}. CelesTrak updates its catalogue about once or twice a day, so these numbers move daily, not every few minutes.`,
 ].filter(Boolean).join(" ");
-// the two data times in one line, for the owner pages (the ranking page explains the cadence in full)
-const shortTimes = (s) => `${s.fast ? `Orbit data: ${timeEl(s.satTime)}. ` : ""}Catalogue: ${timeEl(s.catTime)}, updated about daily.`;
+// how often each source updates, under the lead of an owner page (the lead holds the times; the ranking page explains the cadence in full)
+const shortTimes = (s) => `CelesTrak updates the catalogue about once a day${s.fast ? " and the orbit data about every 2 hours" : ""}; the times are in the line above.`;
 const staleNote = (s) => (s.stale ? `<p class="note warn">This copy was built from a catalogue more than ${OBJECTS_MAX_AGE_HOURS} hours old. A newer copy replaces it when fresh data arrives.</p>` : "");
 const script = () => `<style>${OBJECTS_CSS}</style>\n<script>${objectsScript()}</script>`;
 
@@ -65,7 +88,7 @@ function reconcile(s, act, fast, actNoElements, subject) {
   if (d < 0) return `The orbit data of ${esc(when(s.satTime))} has ${num(-d)} more active ${v(-d, "satellite", "satellites")}${subject} (${num(fast)}) than the catalogue copy of ${esc(when(s.catTime))}${Date.parse(s.satTime) > Date.parse(s.catTime) ? ", which is the older of the two" : ""}.`;
   const rest = d - Math.min(d, actNoElements);
   return `The orbit data of ${esc(when(s.satTime))}, which the <a href="${"{{count}}"}">satellite count page</a> uses, has ${num(fast)} of them${subject}, ${num(d)} fewer. ` +
-    (actNoElements ? `${num(Math.min(d, actNoElements))} of the ${num(d)} have no public orbit data in the catalogue, so they cannot be in data made from orbits` : "") +
+    (actNoElements ? `${num(Math.min(d, actNoElements))} of the ${num(d)} ${v(Math.min(d, actNoElements), "has", "have")} no public orbit data in the catalogue, so they cannot be in data made from orbits` : "") +
     (rest ? `${actNoElements ? "; " : ""}${actNoElements ? "the other " : ""}${num(rest)} ${v(rest, "is", "are")} missing from the orbit data or listed differently there (it uses CelesTrak's active list and a catalogue copy that can be a day older, and drops orbits older than 90 days)` : "") + ".";
 }
 // the short form for one owner: the two active counts and a link to the explanation on the ranking page
@@ -85,8 +108,8 @@ export function rankingPage(s, { built = [] } = {}) {
   const top3 = ranked.slice(0, 3).reduce((x, o) => x + o.total, 0);
   const date = dateLong(s.catTime);
   const title = "Satellites and space debris by country: live count";
-  const description = `${num(T.total)} objects in Earth orbit on ${date}: ${num(T.act)} active satellites and ${num(T.deb)} pieces of debris, for every owner in CelesTrak's catalogue.`;
-  const check = s.debrisCheck && s.debrisCheck.checked ? s.debrisCheck : null;
+  const description = `${kindCount("obj", T.total)} in Earth orbit on ${date}: ${kindCount("act", T.act)} and ${kindCount("deb", T.deb)}, for every owner in CelesTrak's catalogue.`;
+  const debrisLine = debrisOwnerSentence(s);
   const searchText = (o) => esc([o.name, o.code, o.page ? `${o.page.name} ${o.page.aliases}` : ""].join(" ").replace(/\s+/g, " ").trim());
   const rows = ranked.map((o) => ({ attrs: ` data-search="${searchText(o)}"`, cells: [ownerLink(file, o, built), esc(o.code), num(o.act), num(o.inact), num(o.rb), num(o.deb), num(o.unk), num(o.total)] }));
   const foot = ["All owners", "", num(T.act), num(T.inact), num(T.rb), num(T.deb), num(T.unk), num(T.total)];
@@ -96,23 +119,23 @@ export function rankingPage(s, { built = [] } = {}) {
   const awayOwners = ranked.filter((o) => Object.keys(o.away).length).length;
   const stackRows = ranked.slice(0, 10);
   const faq = [
-    ["How many satellites are in orbit?", `CelesTrak's catalogue of ${esc(when(s.catTime))} lists ${num(T.act + T.inact)} satellites in Earth orbit: ${num(T.act)} active and ${num(T.inact)} inactive.${s.fast ? ` The orbit data of ${esc(when(s.satTime))} has ${num(s.fast.total)} active satellites with current orbits, the number on the satellite count page.` : ""}`],
-    ["How much space debris is there?", `${num(T.deb)} catalogued pieces of debris in Earth orbit, plus ${num(T.rb)} spent rocket bodies, as of ${esc(when(s.catTime))}. Pieces too small to track are not in the catalogue, so the real number of fragments is far higher.`],
-    ...(debTop.length ? [["Which country has the most space debris?", `${said(debTop[0], true)}, with ${num(debTop[0].deb)} catalogued pieces in Earth orbit (${pctText(share(debTop[0].deb, T.deb))} percent)${debTop[1] ? `, then ${said(debTop[1])} with ${num(debTop[1].deb)}` : ""}${debTop[2] ? ` and ${said(debTop[2])} with ${num(debTop[2].deb)}` : ""}, as the catalogue records owners.`]] : []),
-    ["Is debris counted under the country that caused it?", `No. Each piece carries an owner in the catalogue${check ? `, and for ${pct(share(check.sameAsPayload, check.checked))} percent of the pieces in orbit it is the same owner as a satellite from the same launch` : ""}. That records where a piece came from, not who or what broke it up.`],
+    ["How many satellites are in orbit?", `CelesTrak's catalogue of ${esc(when(s.catTime))} lists ${cnt(T.act + T.inact, "satellite", "satellites")} in Earth orbit: ${num(T.act)} active and ${num(T.inact)} inactive.${s.fast ? ` The orbit data of ${esc(when(s.satTime))} has ${kindCount("act", s.fast.total)} with current orbits, the number on the satellite count page.` : ""}`],
+    ["How much space debris is there?", `${num(T.deb)} catalogued ${T.deb === 1 ? "piece" : "pieces"} of debris in Earth orbit, plus ${cnt(T.rb, "spent rocket body", "spent rocket bodies")}, as of ${esc(when(s.catTime))}. Pieces too small to track are not in the catalogue, so the real number of fragments is far higher.`],
+    ...(debTop.length ? [["Which country has the most space debris?", `${said(debTop[0], true)}, with ${num(debTop[0].deb)} catalogued ${debTop[0].deb === 1 ? "piece" : "pieces"} in Earth orbit (${pctText(share(debTop[0].deb, T.deb))} percent)${debTop[1] ? `, then ${said(debTop[1])} with ${num(debTop[1].deb)}` : ""}${debTop[2] ? ` and ${said(debTop[2])} with ${num(debTop[2].deb)}` : ""}, as the catalogue records owners.`]] : []),
+    ["Does the owner of a piece of debris say who made it?", `No. The catalogue gives each piece an owner code and does not record how the piece came about.${debrisLine ? ` In this data, ${debrisLine}.` : ""}`],
   ];
-  const lead = `Updated with data of ${timeEl(s.dataTime)}. CelesTrak's catalogue lists <strong>${num(T.total)} objects in Earth orbit</strong>: ${num(T.act)} active satellites, ${num(T.inact)} inactive satellites, ${num(T.rb)} rocket bodies, ${num(T.deb)} pieces of debris and ${num(T.unk)} unknown objects, recorded under ${num(s.owned)} owners.${top ? ` ${said(top, true)} has the most, ${num(top.total)}.` : ""}`;
+  const lead = `${changedLine(s)} CelesTrak's catalogue lists <strong>${kindCount("obj", T.total)} in Earth orbit</strong>: ${kindList(T, { unknownAlways: true })}, recorded under ${cnt(s.owned, "owner", "owners")}.${top ? ` ${said(top, true)} has the most, ${num(top.total)}.` : ""}`;
   const body = `${staleNote(s)}
 <h2 id="meaning">What this means</h2>
-<p>Every object in the public catalogue has an owner: the country or organisation the catalogue records as responsible for it. ${top ? `The three largest owners, ${and(ranked.slice(0, 3).map((o) => said(o)))}, hold ${pct(share(top3, T.total))} percent of everything in Earth orbit. ` : ""}A piece of debris is recorded under an owner too${check ? `: for ${num(check.sameAsPayload)} of the ${num(check.checked)} pieces in orbit (${pct(share(check.sameAsPayload, check.checked))} percent) it is the owner of a satellite from the same launch` : ""}. That says where a piece came from. It does not say who or what broke it up.</p>
-<p>The catalogue is not everything up there. NASA's Orbital Debris Program Office says "${esc(ODPO_QUOTE)}"; smaller fragments are estimated by sampling and are not listed one by one. ${num(T.noElements)} of the objects counted here have no public orbit data in the catalogue.</p>
+<p>Every object in the public catalogue carries an owner code, which CelesTrak's source table names as a country or an organisation. ${top ? `The three largest owners, ${and(ranked.slice(0, 3).map((o) => said(o)))}, hold ${pct(share(top3, T.total))} percent of everything in Earth orbit. ` : ""}Debris carries an owner code too.${debrisLine ? ` In this data, ${debrisLine}.` : ""} The catalogue does not record who or what broke a piece off, and these pages do not say.</p>
+<p>The catalogue is not everything up there. NASA's Orbital Debris Program Office says "${esc(ODPO_QUOTE)}"; smaller fragments are estimated by sampling and are not listed one by one. ${num(T.noElements)} of the objects counted here ${v(T.noElements, "has", "have")} no public orbit data in the catalogue.</p>
 ${cards([[num(T.total), "Objects in Earth orbit"], [num(T.act), "Active satellites"], [num(T.deb), "Pieces of debris"], [num(s.owned), "Owners with an object in orbit"]])}
 <p class="meta">${timesMeta(s)}</p>
 ${withPage.length ? `<p>Owners with their own page: ${withPage.map((o) => ownerLink(file, o, built, o.page.name)).join(", ")}. Active satellites by owner, with maps and purposes: <a href="${href(file, HUB_FILE)}">satellites by country</a>.</p>` : ""}
 
 <h2 id="ranking">Every owner, ranked by objects in orbit</h2>
 <p>${fillCount(reconcile(s, T.act, s.fast ? s.fast.total - s.fast.notRecorded : 0, T.actNoElements || 0, " with an owner recorded"), file)} The columns below are all from the catalogue copy, so each row adds up to its total.</p>
-${tbl({ caption: `Objects in Earth orbit by owner, catalogue of ${date}`, head: ["Owner, as recorded", "Code", "Active satellites", "Inactive satellites", "Rocket bodies", "Debris", "Unknown", "In Earth orbit"], numeric: [2, 3, 4, 5, 6, 7], rows, foot, id: "owners-table", sort: true })}
+${tbl({ caption: `Objects in Earth orbit by owner, catalogue of ${date}`, head: ["Owner, as recorded", "Code", "Active satellites", "Inactive satellites", "Rocket bodies", "Debris", "Unknown", "In Earth orbit"], numeric: [2, 3, 4, 5, 6, 7], rows, foot, id: "owners-table", sort: true, sortedBy: [7, "descending"] })}
 ${figureHtml(stackedSvg(stackRows, date), `Objects in Earth orbit for the ${stackRows.length} largest owners by kind, catalogue of ${date}; the table above gives every number.`)}
 
 <h2 id="debris">Who has the most debris?</h2>
@@ -120,7 +143,7 @@ ${debTop.length ? `<p>${cap(and(debTop.slice(0, 3).map((o) => `${said(o)} with $
 ${tbl({ caption: "The ten owners with the most debris in Earth orbit", head: ["Owner, as recorded", "Debris", "Share of all debris (percent)", "Rocket bodies"], numeric: [1, 2, 3], rows: debTop.slice(0, 10).map((o) => [ownerLink(file, o, built), num(o.deb), pctText(share(o.deb, T.deb)), num(o.rb)]) })}` : "<p>The catalogue lists no debris in Earth orbit.</p>"}
 
 <h2 id="year">The last 12 months</h2>
-<p>In the 365 days to ${esc(dateLong(s.catTime))}, ${num(T.dec365)} catalogued objects re-entered the atmosphere${dec.length ? `, most of them recorded under ${and(dec.map((o) => `${said(o)} with ${num(o.dec365)}`))}` : ""}. ${num(T.new365)} objects launched in those days are still in orbit${fresh.length ? `, most under ${and(fresh.map((o) => `${said(o)} with ${num(o.new365)}`))}` : ""}. ${num(T.decayed)} objects in the catalogue have re-entered since 1957.${T.away ? ` ${num(T.away)} objects of ${num(awayOwners)} owners are not counted here because the catalogue records them around the Moon, the Sun or another body.` : ""}</p>
+<p>In the 365 days to ${esc(dateLong(s.catTime))}, ${cnt(T.dec365, "catalogued object", "catalogued objects")} re-entered the atmosphere${dec.length ? `, most of them recorded under ${and(dec.map((o) => `${said(o)} with ${num(o.dec365)}`))}` : ""}. ${cnt(T.new365, "object launched in those days is", "objects launched in those days are")} still in orbit${fresh.length ? `, most under ${and(fresh.map((o) => `${said(o)} with ${num(o.new365)}`))}` : ""}. ${num(T.decayed)} objects in the catalogue have re-entered since 1957.${T.away ? ` ${num(T.away)} objects of ${num(awayOwners)} owners are not counted here because the catalogue records them around the Moon, the Sun or another body.` : ""}</p>
 
 <h2 id="${METHOD}">How these numbers are made</h2>
 <ul>
@@ -195,20 +218,20 @@ function objectBlocks(s, o, d, { file, h = "h2", base }) {
   blocks.push(`${H("kinds", "By kind")}
 ${tbl({ caption: `Objects in Earth orbit by kind, catalogue of ${dateLong(s.catTime)}`, head: ["Kind", "Objects", "Share of this owner (percent)", "Share of every owner's (percent)"], numeric: [1, 2, 3], rowHead: true, rows: kindRows, foot: ["In Earth orbit", num(o.total), "100.0", pctText(share(o.total, s.totals.total))] })}`);
   blocks.push(`${H("orbits", "Orbits")}
-<p>${mainOrbit ? `The largest group of these objects is in ${ORBIT_PROSE[mainOrbit]} (${num(orbitTotal(mainOrbit))}).` : ""}${debOrbit && debOrbit !== mainOrbit ? ` The largest group of the debris is in ${ORBIT_PROSE[debOrbit]} (${num(d.orbits[debOrbit].deb)} pieces).` : ""}${d.noHeights ? ` ${num(d.noHeights)} ${v(d.noHeights, "has", "have")} no heights in the catalogue.` : ""} (<a href="${href(file, RANKING_FILE)}#${METHOD}">groups</a> from perigee and apogee.)</p>
+<p>${mainOrbit ? `The largest group of these objects is in ${ORBIT_PROSE[mainOrbit]} (${num(orbitTotal(mainOrbit))}).` : ""}${debOrbit && debOrbit !== mainOrbit ? ` The largest group of the debris is in ${ORBIT_PROSE[debOrbit]} (${cnt(d.orbits[debOrbit].deb, "piece", "pieces")}).` : ""}${d.noHeights ? ` ${num(d.noHeights)} ${v(d.noHeights, "has", "have")} no heights in the catalogue.` : ""} (<a href="${href(file, RANKING_FILE)}#${METHOD}">groups</a> from perigee and apogee.)</p>
 ${tbl({ caption: "Objects in Earth orbit by orbit group and kind", head: ["Orbit group", ...COLS.map(([, t]) => t)], numeric: [1, 2, 3, 4], rowHead: true, rows: usedOrbits.map((k) => [esc(ORBIT_ROW[k]), ...COLS.map(([c]) => num(d.orbits[k][c]))]) })}`);
   if (d.decades.length) blocks.push(`${H("launched", "When they were launched")}
 <p>${peak ? `More of these objects were launched in the ${peak.decade}s than in any other decade (${num(peak.sat + peak.other)}, ${num(peak.sat)} of them satellites).` : ""} ${num(d.thisYear)} ${v(d.thisYear, "was", "were")} launched in ${esc(s.catTime.slice(0, 4))}.${d.undated ? ` ${num(d.undated)} ${v(d.undated, "has", "have")} no launch date.` : ""}${d.oldestYear ? ` The oldest dates from ${d.oldestYear}.` : ""}</p>
 ${tbl({ caption: "Objects still in Earth orbit by launch decade", head: ["Launch decade", "Satellites", "Rocket bodies, debris and unknown"], numeric: [1, 2], rowHead: true, rows: d.decades.map((x) => [`${x.decade}s`, num(x.sat), num(x.other)]) })}`);
   if (groups.length) blocks.push(`${H("debris-groups", "Largest debris groups")}
-<p>${groups[0].count > 1 ? `The largest group, from launch ${esc(groups[0].launch)}, has ${num(groups[0].count)} pieces in orbit, ${pct(share(groups[0].count, o.deb))} percent of this owner's debris.` : "No launch has more than one piece in orbit."}</p>
+<p>${groups[0].count > 1 ? `The largest group, from launch ${esc(groups[0].launch)}, has ${cnt(groups[0].count, "piece", "pieces")} in orbit, ${pct(share(groups[0].count, o.deb))} percent of this owner's debris.` : "No launch has more than one piece in orbit."}</p>
 ${tbl({ caption: "Debris in Earth orbit by launch, largest groups", head: ["Launch", "Launch date", "Pieces in orbit", "Most common name", "Satellites of that launch in orbit, same owner"], numeric: [2], rowHead: true, rows: groups.map((g) => [esc(g.launch), dayEl(g.date), num(g.count), esc(g.name), g.payloads.length ? esc(g.payloads.slice(0, 3).join(", ") + (g.payloads.length > 3 ? ` and ${g.payloads.length - 3} more` : "")) : "None"]) })}`);
   if (notable.length) blocks.push(`${H("notable", "Notable objects")}
 <ul>${notable.join("")}</ul>`);
   blocks.push(`${H("details", "Object details")}
 ${d.all ? (() => { const mixed = new Set(d.all.map((r) => r.type)).size > 1, sat = d.all.some((r) => r.type === "P"); return tbl({ caption: `Every object in Earth orbit, newest launch first (${num(d.all.length)})`, head: head(sat, mixed), numeric: [0, ...[5, 6, 7, 8].map((i) => i + (mixed ? 1 : 0) + (sat ? 1 : 0) - 1)], rows: d.all.map(row(sat, mixed)) }); })() : `${d.recentSats.length ? tbl({ caption: `The ${num(d.recentSats.length)} most recently launched satellites still in orbit`, head: head(true), numeric: [0, 5, 6, 7, 8], rows: d.recentSats.map(row(true)) }) : "<p>No satellite of this owner is in Earth orbit.</p>"}
 ${second ? tbl({ caption: second.kind === "debris" ? `The ${num(second.rows.length)} largest pieces of debris by radar cross-section` : `The ${num(second.rows.length)} largest rocket bodies by radar cross-section`, head: head(false), numeric: [0, 4, 5, 6, 7], rows: second.rows.map(row(false)) }) : ""}`}
-<p>${d.all ? `That is all ${num(o.total)} of them.` : `These tables show ${num(staticShown)} of the ${num(o.total)} objects${d.noRcs ? `; ${num(d.noRcs)} have no radar cross-section and come last in the size order` : ""}.`} A dash: no value in the catalogue.${!d.all && o.path ? " The button below (it needs JavaScript) loads the full list of this data version as a table to filter and page through." : ""}</p>
+<p>${d.all ? `That is all ${num(o.total)} of them.` : `These tables show ${num(staticShown)} of the ${num(o.total)} objects${d.noRcs ? `; ${num(d.noRcs)} ${v(d.noRcs, "has", "have")} no radar cross-section and come last in the size order` : ""}.`} A dash: no value in the catalogue.${!d.all && o.path ? " The button below (it needs JavaScript) loads the full list of this data version as a table to filter and page through." : ""}</p>
 ${!d.all && o.path ? `<div id="all-objects" data-src="${esc(base + o.path)}" data-owner="${esc(o.code)}" data-time="${esc(s.catTime)}" data-count="${num(o.total)}"></div>` : ""}`);
   return blocks.join("\n\n");
 }
@@ -219,9 +242,9 @@ const rcsText = (x) => x.toLocaleString("en-GB", { maximumSignificantDigits: 3 }
 function ownerFaq(s, o, d, p) {
   const T = s.totals, ph = p.phrase;
   const q = [];
-  q.push([`How many satellites does ${ph} have in orbit?`, `${num(o.act + o.inact)} in Earth orbit as of ${esc(when(s.catTime))}: ${num(o.act)} active and ${num(o.inact)} inactive, as the catalogue records the owner "${esc(o.name)}".`]);
-  q.push([`How much space debris does ${ph} have?`, o.deb ? `${num(o.deb)} catalogued ${v(o.deb, "piece", "pieces")} of debris in Earth orbit, ${pctText(share(o.deb, T.deb))} percent of all ${num(T.deb)}, ${o.debRank === 1 ? "the most of any owner" : `the ${ordinal(o.debRank)} most of any owner`}${o.rb ? `, plus ${num(o.rb)} rocket ${v(o.rb, "body", "bodies")}` : ""}. Pieces too small to track are not counted.` : `None in the catalogue: no piece of debris in Earth orbit is recorded under "${esc(o.name)}"${o.rb ? `, though ${num(o.rb)} rocket ${v(o.rb, "body is", "bodies are")}` : ""}.`]);
-  if (o.dec365) q.push([`How many objects of ${ph} re-entered in the last year?`, `${num(o.dec365)} in the 365 days to ${esc(dateLong(s.catTime))}, of ${num(o.decayed)} that have re-entered since the first launch. ${num(o.new365)} launched in those 365 days are still in orbit.`]);
+  q.push([`How many satellites does ${ph} have in orbit?`, `${cnt(o.act + o.inact, "satellite", "satellites")} in Earth orbit as of ${esc(when(s.catTime))}: ${num(o.act)} active and ${num(o.inact)} inactive, as the catalogue records the owner "${esc(o.name)}".`]);
+  q.push([`How much space debris does ${ph} have?`, o.deb ? `${num(o.deb)} catalogued ${v(o.deb, "piece", "pieces")} of debris in Earth orbit, ${pctText(share(o.deb, T.deb))} percent of all ${num(T.deb)}, ${o.debRank === 1 ? "the most of any owner" : `the ${ordinal(o.debRank)} most of any owner`}${o.rb ? `, plus ${kindCount("rb", o.rb)}` : ""}. Pieces too small to track are not counted.` : `None in the catalogue: no piece of debris in Earth orbit is recorded under "${esc(o.name)}"${o.rb ? `, though ${num(o.rb)} rocket ${v(o.rb, "body is", "bodies are")}` : ""}.`]);
+  if (o.dec365) q.push([`How many objects of ${ph} re-entered in the last year?`, `${num(o.dec365)} in the 365 days to ${esc(dateLong(s.catTime))}, of ${num(o.decayed)} that ${v(o.decayed, "has", "have")} re-entered since the first launch. ${num(o.new365)} launched in those 365 days ${v(o.new365, "is", "are")} still in orbit.`]);
   else if (d.notable.oldest) q.push([`What is the oldest object of ${ph} still in orbit?`, `${esc(d.notable.oldest.name)}, catalogue number ${d.notable.oldest.id}, launched ${dayEl(d.notable.oldest.launch)}.`]);
   return q;
 }
@@ -232,9 +255,10 @@ function ownerIntro(s, o, d, p, file, built) {
   const rankText = `${o.rank === 1 ? "That is the most of any owner" : `That ranks ${ordinal(o.rank)} of ${num(ranked.length)} owners`}${above ? `, after ${ownerLink(file, above, built, above.page ? above.page.name : above.name)} (${num(above.total)})` : ""}${below ? `${above ? " and" : ","} ahead of ${ownerLink(file, below, built, below.page ? below.page.name : below.name)} (${num(below.total)})` : ""}.`;
   const debText = o.deb ? `Its ${num(o.deb)} ${v(o.deb, "piece", "pieces")} of debris ${v(o.deb, "is", "are")} ${pctText(share(o.deb, T.deb))} percent of all catalogued debris in Earth orbit${d.debrisGroups[0] && d.debrisGroups[0].count > 1 ? `; ${num(d.debrisGroups[0].count)} of ${v(o.deb, "it", "them")} are catalogued under one launch, ${esc(d.debrisGroups[0].launch)}` : ""}.` : "No debris in Earth orbit is recorded under this owner.";
   const away = Object.entries(o.away);
-  const awayText = away.length ? ` ${num(away.reduce((x, [, c]) => x + c, 0))} more objects that have not re-entered are recorded around other bodies (orbit centre ${esc(away.map(([c, k]) => `${c} ${k}`).join(", "))}) and are not counted here.` : "";
+  const awayN = away.reduce((x, [, c]) => x + c, 0);
+  const awayText = away.length ? ` ${cnt(awayN, "more object that has not re-entered is", "more objects that have not re-entered are")} recorded around other bodies (orbit centre ${esc(away.map(([c, k]) => `${c} ${k}`).join(", "))}) and are not counted here.` : "";
   return `<p>The catalogue records these objects under the owner "${esc(o.name)}" (code ${esc(o.code)}). ${rankText} ${debText}${awayText}</p>
-<p>${reconcileShort(s, o, file)}${o.deb ? ` Debris is recorded under the owner of its launch, <a href="${href(file, RANKING_FILE)}#meaning">not under whoever broke it up</a>.` : ""}</p>`;
+<p>${reconcileShort(s, o, file)}${o.deb && debrisOwnerSentence(s) ? ` Across the catalogue, ${debrisOwnerSentence(s)}; the owner does not say who or what broke a piece off (<a href="${href(file, RANKING_FILE)}#meaning">what the owner of debris means</a>).` : ""}</p>`;
 }
 
 // page: the OWNER_PAGES entry; built: the live files that exist after this run (links go only to those)
@@ -244,9 +268,9 @@ export function ownerObjectsPage(s, page, { built = [] } = {}) {
   const d = s.detail, file = page.file, T = s.totals, base = href(file, "live/");
   const title = `${page.name} satellites and space debris: live count`;
   const date = dateLong(s.catTime);
-  const descFull = `${cap(page.phrase)}: ${num(o.act)} active satellites and ${num(o.deb)} pieces of debris among ${num(o.total)} objects in Earth orbit on ${date}. With details.`;
-  const description = descFull.length < 160 ? descFull : `${page.name}: ${num(o.act)} active satellites, ${num(o.deb)} debris, ${num(o.total)} objects in orbit on ${date}.`;
-  const lead = `Updated with data of ${timeEl(s.dataTime)}. CelesTrak's catalogue records <strong>${num(o.total)} objects in Earth orbit</strong> for ${esc(page.phrase)}: ${num(o.act)} active satellites, ${num(o.inact)} inactive satellites, ${num(o.rb)} rocket bodies, <strong>${num(o.deb)} pieces of debris</strong>${o.unk ? ` and ${num(o.unk)} unknown objects` : ""}.`;
+  const descFull = `${cap(page.phrase)}: ${kindCount("act", o.act)} and ${kindCount("deb", o.deb)} among ${kindCount("obj", o.total)} in Earth orbit on ${date}. With details.`;
+  const description = descFull.length < 160 ? descFull : `${page.name}: ${kindCount("act", o.act)}, ${num(o.deb)} debris, ${kindCount("obj", o.total)} in orbit on ${date}.`;
+  const lead = `${changedLine(s)} CelesTrak's catalogue records <strong>${kindCount("obj", o.total)} in Earth orbit</strong> for ${esc(page.phrase)}: ${kindList(o, { strong: ["deb"] })}.`;
   const faq = ownerFaq(s, o, d, page);
   // the owner pages ranked nearest this one (two above, two below, among owners whose page exists), for the links at the end
   const withPages = s.owners.filter((x) => x.total > 0 && x.page && built.includes(x.page.file));
@@ -272,7 +296,7 @@ ${script()}`;
     title, description, h1: `How many satellites and how much debris does ${page.phrase} have in orbit?`, kicker: "Live count", lead, wide: true,
     meta: shortTimes(s),
     body, dataTime: s.dataTime,
-    jsonld: [webPageLd({ file, title, description, dataTime: s.dataTime, crumbTitle: page.name })],
+    jsonld: [webPageLd({ file, title, description, dataTime: s.dataTime, crumbTitle: page.name, crumbs: [{ name: "Satellites and debris by country", file: RANKING_FILE }] })],
   };
 }
 
@@ -285,13 +309,13 @@ export function countrySection(s, code, file) {
   const d = s.detail, base = href(file, "live/");
   const html = `
 <h2 id="objects">Satellites, rocket bodies and debris in orbit</h2>
-<p>${esc(cap(p.phrase))} has <strong>${num(o.total)} objects in Earth orbit</strong> in CelesTrak's whole catalogue of ${timeEl(s.catTime)}: ${num(o.act)} active satellites, ${num(o.inact)} inactive satellites, ${num(o.rb)} rocket bodies, ${num(o.deb)} pieces of debris${o.unk ? ` and ${num(o.unk)} unknown objects` : ""}. ${o.deb ? `That debris is ${pctText(share(o.deb, s.totals.deb))} percent of all catalogued debris in Earth orbit, ${o.debRank === 1 ? "the most of any owner" : `the ${ordinal(o.debRank)} most of any owner`}.` : "No debris in Earth orbit is recorded under this owner."} ${reconcileShort(s, o, file)} The catalogue updates about daily; compare every owner on <a href="${href(file, RANKING_FILE)}">satellites and debris by country</a>.</p>
+<p>${esc(cap(p.phrase))} has <strong>${kindCount("obj", o.total)} in Earth orbit</strong> in CelesTrak's whole catalogue of ${timeEl(s.catTime)}: ${kindList(o)}. ${o.deb ? `That debris is ${pctText(share(o.deb, s.totals.deb))} percent of all catalogued debris in Earth orbit, ${o.debRank === 1 ? "the most of any owner" : `the ${ordinal(o.debRank)} most of any owner`}.` : "No debris in Earth orbit is recorded under this owner."} ${reconcileShort(s, o, file)} The catalogue updates about daily; compare every owner on <a href="${href(file, RANKING_FILE)}">satellites and debris by country</a>.</p>
 ${objectBlocks(s, o, d, { file, h: "h3", base })}
 ${script()}`;
   return {
     html, title: `${p.name} satellites and space debris: live count`,
-    descTail: ` ${num(o.deb)} pieces of debris among ${num(o.total)} objects in orbit.`,
-    leadTail: ` The whole catalogue lists <strong>${num(o.total)} objects in Earth orbit</strong> for ${esc(p.phrase)}, ${num(o.deb)} of them debris.`,
+    descTail: ` ${kindCount("deb", o.deb)} among ${kindCount("obj", o.total)} in orbit.`,
+    leadTail: ` The whole catalogue lists <strong>${kindCount("obj", o.total)} in Earth orbit</strong> for ${esc(p.phrase)}, ${num(o.deb)} of them debris.`,
   };
 }
 
@@ -300,8 +324,8 @@ export function objectsHubRow(s, { missing = {} } = {}) {
   const dayHour = (iso) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(new Date(iso));
   return {
     key: "objects", file: RANKING_FILE, label: "Satellites and debris by country", short: "objects in Earth orbit",
-    value: s ? `${num(s.totals.total)} objects in Earth orbit, ${num(s.totals.deb)} of them debris` : null,
-    said: s ? `${num(s.totals.total)} objects in Earth orbit in CelesTrak's catalogue, ${num(s.totals.deb)} of them debris` : null,
+    value: s ? `${kindCount("obj", s.totals.total)} in Earth orbit, ${num(s.totals.deb)} of them debris` : null,
+    said: s ? `${kindCount("obj", s.totals.total)} in Earth orbit in CelesTrak's catalogue, ${num(s.totals.deb)} of them debris` : null,
     dataTime: s ? s.catTime : null, guide: null, stale: !!(s && s.stale), reason: s ? null : missing.objects || "not available in this build",
     timeText: s ? `${dayHour(s.catTime)} (CelesTrak's catalogue)` : "", limit: `the catalogue ${OBJECTS_MAX_AGE_HOURS} hours`,
     timeNote: "For the catalogue counts, the time is when CelesTrak last updated the catalogue file.", source: OBJ_SRC.satcat, notableRule: null, notable: null,

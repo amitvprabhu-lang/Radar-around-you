@@ -38,20 +38,49 @@ export function objParse(doc, want, C) {
   if (doc.sourceTime !== want.time) bad("version", "the file is from " + doc.sourceTime + ", the page from " + want.time);
   return doc.rows.map(function (r) { var o = {}; for (var i = 0; i < C.fields.length; i++) o[C.fields[i]] = r[i]; return o; });
 }
-// the rows that match the text and the kind ("" for every kind)
-export function objFilter(rows, query, type) {
-  return rows.filter(function (r) { return (!type || r.type === type) && objMatch(r.id + " " + r.name + " " + r.intl, query); });
+// The number formats the full table uses, made once (a new formatter per number made the table of 18,000 objects take seconds).
+export function objFormat() {
+  return { f0: new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }), f1: new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 }), s3: new Intl.NumberFormat("en-GB", { maximumSignificantDigits: 3 }) };
+}
+// The rows of a detail file made ready for the table, once, on load: for each object its search text (lower case, no accents) and a sort
+// key per column from the raw values (numbers stay numbers, a missing number sorts first going up; text is compared as lower case text
+// without accents), and room for its display cells, which are made the first time the row is shown and then kept.
+export function objPrepare(rows, C) {
+  var low = function (v) { return objNorm(v == null ? "" : v); };
+  var n = function (v) { return typeof v === "number" ? v : -Infinity; };
+  return rows.map(function (r) {
+    return { r: r, cells: null, text: low(r.id + " " + r.name + " " + r.intl),
+      keys: [r.id, low(r.name), low(r.intl), low(C.types[r.type] || r.type), r.type === "P" ? low(C.status[r.status] || r.status) : "", r.launch || "", n(r.perigee), n(r.apogee), n(r.incl), n(r.rcs)] };
+  });
+}
+// a sorted copy of the prepared rows by one column (ties by catalogue number, always going up)
+export function objSortItems(items, col, dir) {
+  var sign = dir === "descending" ? -1 : 1;
+  return items.slice().sort(function (a, b) {
+    var x = a.keys[col], y = b.keys[col];
+    var c = x < y ? -1 : x > y ? 1 : 0;
+    return c ? sign * c : a.r.id - b.r.id;
+  });
+}
+// the prepared rows that match the text (every word, in the number, name or designator) and the kind ("" for every kind), in their order
+export function objFilterItems(items, query, type) {
+  var words = objNorm(query).split(" ").filter(Boolean);
+  return items.filter(function (it) {
+    if (type && it.r.type !== type) return false;
+    for (var i = 0; i < words.length; i++) if (it.text.indexOf(words[i]) < 0) return false;
+    return true;
+  });
 }
 // one page of a list: { rows, page (from 1, clamped), pages (at least 1) }
 export function objPage(list, page, size) {
   var pages = Math.max(1, Math.ceil(list.length / size)), p = Math.min(Math.max(1, page), pages);
   return { rows: list.slice((p - 1) * size, p * size), page: p, pages: pages };
 }
-// the cells of one object, as the static tables print them
-export function objCells(r, C) {
-  var n = function (v, d) { return typeof v === "number" ? v.toLocaleString("en-GB", { maximumFractionDigits: d }) : "-"; };
+// the cells of one object, as the static tables print them; F: objFormat()
+export function objCells(r, C, F) {
+  var n = function (v, f) { return typeof v === "number" ? f.format(v) : "-"; };
   return [String(r.id), r.name || "-", r.intl || "-", C.types[r.type] || r.type, r.type === "P" ? (C.status[r.status] || r.status || "-") : "-", r.launch || "-",
-    n(r.perigee, 0), n(r.apogee, 0), n(r.incl, 1), typeof r.rcs === "number" ? r.rcs.toLocaleString("en-GB", { maximumSignificantDigits: 3 }) : "-"];
+    n(r.perigee, F.f0), n(r.apogee, F.f0), n(r.incl, F.f1), n(r.rcs, F.s3)];
 }
 
 // The part that touches the page. doc: the document; C: OBJ_CONST.
@@ -105,7 +134,7 @@ export function objInit(doc, C) {
       btn.disabled = true;
       msg.textContent = "Loading the full list...";
       fetch(src, { cache: "no-cache" }).then(function (r) {
-        if (r.status === 404) { var e = new Error("missing"); e.reason = "version"; throw e; }
+        if (r.status === 404) { var e = new Error("missing"); e.reason = "missing"; throw e; }
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       }).then(function (d) {
@@ -117,11 +146,14 @@ export function objInit(doc, C) {
         btn.disabled = false;
         msg.textContent = e && e.reason === "version"
           ? "The full list has been updated since this page was built, so it no longer matches the numbers above. Reload the page to see the current page and list."
+          : e && e.reason === "missing" ? "This list is not on the server yet. Try again in a few minutes."
           : "The full list could not be loaded just now. Try again in a moment.";
       });
     });
     var show = function (rows) {
-      var state = { q: "", type: "", page: 1, col: 0, numeric: true, dir: "ascending" };
+      var F = objFormat(), items = objPrepare(rows, C);
+      // sorted: every row in the current sort order, made again only when the sort changes; shown: the rows that pass the filters
+      var state = { q: "", type: "", page: 1, sorted: items, shown: items };
       var form = el("div", { "class": "objsearch" });
       var l1 = el("label", { "for": "obj-search" }, "Filter by name, catalogue number or designator");
       var q = el("input", { id: "obj-search", type: "search", autocomplete: "off", spellcheck: "false" });
@@ -135,7 +167,7 @@ export function objInit(doc, C) {
       var table = el("table", { id: "all-objects-table" });
       var cap = el("caption", null, "Every object in Earth orbit recorded for this owner");
       var thead = el("thead"), tr = el("tr");
-      heads.forEach(function (h, i) { var th = el("th", { scope: "col", "data-col": String(i), "data-sort": numericCols.indexOf(i) >= 0 ? "num" : "text" }, h); if (numericCols.indexOf(i) >= 0) th.className = "num"; tr.appendChild(th); });
+      heads.forEach(function (h, i) { var th = el("th", { scope: "col", "data-col": String(i), "data-sort": numericCols.indexOf(i) >= 0 ? "num" : "text" }, h); if (numericCols.indexOf(i) >= 0) th.className = "num"; if (i === 0) th.setAttribute("aria-sort", "ascending"); tr.appendChild(th); });
       thead.appendChild(tr);
       var tbody = el("tbody");
       table.appendChild(cap); table.appendChild(thead); table.appendChild(tbody); wrap.appendChild(table);
@@ -144,32 +176,34 @@ export function objInit(doc, C) {
       var info = el("p", { "class": "meta", "aria-live": "polite", id: "obj-page" });
       nav.appendChild(prev); nav.appendChild(info); nav.appendChild(next);
       box2.appendChild(form); box2.appendChild(wrap); box2.appendChild(nav);
-      var keyOf = function (r, col) { var c = objCells(r, C)[col]; return objKey(c, numericCols.indexOf(col) >= 0); };
+      // only the rows of the current page are put in the table
       var draw = function () {
-        var list = objFilter(rows, state.q, state.type).sort(function (a, b) { return objCompare(keyOf(a, state.col), keyOf(b, state.col), state.dir) || a.id - b.id; });
-        var pg = objPage(list, state.page, C.pageSize);
+        var list = state.shown, pg = objPage(list, state.page, C.pageSize);
         state.page = pg.page;
         tbody.textContent = "";
-        pg.rows.forEach(function (r) {
+        pg.rows.forEach(function (it) {
+          if (!it.cells) it.cells = objCells(it.r, C, F);
           var row = el("tr");
-          objCells(r, C).forEach(function (c, i) { var td = el("td", numericCols.indexOf(i) >= 0 ? { "class": "num" } : null, c); row.appendChild(td); });
+          it.cells.forEach(function (c, i) { row.appendChild(el("td", numericCols.indexOf(i) >= 0 ? { "class": "num" } : null, c)); });
           tbody.appendChild(row);
         });
         info.textContent = list.length ? "Page " + pg.page + " of " + pg.pages + ", " + list.length + " of " + rows.length + " objects" : "No object matches.";
         prev.disabled = pg.page <= 1; next.disabled = pg.page >= pg.pages;
       };
-      q.addEventListener("input", function () { state.q = q.value; state.page = 1; draw(); });
-      sel.addEventListener("change", function () { state.type = sel.value; state.page = 1; draw(); });
+      var refilter = function () { state.shown = objFilterItems(state.sorted, state.q, state.type); state.page = 1; draw(); };
+      var timer = null;
+      q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { state.q = q.value; refilter(); }, 150); });
+      sel.addEventListener("change", function () { state.type = sel.value; refilter(); });
       prev.addEventListener("click", function () { state.page--; draw(); });
       next.addEventListener("click", function () { state.page++; draw(); });
-      sortable(table, function (col, numeric, dir) { state.col = col; state.numeric = numeric; state.dir = dir; state.page = 1; draw(); });
+      sortable(table, function (col, numeric, dir) { state.sorted = objSortItems(items, col, dir); refilter(); });
       draw();
       q.focus();
     };
   }
 }
 
-const FUNCTIONS = [objNorm, objMatch, objKey, objCompare, objParse, objFilter, objPage, objCells, objInit];
+const FUNCTIONS = [objNorm, objMatch, objKey, objCompare, objParse, objFormat, objPrepare, objSortItems, objFilterItems, objPage, objCells, objInit];
 // The inline script: the functions above by their source text, the constants as JSON, and one line that runs them.
 export function objectsScript() {
   return `(function(){\n${FUNCTIONS.map((f) => f.toString().replace(/^export /, "")).join("\n")}\nobjInit(document, ${JSON.stringify(OBJ_CONST)});\n})();`;

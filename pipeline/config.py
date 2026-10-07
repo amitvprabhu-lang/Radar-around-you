@@ -139,4 +139,7 @@ SWPC_URLS = {
 }
 HALT_COOL_OFF_S = 21600    # after a policy halt, wait this long before one probe; a human is told on every halted run
 KEEP_VERSIONS = 3
+# OURS: feeds that keep fewer versions in the data folder. The satcat feed is about 3 MB a version and changes once a day; the version before
+# the current one stays for a pull that read the previous manifest (hosting/pull.php keeps what the old manifest names for one more run).
+KEEP_VERSIONS_BY_FEED = {"satcat": 2}
 CITIES_FALLBACK_NOTE = "A city that fails keeps its last good data."

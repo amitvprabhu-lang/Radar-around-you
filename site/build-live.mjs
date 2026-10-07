@@ -125,6 +125,9 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const keepSat = (f) => sameShell && prev.pages[f] && same(prev.pages[f].feeds, satVersionsOf(f)) && prev.files[f] && exists(f);
   const satKeep = SATELLITE_FILES.every((f) => keepSat(f) || !(prev && prev.pages && prev.pages[f]) && f !== SATCOUNT_FILE && f !== HUB_FILE) && keepSat(SATCOUNT_FILE);
   if (countryObjects.reasons.length) for (const r of countryObjects.reasons) warnings.push({ file: "country pages", reason: `no objects section for ${r}` });
+  // A country page that had the objects section keeps that copy when the section cannot be built now (a stale catalogue, a detail file that
+  // fails its checks), rather than going back to the page without it; with no such copy it is built without the section.
+  const holdCountry = (f) => { const c = codeOf(f); return !!(c && countryObjects.tried && !countryObjects.byCode[c] && prev && prev.pages && prev.pages[f] && prev.pages[f].feeds && prev.pages[f].feeds.satcat && prev.files[f] && exists(f)); };
   try {
     if (!satFeed || !satVersion || !satFeed.files) throw new Error("build-live: the manifest has no satellites feed");
     for (const f of NEED) if (!satFeed.files[f]) throw new Error(`build-live: the manifest does not name ${f}`);
@@ -140,7 +143,11 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
       texts.set(SATCOUNT_FILE, renderPage(satelliteCountPage(counts, { updated: now }), { noindex }));
       for (const p of country.pages) texts.set(p.file, renderPage(p, { noindex }));
       // a page built from the same versions as its copy on the site keeps that copy (its new text would differ only in the build time)
-      for (const f of SATELLITE_FILES) if (texts.has(f)) { if (keepSat(f)) { texts.delete(f); carry(f); } else pages[f] = { feeds: satVersionsOf(f), dataTime: satDataTime(f, taken) }; }
+      for (const f of SATELLITE_FILES) {
+        if (!texts.has(f)) continue;
+        if (holdCountry(f)) { texts.delete(f); stale.push({ file: f, reason: `no objects section this run (${countryObjects.why[codeOf(f)]}); the copy with the section stays`, kept: carry(f) }); }
+        else if (keepSat(f)) { texts.delete(f); carry(f); } else pages[f] = { feeds: satVersionsOf(f), dataTime: satDataTime(f, taken) };
+      }
       // a country page left out this run keeps its earlier copy, if there is one
       for (const s of country.skipped) skipped.push({ ...s, kept: carry(s.file) });
     }
@@ -170,7 +177,10 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
       summaries[hp.key] = s;
       for (const w of s.warnings || []) warnings.push({ file: hp.file, reason: w });
       if (keepablePage(hp)) { carry(hp.file); continue; }
-      pages[hp.file] = { feeds: pageVersions(hp), dataTime: s.dataTime };
+      // a page whose summary carries a contentKey keeps its previous data time while the key is the same (site/objects-family.mjs)
+      const before = prev && prev.pages && prev.pages[hp.file];
+      if (s.contentKey && before && before.contentKey === s.contentKey && before.dataTime) s.dataTime = before.dataTime;
+      pages[hp.file] = { feeds: pageVersions(hp), dataTime: s.dataTime, ...(s.contentKey ? { contentKey: s.contentKey } : {}) };
     } catch (e) {
       if (e && e.code === "ENOENT" && (e.path === coastFile || e.path === placesFile)) throw e;
       if (e && e.stale) { missing[hp.key] = `data older than the page's limit (${e.message})`; stale.push({ file: hp.file, reason: e.message, kept: carry(hp.file) }); }

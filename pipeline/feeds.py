@@ -201,8 +201,12 @@ def satcat(ctx):
         raise FeedFailure("satcat: the owner names come from the catalogue, which has not been built yet (it is fetched first, once a day)")
     ctx.sleep(PAUSE_S)  # keeps this request apart from the other CelesTrak requests of the same run
     r = ctx.get("satcat", SATCAT_CSV_URL)
+    # the whole file or nothing: a CSV ends with a line break, so a body cut short without a Content-Length is caught here
+    if not r.body.endswith(b"\n"):
+        raise FeedFailure("satcat: the file does not end with a line break, so it was probably cut short")
     fs = ctx.fs("satcat")
-    digest = hashlib.sha256(r.body).hexdigest()
+    # the owner names are part of what is published, so a corrected name table publishes again even when the CSV is the same
+    digest = hashlib.sha256(r.body + dumps(cat["owners"])).hexdigest()
     if digest == fs.get("bodySha256") and fs.get("files"):
         raise Unchanged()  # the same catalogue as last time: nothing to publish, so the pages are not rebuilt
     modified = r.header("last-modified")
@@ -215,7 +219,7 @@ def satcat(ctx):
     if t is None or t > ctx.now + timedelta(hours=1):
         t = ctx.now  # no usable Last-Modified: the fetch time is the honest upper bound
     try:
-        text = r.body.decode("utf-8")
+        text = r.body.decode("utf-8-sig")  # a byte order mark at the start, if any, is not part of the first field name
         files, s = SC.summarise(text, iso(t), cat["owners"], SATCAT_MIN_OBJECTS, SATCAT_MAX_OBJECTS)
     except UnicodeDecodeError as e:
         raise FeedFailure(f"satcat: not UTF-8 text ({e})")

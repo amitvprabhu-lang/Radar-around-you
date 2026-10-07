@@ -29,7 +29,7 @@ const COUNTRY_BY_SLUG = Object.fromEntries(COUNTRY_PAGES.map((p) => [p.slug, p])
 const fromCountry = (code, slug, aliases = "") => ({ code, slug, name: COUNTRY_BY_SLUG[slug].name, phrase: COUNTRY_BY_SLUG[slug].phrase, country: true, aliases });
 export const OWNER_PAGES = [
   fromCountry("US", "united-states", "USA America"),
-  fromCountry("CIS", "cis-former-ussr", "USSR Soviet Union"),
+  fromCountry("CIS", "cis-former-ussr", "USSR Soviet Union Russia Russian Federation"),
   fromCountry("PRC", "china", "China"),
   fromCountry("UK", "united-kingdom", "Britain Great Britain"),
   { code: "FR", slug: "france", name: "France", phrase: "France" },

@@ -7,12 +7,14 @@ import { LIVE_SCRIPT_FILE, LIVE_SCRIPT_VERSION } from "./live-pages-js.mjs";
 
 // WebPage JSON-LD: name, description, url, inLanguage, dateModified (the data time), isPartOf the WebSite, and the same breadcrumb the
 // page shows (Home, then the page), as renderPage writes it in its BreadcrumbList.
-export function webPageLd({ file, title, description, dataTime, crumbTitle }) {
+// crumbs: the pages between Home and this one, as renderPage's page.crumbs ([{ name, file }]), so both breadcrumbs say the same.
+export function webPageLd({ file, title, description, dataTime, crumbTitle, crumbs = [] }) {
   const url = `${SITE.url}/${urlPath(file)}`;
+  const middle = crumbs.map((c, i) => ({ "@type": "ListItem", position: i + 2, name: c.name, item: `${SITE.url}/${urlPath(c.file)}` }));
   return {
     "@context": "https://schema.org", "@type": "WebPage", name: title, description, url, inLanguage: "en", ...(dataTime ? { dateModified: dataTime } : {}),
     isPartOf: { "@type": "WebSite", name: SITE.name, url: `${SITE.url}/` },
-    breadcrumb: { "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${SITE.url}/` }, { "@type": "ListItem", position: 2, name: crumbTitle, item: url }] },
+    breadcrumb: { "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: `${SITE.url}/` }, ...middle, { "@type": "ListItem", position: middle.length + 2, name: crumbTitle, item: url }] },
   };
 }
 

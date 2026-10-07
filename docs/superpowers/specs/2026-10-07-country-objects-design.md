@@ -39,11 +39,13 @@ updates manually once or twice a day", so it is read once a day.
 - New family `objects` in `site/livepages.mjs`, read and rendered through `site/liveregistry.mjs`, built by `site/build-live.mjs` after
   each collection like every family page. Feeds: `satcat` and `satellites`. A page is rebuilt when either version changes and is kept
   byte for byte otherwise.
-- Freshest source per number: active satellites from the satellites feed (about every 2 hours, the same count as
-  `/how-many-satellites-in-orbit/`, so the column adds up to that page's total); inactive satellites, rocket bodies, debris and unknown
-  objects from the catalogue (about daily). Each page says both times. The catalogue's own active count is shown beside it with the
-  difference, and the total in orbit is the sum of the parts shown (stated as such).
-- dataTime (lead time, JSON-LD dateModified, sitemap lastmod) is the later of the two data times: it moves only when data moves.
+- Corrected 2026-10-07 after review (the build did this from the start; the earlier wording here was wrong): every table, including the
+  active column, uses the catalogue (about daily), so each row adds up and the totals equal CelesTrak's own statistics. The active count
+  of the satellites feed (about every 2 hours, the number on `/how-many-satellites-in-orbit/`) is shown beside it with its own time and the
+  difference explained from the data. Each page names both times.
+- dataTime (JSON-LD dateModified, sitemap lastmod and the first time in the lead, "Numbers last changed ...") is the later of the two data
+  times when the page's numbers change, and stays as it was while they do not (a hash of the page's numbers, `contentKey`, is kept in
+  `pages/index.json`). The lead then names the time of each source.
 - `/satellites-and-debris-by-country/` (new, top level): answer-first lead, "What this means", a ranked table of every owner (owner as
   recorded, code, active, inactive, rocket bodies, debris, unknown, total), each row a plain link where the owner has a page; a search box
   and sortable headers added by script (the full table is in the HTML); a stacked bar chart of the top ten; debris leaders; re-entries
@@ -60,9 +62,21 @@ updates manually once or twice a day", so it is read once a day.
   catalogue number); "Show all N objects", which fetches `o-<code>.json` of the same version and renders a paged, filterable table;
   what "debris of this owner" means; questions answered from the owner's own numbers; links to the owners ranked just above and below.
 - The data version: the page carries the file's path (which holds the version) and its sourceTime; the script refuses a file whose
-  sourceTime differs (a page from one version and a file from another) and asks the visitor to reload.
+  sourceTime differs (a page from one version and a file from another) and asks the visitor to reload; a file that answers 404 (not on the
+  server yet, for example while a pull is copying a new version) gets "try again in a few minutes".
+- The full table works on prepared rows: number formats are made once, every row's search text and sort keys are made once on load,
+  display cells only for rows that are shown and then kept, a sort runs only when the sort changes, a filter (typing waits 150 ms) runs
+  over the already sorted rows, and only the current page of 50 rows is put in the table. On the real United States file (18,356
+  objects) every step took under 50 ms in Node on this Mac; the first version took 5 to 82 seconds per step.
+- A country page that had the objects section keeps that copy when the section cannot be built (a catalogue more than 72 hours old, a
+  detail file that fails its checks), rather than going back to its old title and text.
 - No editorial claims: the pages never say who caused debris, never rename an owner, and say that the catalogue misses objects too
   small to track and is not exact.
+
+## 4b. Collector safety (added after review)
+- `pipeline/net.py` refuses, for every feed, a plain 200 answer whose body length differs from its Content-Length (a connection that
+  closed early). The satcat feed also refuses a file that does not end with a line break, reads a byte order mark as nothing, and
+  publishes again when the owner names change even if the CSV did not. It keeps 2 versions in the data folder instead of 3.
 
 ## 5. Hosting
 - `radar_safe_page_path` in `hosting/lib.php` gains the exact path of the ranking page and an exact alternation of the 19 new slugs. A unit

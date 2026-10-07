@@ -10,14 +10,14 @@ import { fileURLToPath } from "node:url";
 import { buildLive } from "../site/build-live.mjs";
 import { OWNER_PAGES, NEW_OWNER_PAGES, OBJECT_PAGES, RANKING_FILE, OWNER_SELECT_MIN, OWNER_PAGE_MIN, STATIC_ROWS, STATIC_ALL_MAX, OBJECTS_MAX_AGE_HOURS,
   orbitFromApsides, fastActiveByCode, summariseObjects, readDetail, ownerDetail, launchOfIntl, ORBIT_KEYS } from "../site/objects.mjs";
-import { objNorm, objMatch, objKey, objCompare, objParse, objFilter, objPage, objCells, objectsScript, OBJ_CONST } from "../site/objects-js.mjs";
+import { objNorm, objMatch, objKey, objCompare, objParse, objFormat, objPrepare, objSortItems, objFilterItems, objPage, objCells, objectsScript, OBJ_CONST } from "../site/objects-js.mjs";
 import { COUNTRY_PAGES, HUB_FILE } from "../site/satcountry.mjs";
 import { SATCOUNT_FILE, LIVE_FILES } from "../site/livepages.mjs";
 import { PAGE_PATH_RE } from "../site/live-snapshot.mjs";
 import { SITE, urlPath } from "../site/layout.mjs";
 import { ORBIT_BOUNDS } from "../site/satcount.mjs";
 import { countryFixture } from "./helpers/satfixture.mjs";
-import { objectsDataDir, satcatSummary, satcatDetail, SATCAT_TIME, SAT_TIME_OBJ, OBJECTS_NOW, TEST_OBJECT_BOUNDS } from "./helpers/satcatfixture.mjs";
+import { objectsDataDir, satcatSummary, satcatDetail, bigDetail, SATCAT_TIME, SAT_TIME_OBJ, OBJECTS_NOW, TEST_OBJECT_BOUNDS } from "./helpers/satcatfixture.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const tmps = [];
@@ -147,6 +147,36 @@ test("an owner's detail: checked against the summary, every object counted once,
 });
 
 // ---------------------------------------------------------------- the browser script's pure parts
+test("the ranking's search finds owners by the words people use (aliases are never shown)", () => {
+  const h = read(OUT, RANKING_FILE);
+  const rows = [...h.matchAll(/<tr data-search="([^"]*)"><td>(?:<a [^>]*>)?([^<]*)/g)].map((m) => ({ search: m[1].replace(/&#39;/g, "'"), name: m[2].replace(/&#39;/g, "'") }));
+  const find = (q) => rows.filter((r) => objMatch(r.search, q)).map((r) => r.name);
+  for (const [q, owner] of [["USA", "United States"], ["UK", "United Kingdom"], ["Britain", "United Kingdom"], ["Turkey", "Türkiye"], ["Russia", "Commonwealth of Independent States (former USSR)"],
+    ["Russian Federation", "Commonwealth of Independent States (former USSR)"], ["Korea", "Republic of Korea"], ["China", "People's Republic of China"], ["India", "India"]]) {
+    assert.ok(find(q).includes(owner), `${q} finds ${owner}: ${find(q).join(", ")}`);
+  }
+  assert.ok(!/russia/i.test(textOf(mainOf(h))), "the alias is in the search data only, never in the text");
+});
+
+test("counts read correctly in the singular", async () => {
+  const { kindList, kindCount } = await import("../site/pages-objects.mjs");
+  assert.equal(kindList({ act: 1, inact: 1, rb: 1, deb: 1, unk: 0 }), "1 active satellite, 1 inactive satellite, 1 rocket body and 1 piece of debris");
+  assert.equal(kindList({ act: 2, inact: 0, rb: 3, deb: 4, unk: 1 }), "2 active satellites, 0 inactive satellites, 3 rocket bodies, 4 pieces of debris and 1 unknown object");
+  assert.equal(kindCount("obj", 1), "1 object");
+  for (const f of [RANKING_FILE, ...OWNER_FILES, ...COUNTRY_PAGES.map((p) => p.file)]) {
+    const t = textOf(mainOf(read(OUT, f)));
+    assert.ok(!/(^|[^\d,.])1 (pieces|objects|active satellites|inactive satellites|rocket bodies|unknown objects)\b/.test(t), `${f}: ${(t.match(/(^|[^\d,.])1 (pieces|objects|active satellites|inactive satellites|rocket bodies|unknown objects)\b.{0,30}/) || [])[0]}`);
+  }
+});
+
+test("the WebPage breadcrumb of an owner page is the page's own: Home, the ranking, the owner", () => {
+  for (const p of NEW_OWNER_PAGES) {
+    const ld = [...read(OUT, p.file).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1].replace(/\\u003c/g, "<")));
+    const page = ld.find((o) => o["@type"] === "BreadcrumbList"), wp = ld.find((o) => o["@type"] === "WebPage");
+    assert.deepEqual(wp.breadcrumb.itemListElement, page.itemListElement, p.slug);
+  }
+});
+
 test("the search and table functions of the page script", () => {
   assert.equal(objNorm("  Türkiye  "), "turkiye");
   assert.ok(objMatch("Türkiye TURK Turkey", "turkey"));
@@ -164,15 +194,41 @@ test("the search and table functions of the page script", () => {
   assert.throws(() => objParse(doc, { owner: "IND", time: "2026-10-06T04:00:00Z" }, OBJ_CONST), (e) => e.reason === "version");
   assert.throws(() => objParse(doc, { owner: "US", time: SATCAT_TIME }, OBJ_CONST), (e) => e.reason === "shape");
   assert.throws(() => objParse({ schema: 2 }, { owner: "IND", time: SATCAT_TIME }, OBJ_CONST), (e) => e.reason === "shape");
-  assert.equal(objFilter(rows, "", "D").length, rows.filter((r) => r.type === "D").length);
-  assert.ok(objFilter(rows, "pslv", "").length > 0);
-  assert.equal(objFilter(rows, String(rows[0].id), "")[0].id, rows[0].id);
+  const items = objPrepare(rows, OBJ_CONST);
+  assert.equal(objFilterItems(items, "", "D").length, rows.filter((r) => r.type === "D").length);
+  assert.ok(objFilterItems(items, "pslv", "").length > 0 && objFilterItems(items, "pslv", "").every((it) => /PSLV/.test(it.r.name)));
+  assert.equal(objFilterItems(items, String(rows[0].id), "")[0].r.id, rows[0].id);
+  const byName = objSortItems(items, 1, "ascending").map((it) => it.keys[1]);
+  assert.ok(byName.every((x, i) => i === 0 || byName[i - 1] <= x));
+  const byRcs = objSortItems(items, 9, "descending").map((it) => it.r.rcs);
+  assert.ok(byRcs.findIndex((x) => x == null) === -1 || byRcs.slice(byRcs.findIndex((x) => x == null)).every((x) => x == null), "objects without a radar cross-section come last going down");
+  assert.notEqual(objSortItems(items, 0, "ascending"), items, "a sorted copy, not the same array");
   assert.deepEqual(objPage([1, 2, 3, 4, 5], 2, 2), { rows: [3, 4], page: 2, pages: 3 });
   assert.deepEqual(objPage([1, 2, 3], 9, 2), { rows: [3], page: 2, pages: 2 }, "a page past the end is the last page");
   assert.deepEqual(objPage([], 1, 50), { rows: [], page: 1, pages: 1 });
-  const c = objCells({ id: 5, name: "VANGUARD 1", intl: "1958-002B", type: "P", status: "-", launch: "1958-03-17", perigee: 654, apogee: 3820, incl: 34.25, rcs: 0.1224 }, OBJ_CONST);
+  const F = objFormat();
+  const c = objCells({ id: 5, name: "VANGUARD 1", intl: "1958-002B", type: "P", status: "-", launch: "1958-03-17", perigee: 654, apogee: 3820, incl: 34.25, rcs: 0.1224 }, OBJ_CONST, F);
   assert.deepEqual(c, ["5", "VANGUARD 1", "1958-002B", "Satellite", "Not operational", "1958-03-17", "654", "3,820", "34.3", "0.122"]);
-  assert.equal(objCells({ id: 6, type: "D", status: "", perigee: null, apogee: null, incl: null, rcs: null }, OBJ_CONST)[4], "-");
+  assert.equal(objCells({ id: 6, type: "D", status: "", perigee: null, apogee: null, incl: null, rcs: null }, OBJ_CONST, F)[4], "-");
+});
+
+// A detail file as large as the United States' (18,356 objects on 2026-10-07): the steps of the full table, timed. The first version
+// built new number formatters for every comparison and took 5 to 82 seconds per step on this Mac.
+test("the full table of 18,000 objects: first draw, a filter keystroke and each sort stay well under 300 ms", (t) => {
+  const doc = bigDetail();
+  const time = (fn) => { const t0 = performance.now(); const v = fn(); return [performance.now() - t0, v]; };
+  const F = objFormat(), page = (list) => objPage(list, 1, OBJ_CONST.pageSize).rows.forEach((it) => { if (!it.cells) it.cells = objCells(it.r, OBJ_CONST, F); });
+  const [first, items] = time(() => { const it = objPrepare(objParse(JSON.parse(JSON.stringify(doc)), { owner: "US", time: SATCAT_TIME }, OBJ_CONST), OBJ_CONST); page(it); return it; });
+  const out = [["first draw (parse, prepare, one page)", first]];
+  for (const [label, fn] of [["filter, one keystroke", () => objFilterItems(items, "star", "")], ["filter, kind", () => objFilterItems(items, "", "D")],
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => [`sort by column ${col}`, () => objSortItems(items, col, col % 2 ? "descending" : "ascending")])]) {
+    const [ms, list] = time(() => { const l = fn(); page(l); return l; });
+    assert.ok(list.length > 0, label);
+    out.push([label, ms]);
+  }
+  t.diagnostic(out.map(([l, ms]) => `${l} ${ms.toFixed(1)} ms`).join("; "));
+  // OURS: 300 ms is the reviewer's budget; measured on 2026-10-07 at 50 ms or less for every step on the real US file
+  for (const [l, ms] of out) assert.ok(ms < 300, `${l}: ${ms.toFixed(0)} ms`);
 });
 
 test("the page script is plain browser code built from the tested functions", () => {
@@ -188,7 +244,11 @@ test("every page of the family and the five country pages are built from the fix
   assert.deepEqual(R.failed, []);
   for (const f of [RANKING_FILE, ...OWNER_FILES, ...COUNTRY_PAGES.map((p) => p.file)]) assert.ok(fs.existsSync(path.join(OUT, f)), f);
   const index = readIndex(OUT);
-  for (const f of [RANKING_FILE, ...OWNER_FILES]) assert.deepEqual(index.pages[f], { feeds: { satcat: "C1", satellites: "S1" }, dataTime: SAT_TIME_OBJ }, f);
+  for (const f of [RANKING_FILE, ...OWNER_FILES]) {
+    const { contentKey, ...rest } = index.pages[f];
+    assert.deepEqual(rest, { feeds: { satcat: "C1", satellites: "S1" }, dataTime: SAT_TIME_OBJ }, f);
+    assert.match(contentKey, /^[0-9a-f]{32}$/, f);
+  }
   for (const p of COUNTRY_PAGES) assert.deepEqual(index.pages[p.file].feeds, { satellites: "S1", satcat: "C1" }, p.slug);
   assert.deepEqual(index.pages[SATCOUNT_FILE].feeds, { satellites: "S1" }, "the count page does not depend on the catalogue");
   assert.deepEqual(index.pages[HUB_FILE].feeds, { satellites: "S1" }, "nor does the country hub");
@@ -247,7 +307,15 @@ test("the ranking: every owner with an object in orbit, rows that add up, column
   for (const s of ['data-col="0" data-sort="text"', 'data-col="7" data-sort="num"']) assert.ok(h.includes(s), s);
   const t = textOf(mainOf(h));
   assert.ok(t.includes(`lists ${summary.totals.total.toLocaleString("en-GB")} objects in Earth orbit`));
-  assert.ok(t.includes("does not say who or what broke it up"));
+  // what the owner of debris is: only the share measured in this data, computed, never a claim about causes or responsibility
+  const c = summary.debrisOwnerCheck, share = (Math.round((c.sameAsPayload / c.checked) * 1000) / 10).toFixed(1);
+  assert.ok(t.includes(`${share} percent of the ${c.checked.toLocaleString("en-GB")} pieces of debris in Earth orbit${c.checked === summary.totals.deb ? "" : " whose launch has a satellite in the catalogue"} carry the owner of a satellite from the same launch; ${c.checked - c.sameAsPayload} do not`), "the measured share");
+  assert.ok(!/responsib|\bcaus(e|ed|ing)\b/i.test(t), "no word about responsibility or causes");
+  assert.ok(t.includes("The catalogue does not record who or what broke a piece off"));
+  // the lead names when the numbers last changed and the time of each source
+  const tl = t.replace(/ ([,.;)])/g, "$1");
+  assert.ok(tl.includes(`Numbers last changed 7 October 2026, 04:20 UTC (orbit data of 7 Oct, 04:20 UTC, catalogue of 7 Oct, 04:04 UTC)`), tl.slice(tl.indexOf("Numbers"), tl.indexOf("Numbers") + 120));
+  assert.ok(/<th scope="col" class="num" data-col="7" data-sort="num" aria-sort="descending">/.test(h), "the default order is marked on its column");
   assert.ok(t.includes("Large orbital debris (> 10 cm) is tracked routinely by the U.S. Space Surveillance Network"));
 });
 
@@ -418,7 +486,7 @@ test("a new satellites version with the same content leaves the objects pages' b
   for (const f of [RANKING_FILE, ...OWNER_FILES]) { assert.deepEqual(idx2.files[f], idx1.files[f], f); assert.equal(idx2.pages[f].feeds.satellites, "S2"); }
 });
 
-test("a stale catalogue: the objects pages keep their previous copy; the country pages are rebuilt without the section, with a warning", () => {
+test("a stale catalogue: the objects pages and the country pages with the section keep their previous copy, with a reason", () => {
   const out = mk(), dir = objectsDataDir({ dir: mk() });
   buildLive({ dataDir: dir, outDir: out, now: OBJECTS_NOW, ...opts });
   const before = snapshotOf(out);
@@ -431,9 +499,48 @@ test("a stale catalogue: the objects pages keep their previous copy; the country
   const after = snapshotOf(out);
   for (const f of [RANKING_FILE, ...OWNER_FILES]) assert.equal(after[f], before[f], f);
   assert.ok(r.warnings.some((w) => /no objects section for US: satcat data from/.test(w.reason)));
-  const us = read(out, COUNTRY_PAGES[0].file);
-  assert.ok(!us.includes('id="objects"'), "the country page is not left with an out of date section");
-  assert.deepEqual(readIndex(out).pages[COUNTRY_PAGES[0].file].feeds, { satellites: "S9" });
+  for (const p of COUNTRY_PAGES) {
+    assert.equal(after[p.file], before[p.file], `${p.slug}: the copy with the section stays, its title does not flip back`);
+    const st = r.stale.find((x) => x.file === p.file);
+    assert.ok(st && st.kept && /no objects section this run \(satcat data from .* is more than 72 hours old\); the copy with the section stays/.test(st.reason), p.slug);
+    assert.deepEqual(readIndex(out).pages[p.file].feeds, { satellites: "S1", satcat: "C1" }, p.slug);
+  }
+  assert.notEqual(after[SATCOUNT_FILE], undefined);
+  // without an earlier copy that had the section, a country page is built without it (the first runs before the catalogue arrives)
+  const fresh = mk();
+  const r2 = buildLive({ dataDir: objectsDataDir({ dir: mk(), taken: late.toISOString().replace(/\.\d+Z$/, "Z"), satVersion: "S9" }), outDir: fresh, now: late, ...opts });
+  assert.ok(!read(fresh, COUNTRY_PAGES[0].file).includes('id="objects"') && !r2.stale.some((x) => x.file === COUNTRY_PAGES[0].file));
+});
+
+test("a broken detail file for a country keeps that country page's previous copy and fails nothing else", () => {
+  const out = mk();
+  buildLive({ dataDir: objectsDataDir({ dir: mk() }), outDir: out, now: OBJECTS_NOW, ...opts });
+  const before = snapshotOf(out);
+  const jp = summary.owners.find((o) => o.code === "JPN").file;
+  const broken = objectsDataDir({ dir: mk(), satcatVersion: "C5", edit: (name, buf) => (name === jp ? Buffer.from(buf.toString("utf8").replace('"owner":"JPN"', '"owner":"XXX"')) : buf) });
+  const r = buildLive({ dataDir: broken, outDir: out, now: OBJECTS_NOW, ...opts });
+  const japan = COUNTRY_PAGES.find((p) => p.slug === "japan").file;
+  assert.equal(snapshotOf(out)[japan], before[japan], "the Japan page keeps its copy");
+  assert.ok(r.stale.some((x) => x.file === japan && x.kept));
+  assert.equal(readIndex(out).pages[COUNTRY_PAGES[0].file].feeds.satcat, "C5", "the other country pages take the new catalogue");
+});
+
+test("dateModified, the sitemap time and the lead's time move only when a number on the page changes", () => {
+  const out = mk();
+  buildLive({ dataDir: objectsDataDir({ dir: mk() }), outDir: out, now: OBJECTS_NOW, ...opts });
+  const t1 = readIndex(out).pages[RANKING_FILE].dataTime;
+  // two hours later the orbit data has a new version and time but the same numbers
+  const later = "2026-10-07T06:20:22Z";
+  buildLive({ dataDir: objectsDataDir({ dir: mk(), satVersion: "S2", taken: later }), outDir: out, now: new Date("2026-10-07T06:30:00Z"), ...opts });
+  const idx = readIndex(out), h = read(out, RANKING_FILE);
+  assert.equal(idx.pages[RANKING_FILE].dataTime, t1, "the numbers did not change, so neither does the date");
+  const ld = [...h.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1])).find((o) => o["@type"] === "WebPage");
+  assert.equal(ld.dateModified, t1);
+  assert.ok(read(out, "sitemap-live.xml").includes(`<loc>${SITE.url}/${urlPath(RANKING_FILE)}</loc><lastmod>${t1}</lastmod>`));
+  assert.ok(textOf(h).includes("orbit data of 7 Oct, 06:20 UTC"), "the lead still names the new orbit data time");
+  // a new catalogue with a changed number moves it
+  buildLive({ dataDir: objectsDataDir({ dir: mk(), satVersion: "S2", taken: later, satcatVersion: "C2", edit: nextDay }), outDir: out, now: new Date("2026-10-08T04:30:00Z"), ...opts });
+  assert.equal(readIndex(out).pages[RANKING_FILE].dataTime, "2026-10-08T04:01:00Z");
 });
 
 test("an owner under the guard is skipped and keeps its previous copy; a detail file that does not match fails only that page", () => {

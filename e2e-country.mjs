@@ -13,7 +13,7 @@ import { buildLive } from "./site/build-live.mjs";
 import { RANKING_FILE, NEW_OWNER_PAGES, STATIC_ALL_MAX } from "./site/objects.mjs";
 import { OBJ_PAGE_SIZE } from "./site/objects-js.mjs";
 import { urlPath } from "./site/layout.mjs";
-import { objectsDataDir, satcatSummary, OBJECTS_NOW, TEST_OBJECT_BOUNDS } from "./test/helpers/satcatfixture.mjs";
+import { objectsDataDir, satcatSummary, bigDetail, OBJECTS_NOW, TEST_OBJECT_BOUNDS, SATCAT_TIME } from "./test/helpers/satcatfixture.mjs";
 
 const site = fileURLToPath(new URL("./dist/site/", import.meta.url));
 if (!fs.existsSync(site + "index.html")) { console.error("dist/site/index.html is missing; run npm run build:hosting first"); process.exit(2); }
@@ -119,9 +119,12 @@ const browser = await launch();
   check("the kind filter keeps only debris and goes back to page 1", kinds.length === big.o.deb && kinds.every((k) => k === "Debris") && (await page.textContent("#obj-page")).startsWith("Page 1 of 1"), JSON.stringify(kinds.slice(0, 3)));
   await page.selectOption("#obj-type", "");
   await page.fill("#obj-search", "pslv");
+  // typing is applied 150 ms after the last key
+  await page.waitForFunction(() => { const c = document.querySelector("#all-objects-table tbody tr td:nth-child(2)"); return c && /PSLV/.test(c.textContent); }, null, { timeout: 10000 }).catch(() => {});
   const found = await page.evaluate(() => [...document.querySelectorAll("#all-objects-table tbody tr")].map((r) => r.cells[1].textContent));
   check("the text filter finds objects by name", found.length > 0 && found.every((n) => /PSLV/.test(n)), JSON.stringify(found.slice(0, 3)));
   await page.fill("#obj-search", "");
+  await page.waitForFunction((n) => document.getElementById("obj-page").textContent.includes(`${n} of ${n} objects`), big.o.total, { timeout: 10000 }).catch(() => {});
   await page.click('#all-objects-table th[data-col="0"] button');
   const ids = await page.evaluate(() => [...document.querySelectorAll("#all-objects-table tbody tr")].map((r) => Number(r.cells[0].textContent)));
   check("the full table sorts by a clicked column", ids.every((x, i) => i === 0 || ids[i - 1] >= x), JSON.stringify(ids.slice(0, 4)));
@@ -146,7 +149,7 @@ const browser = await launch();
 // ---- a file of another data version, and a file that is gone
 for (const [name, answer, want] of [
   ["a detail file from another data version is refused, with a reload message", (b) => ({ status: 200, body: JSON.stringify({ ...JSON.parse(b), sourceTime: "2026-10-08T04:01:00Z" }) }), /updated since this page was built/],
-  ["a detail file that is gone (the version was replaced) gives the same reload message", () => ({ status: 404, body: "" }), /updated since this page was built/],
+  ["a detail file that is not on the server (404) says so and offers to try again later", () => ({ status: 404, body: "" }), /not on the server yet/],
   ["a server error gives a try-again message and keeps the button", () => ({ status: 500, body: "" }), /could not be loaded just now/],
 ]) {
   const file = fs.readFileSync(path.join(data, "satcat/C1", big.o.file), "utf8");
@@ -156,6 +159,28 @@ for (const [name, answer, want] of [
   const msg = await page.textContent("#all-objects p.meta");
   check(name, want.test(msg) && !(await page.$("#all-objects-table")) && !!(await page.$("#show-all")), msg);
   check(`${name}: no page errors`, errors.filter((e) => /pageerror/.test(e)).length === 0, errors.join(" | "));
+  await ctx.close();
+}
+
+// ---- the United States page with a detail file as large as the real one (18,356 objects on 2026-10-07): the full table must stay quick
+{
+  const n = 18356, doc = JSON.stringify(bigDetail(n, "US", SATCAT_TIME));
+  const usFile = summary.owners.find((o) => o.code === "US").file;
+  const { ctx, page, errors } = await open(browser, "satellites-by-country/united-states/index.html", { override: (rel) => (rel.endsWith(`/${usFile}`) ? { status: 200, body: doc } : null) });
+  await page.evaluate(() => { window.__lt = []; new PerformanceObserver((l) => l.getEntries().forEach((e) => window.__lt.push(Math.round(e.duration)))).observe({ type: "longtask" }); });
+  const took = async (fn, until) => { await page.evaluate(() => { window.__lt = []; }); const t0 = Date.now(); await fn(); await page.waitForFunction(until, null, { timeout: 30000 }); await page.waitForTimeout(300); return { ms: Date.now() - t0, longest: await page.evaluate(() => Math.max(0, ...window.__lt)) }; };
+  const load = await took(() => page.click("#show-all"), `document.querySelectorAll("#all-objects-table tbody tr").length === ${OBJ_PAGE_SIZE}`);
+  const filter = await took(() => page.type("#obj-search", "star"), () => /of 18356 objects/.test(document.getElementById("obj-page").textContent) && !/18356 of 18356/.test(document.getElementById("obj-page").textContent));
+  await page.fill("#obj-search", ""); await page.waitForTimeout(400);
+  const sortName = await took(() => page.click('#all-objects-table th[data-col="1"] button'), () => document.querySelector('#all-objects-table th[data-col="1"]').getAttribute("aria-sort") === "descending");
+  const sortLaunch = await took(() => page.click('#all-objects-table th[data-col="5"] button'), () => document.querySelector('#all-objects-table th[data-col="5"]').getAttribute("aria-sort") === "descending");
+  const names = await page.evaluate(() => [...document.querySelectorAll("#all-objects-table tbody tr")].map((r) => r.cells[5].textContent));
+  console.log(`     large table (${n} objects): load ${load.ms} ms (longest task ${load.longest} ms), filter ${filter.ms} ms (${filter.longest}), sort by name ${sortName.ms} ms (${sortName.longest}), sort by launch ${sortLaunch.ms} ms (${sortLaunch.longest})`);
+  check(`a detail file of ${n} objects loads and shows its first page`, (await page.textContent("#obj-page")).startsWith(`Page 1 of ${Math.ceil(n / OBJ_PAGE_SIZE)}, ${n} of ${n} objects`), await page.textContent("#obj-page"));
+  check("with 18,356 objects a filter keystroke keeps every long task under 200 ms", filter.longest < 200, JSON.stringify(filter));
+  check("with 18,356 objects sorting by name and by launch date keeps every long task under 200 ms", sortName.longest < 200 && sortLaunch.longest < 200, JSON.stringify({ sortName, sortLaunch }));
+  check("the launch date sort orders the rows, newest first", names.every((x, i) => i === 0 || names[i - 1] >= x), names.slice(0, 3).join(", "));
+  check("no console errors with the large table", errors.length === 0, errors.join(" | "));
   await ctx.close();
 }
 
