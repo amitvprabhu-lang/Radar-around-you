@@ -21,8 +21,7 @@ function server(array $map, array &$log): callable { return function ($url) use 
 ob_start();  // the library logs what it does; the test output shows only results
 ok(radar_safe_path('launches/20261005T025703Z/launches.json'), 'a normal path is safe');
 ok(radar_safe_path('satellites/20261005T025703Z/swarm.bin'), 'a binary path is safe');
-ok(radar_safe_path('satcat/20261007T050000Z/o-us.json') && radar_safe_path('satcat/20261007T050000Z/o-o3b.json') && radar_safe_path('satcat/20261007T050000Z/summary.json'), 'the satcat feed files need no change to the live path rule');
-foreach (['quakes', 'events', 'aurora', 'kp', 'clouds', 'planes', 'satellites', 'catalogue', 'storms', 'fires', 'spaceweather', 'closeapproaches', 'launches', 'satcat'] as $id) { ok(radar_safe_path($id . '/20261005T025703Z/' . $id . '.json'), "the real feed name '$id' is accepted"); }
+foreach (['quakes', 'events', 'aurora', 'kp', 'clouds', 'planes', 'satellites', 'catalogue', 'storms', 'fires', 'spaceweather', 'closeapproaches', 'launches'] as $id) { ok(radar_safe_path($id . '/20261005T025703Z/' . $id . '.json'), "the real feed name '$id' is accepted"); }
 foreach (['../etc/passwd', '/etc/passwd', 'a/../b', 'launches/20261005T025703Z/../x.json', 'launches/2026/launches.json', 'launches/20261005T025703Z/.htaccess', 'launches/20261005T025703Z/a/b.json', 'Launches/20261005T025703Z/x.json', 'launches/20261005T025703Z/x y.json', "launches/20261005T025703Z/x.php\0.json", '_state/20261005T025703Z/x.json', 'launches/20261005T025703Z/'] as $bad) {
     ok(!radar_safe_path($bad), 'unsafe path rejected: ' . json_encode($bad));
 }
@@ -147,18 +146,12 @@ foreach (['earthquakes-today', 'aurora-tonight', 'asteroid-close-approaches', 't
 foreach (['pune', 'newyork', 'london', 'tromso', 'tokyo', 'sydney'] as $city) { ok(radar_safe_page_path("tonights-sky/$city/index.html"), "the sky page for '$city' is allowed"); ok(!radar_safe_page_path("tonights-sky/$city/x/index.html"), "a nested path under the sky page for '$city' is refused"); }
 ok(!radar_safe_page_path('tonights-sky/paris/index.html'), 'a city that is not in the list is refused');
 ok(!radar_safe_page_path('tonights-sky/PUNE/index.html'), 'upper case is refused');
-// the satellites and debris pages (2026-10-07): the ranking page and an exact list of 19 owner pages, no open slug
-ok(radar_safe_page_path('satellites-and-debris-by-country/index.html'), 'the satellites and debris ranking is allowed');
-foreach (['france', 'india', 'intelsat', 'european-space-agency', 'germany', 'italy', 'globalstar', 'canada', 'south-korea', 'ses', 'orbcomm', 'spain', 'eutelsat', 'turkiye', 'australia', 'taiwan', 'sea-launch', 'argentina', 'o3b-networks'] as $slug) { ok(radar_safe_page_path("satellites-by-country/$slug/index.html"), "the owner page '$slug' is allowed"); ok(!radar_safe_page_path("satellites-by-country/$slug/x/index.html"), "a nested path under '$slug' is refused"); ok(!radar_safe_page_path("satellites-by-country/$slug/index.html\n"), "a trailing newline after '$slug' is refused"); ok(!radar_safe_page_path("satellites-by-country/{$slug}x/index.html"), "a longer slug than '$slug' is refused"); }
-foreach (['satellites-and-debris-by-country/x/index.html', "satellites-and-debris-by-country/index.html\n", 'satellites-and-debris-by-country/index.html.bak', 'satellites-and-debris-by-country/india/index.html', 'satellites-by-country/tbd/index.html', 'satellites-by-country/russia/index.html', 'satellites-by-country/INDIA/index.html', 'satellites-by-country/o3b/index.html', 'satellites-by-country/korea/index.html', 'satellites-and-debris-by-country/', 'satellites-and-debris-by-country/index.php'] as $bad) {
-    ok(!radar_safe_page_path($bad), 'a path near the owner pages is refused: ' . json_encode($bad));
-}
 foreach (['about/index.html', 'x/index.html', 'moon-phases/index.html', 'how-many-satellites-in-orbit/index.html.bak', 'how-many-satellites-in-orbit/index.htm', "sitemap-live.xml\n", '../x/index.html', 'a/../b/index.html', '/etc/passwd', 'index.html', 'a/b/index.html', 'a/index.php', 'a/index.html.bak', '-a/index.html', 'A/index.html', 'sitemap.xml', 'live/manifest.json', '', "a/index.html\n", '.htaccess', 'a//index.html',
     'satellites-by-country/a/b/index.html', 'satellites-by-country/UPPER/index.html', 'satellites-by-country/x.php', 'satellites-by-country//index.html',
     'satellites-by-country/../about/index.html', 'satellites-by-country/-japan/index.html', 'satellites-by-country/japan-/index.html', 'satellites-by-country/united--states/index.html',
     'satellites-by-country/japan2/index.html', 'satellites-by-country/japan/index.html.bak', "satellites-by-country/japan/index.html\n", 'satellites-by-country/japan/', 'satellites-by-country/japan/x.html',
     'satellites-by-country/index.html.bak', 'satellites-by-country', 'satellites-by-country/', 'Satellites-by-country/japan/index.html', 'x/satellites-by-country/japan/index.html',
-    'satellites-by-country/united-states-of-america/index.html', 'satellites-by-country/chinaa/index.html', 'satellites-by-country/japan-x/index.html'] as $bad) {
+    'satellites-by-country/france/index.html', 'satellites-by-country/italy/index.html', 'satellites-by-country/united-states-of-america/index.html', 'satellites-by-country/chinaa/index.html', 'satellites-by-country/japan-x/index.html'] as $bad) {
     ok(!radar_safe_page_path($bad), 'unsafe page path rejected: ' . json_encode($bad));
 }
 $PAGE = '<!doctype html><title>t</title><p>7 active satellites</p>'; $SITEMAP = '<?xml version="1.0"?><urlset/>';
@@ -215,16 +208,6 @@ $evil3 = $P1 + ['satellites-by-country/a/b/index.html' => 'x', 'satellites-by-co
 $root4 = tmpdir(); $r = radar_sync_pages(BASE, $root4, $srv($evil3, $log));
 ok(!$r['ok'] && count($r['failed']) === 2, 'deeper or uppercase country paths are refused');
 ok(!is_dir($root4 . '/satellites-by-country'), 'and no folder is made for them');
-// a page the server's lib.php does not allow yet (as the owner pages are for a server still on the lib.php before 2026-10-07) is logged and
-// left out, and every allowed page is still copied: the sync does not stop and nothing is written for the refused path
-$root4b = tmpdir(); $log = []; $logFile = $root4b . '/pull.log';
-$newer = $P3 + ['satellites-by-country/not-allowed-yet/index.html' => '<p>new owner</p>'];
-$r = radar_sync_pages(BASE, $root4b, $srv($newer, $log), $logFile);
-ok(!$r['ok'] && $r['reason'] === 'files' && count($r['failed']) === 1, 'a page path the server does not allow yet is reported as one failure');
-same(count($r['changed']), 5, 'and every allowed page is still written');
-ok(strpos((string) file_get_contents($logFile), 'not-allowed-yet') !== false && strpos((string) file_get_contents($logFile), 'not an allowed page') !== false, 'the log names the refused path');
-ok(!is_dir($root4b . '/satellites-by-country/not-allowed-yet'), 'no folder is made for the refused path');
-ok(!in_array('satellites-by-country/not-allowed-yet/index.html', array_map(function ($u) { return substr($u, strlen(BASE)); }, $log), true), 'the refused page is never downloaded');
 
 // ---- the pages sync hands back the parsed index and the paths it actually wrote (for IndexNow), next to its old fields
 $root5 = tmpdir(); $log = [];
@@ -299,7 +282,7 @@ foreach (['missing' => null, 'different' => 'ffffffffffffffffffffffffffffffff', 
 
 // refused paths are never submitted
 $site = inowSite(); $work = tmpdir(); $calls = [];
-$r = radar_indexnow(inowIndex(), $site, ['about/index.html', '../evil/index.html', 'satellites-by-country/atlantis/index.html', "satellites-by-country/japan/index.html\n", 'live/manifest.json', 'index.html', 42, 'how-many-satellites-in-orbit/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
+$r = radar_indexnow(inowIndex(), $site, ['about/index.html', '../evil/index.html', 'satellites-by-country/france/index.html', "satellites-by-country/japan/index.html\n", 'live/manifest.json', 'index.html', 42, 'how-many-satellites-in-orbit/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
 same(json_decode($calls[0]['body'], true)['urlList'], ['https://example.org/how-many-satellites-in-orbit/'], 'only the allowed page is submitted, never a refused path');
 $calls = [];
 $r = radar_indexnow(inowIndex(), $site, ['about/index.html', '../evil/index.html'], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0 + 99999);
@@ -412,7 +395,7 @@ foreach (['{"sent":{},"pending":["how-many-satellites-in-orbit/index.html"', '{"
 // send times and pending entries for paths outside the allowed list are dropped and never sent
 $site = inowSite(); $work = tmpdir(); $calls = [];
 file_put_contents($work . '/indexnow.json', json_encode(['sent' => ['about/index.html' => T0 - 10, 'how-many-satellites-in-orbit/index.html' => T0 - 30000, 'sitemap-live.xml' => T0 - 10],
-    'pending' => ['about/index.html', '../evil/index.html', 'sitemap-live.xml', 42, ['x'], 'satellites-by-country/atlantis/index.html', 'satellites-by-country/japan/index.html', 'satellites-by-country/japan/index.html']]));
+    'pending' => ['about/index.html', '../evil/index.html', 'sitemap-live.xml', 42, ['x'], 'satellites-by-country/france/index.html', 'satellites-by-country/japan/index.html', 'satellites-by-country/japan/index.html']]));
 $r = radar_indexnow(inowIndex(), $site, [], inowHttp($calls), $work . '/pull.log', $work . '/indexnow.json', T0);
 same(json_decode($calls[0]['body'], true)['urlList'], ['https://example.org/satellites-by-country/japan/'], 'only the allowed pending page is sent, once');
 same(json_decode((string) file_get_contents($work . '/indexnow.json'), true), ['sent' => ['how-many-satellites-in-orbit/index.html' => T0 - 30000, 'satellites-by-country/japan/index.html' => T0], 'pending' => [], 'retry' => []], 'entries for paths outside the allowed list are dropped from the state');
