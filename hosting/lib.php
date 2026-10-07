@@ -218,11 +218,14 @@ function radar_prune(string $dest, array $keep): int
 // is used so a trailing newline cannot slip through.
 // The slugs must match COUNTRY_PAGES in site/satcountry.mjs (a unit test, test/satcountry.test.js, checks they match). Adding a country
 // page means adding its slug here as well, and the owner copying this lib.php to the server again; until then the server refuses it.
-const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the largest live page (the United States page with its map) is about 240 KB
+// Added 2026-10-07 (docs/superpowers/specs/2026-10-07-country-objects-design.md): "satellites-and-debris-by-country/index.html" and
+// "satellites-by-country/<slug>/index.html" for the 19 owner pages of NEW_OWNER_PAGES in site/objects.mjs, an exact list again (a unit test,
+// test/objects.test.js, checks it matches). A server still on the older lib.php refuses these paths, logs them and copies every other page.
+const RADAR_MAX_PAGE_BYTES = 2 * 1024 * 1024;   // OURS: the largest live page (the United States page with its map and objects) is about 270 KB
 
 function radar_safe_page_path(string $p): bool
 {
-    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/(?:united-states|china|united-kingdom|cis-former-ussr|japan)/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now|starlink-tracker|natural-disasters-now|rocket-launches|iss-today|tonights-sky)/index\.html|tonights-sky/(?:pune|newyork|london|tromso|tokyo|sydney)/index\.html)\z#', $p);
+    return (bool) preg_match('#^(?:how-many-satellites-in-orbit/index\.html|sitemap-live\.xml|satellites-by-country/index\.html|satellites-by-country/(?:united-states|china|united-kingdom|cis-former-ussr|japan)/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now|starlink-tracker|natural-disasters-now|rocket-launches|iss-today|tonights-sky)/index\.html|tonights-sky/(?:pune|newyork|london|tromso|tokyo|sydney)/index\.html|satellites-and-debris-by-country/index\.html|satellites-by-country/(?:france|india|intelsat|european-space-agency|germany|italy|globalstar|canada|south-korea|ses|orbcomm|spain|eutelsat|turkiye|australia|taiwan|sea-launch|argentina|o3b-networks)/index\.html)\z#', $p);
 }
 
 // Copy the pages named in $base/pages/index.json into $destRoot (the site's public folder, which must already exist; the folders inside it,
