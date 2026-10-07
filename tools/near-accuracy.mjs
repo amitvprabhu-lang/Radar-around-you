@@ -18,10 +18,10 @@ import { fileURLToPath } from "node:url";
 import { json2satrec, sgp4, gstime } from "satellite.js";
 import { decodeSwarm, swarmPositionEcef } from "../src/core.js";
 import { rowToOmm } from "../src/sgp4.js";
-import { swarmOmm, groundDistanceKm, uncertaintyBand, U_HOURS, U_TABLE } from "../site/near.mjs";
+import { swarmOmm, groundDistanceKm, uncertaintyBand, U_HOURS, POSITION_P95 } from "../site/near.mjs";
 
 export const COLS = ["id", "epoch", "n", "e", "i", "raan", "argp", "ma", "bstar", "ndot", "nddot"];
-export const BANDS = Object.keys(U_TABLE);
+export const BANDS = Object.keys(POSITION_P95);
 // OURS: how many element sets of each band the committed sample keeps (all of a band when it has fewer)
 export const SAMPLE_SIZES = { "low-under-450": 150, "low-450-600": 250, "low-600-1000": 120, "low-1000-2000": 100, medium: 80, geostationary: 80, highElliptical: 60, beyond: 20 };
 export const FROM_DATA_HOURS = [0, 6, 24];
@@ -174,17 +174,22 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const ab = sw.buffer.slice(sw.byteOffset, sw.byteOffset + sw.byteLength);
     const F = new Float32Array(ab, 0, meta.count * 2), U = new Uint16Array(ab, meta.count * 8, meta.count * 6);
     const I = new Uint32Array(ids.buffer.slice(ids.byteOffset, ids.byteOffset + ids.byteLength));
-    old = { refMs: meta.ref, taken: meta.taken, rows: [] };
+    old = { refMs: meta.ref, taken: meta.taken, rows: [], precise: JSON.parse(fs.readFileSync(path.join(oldDir, "precise.json"), "utf8")) };
     for (let k = 0; k < meta.count; k++) old.rows.push([I[k], F[2 * k], F[2 * k + 1], U[6 * k], U[6 * k + 1], U[6 * k + 2], U[6 * k + 3], U[6 * k + 4]]);
   }
   const report = { refIso: new Date(refMs).toISOString(), sets: rows.length, bandCounts: counts, full, ahead: old ? measureAhead(rows, old) : null };
   console.log(JSON.stringify(report, (k, v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v), 1));
   if (process.argv.includes("--write-sample")) {
+    // the satellites that had full element sets in the older data are all added (their own error is measured from them)
+    const added = [];
+    if (old) { const have = new Set(sample.map((r) => r[0])), byId = new Map(rows.map((r) => [r[0], r])); for (const pr of old.precise.rows) if (!have.has(pr[0]) && byId.has(pr[0])) { sample.push(byId.get(pr[0])); have.add(pr[0]); added.push(pr[0]); } sample.sort((x, y) => x[0] - y[0]); }
     const ids = new Set(sample.map((r) => r[0]));
     const out = {
       note: "A stratified sample of CelesTrak's GP list GROUP=active (FORMAT=json), for test/near-accuracy.test.js. Made by tools/near-accuracy.mjs. Columns as public/precise.json.",
       source: "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json", downloadedAt: new Date(refMs).toISOString(), refMs, bandCounts: counts, cols: COLS, rows: sample,
-      old: old ? { note: "The same satellites as packed in the published swarm.bin of an older collection: [id, epoch offset min, mean motion rad/min, e, i, node, perigee, mean anomaly as uint16]", taken: old.taken, refMs: old.refMs, rows: old.rows.filter((r) => ids.has(r[0])) } : null,
+      addedForFullSets: { note: "Not part of the stratified sample: added because the older collection had their full element sets. The position measurement leaves them out.", ids: added },
+      old: old ? { note: "The same satellites as packed in the published swarm.bin of an older collection: [id, epoch offset min, mean motion rad/min, e, i, node, perigee, mean anomaly as uint16]", taken: old.taken, refMs: old.refMs, rows: old.rows.filter((r) => ids.has(r[0])),
+        precise: { note: "The full element sets of the older collection's precise.json for these satellites", cols: old.precise.cols, rows: old.precise.rows.filter((r) => ids.has(r[0])) } } : null,
     };
     const f = fileURLToPath(new URL("../test/fixtures/near-accuracy.json", import.meta.url));
     fs.writeFileSync(f, JSON.stringify(out) + "\n");

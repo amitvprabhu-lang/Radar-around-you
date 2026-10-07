@@ -13,18 +13,25 @@ import { rowToOmm } from "../src/sgp4.js";
 import { runSteps } from "../src/schedule.js";
 import { orbitClass, ACTIVE_STATUSES } from "./satcount.mjs";
 import { DEFAULT_RADIUS_KM, WINDOW_HOURS, STALE_HOURS, TABLE_CAP } from "./near-ui.mjs";
+import { PASS_ERRORS } from "./near-errors.mjs";
+
+export { PASS_ERRORS };
 
 export { NEAR_FILE, RADII_KM, DEFAULT_RADIUS_KM, WINDOW_HOURS, STALE_HOURS, TABLE_CAP, capFraction, capAreaKm2, EARTH_AREA_KM2, expectedAtOnce } from "./near-ui.mjs";
 const ACTIVE = new Set(ACTIVE_STATUSES);
 
 // ---------- Uncertainty ----------
 
-// The 95th percentile of the ground distance between our calculation (SGP4 from the swarm's mean elements, no drag terms) and full SGP4 from
-// the same CelesTrak element sets, by height band and hours since the element set's epoch. Measured on 16,689 element sets of CelesTrak's
-// active list downloaded on 2026-10-07 (docs/satellites-near-me-sources.md); test/near-accuracy.test.js checks a committed sample against
-// these numbers. Rounded up to whole km, at least 1 km, and never falling with time. Between the hours the value is interpolated.
+// The uncertainty the page prints and classifies with is the measured error of a PASS (site/near-errors.mjs, written by
+// tools/near-pass-errors.mjs): how far the closest ground distance and the time of closest approach of our passes were from those of the
+// truth, for passes predicted from older published data and checked against newer element sets. An error along the track moves when a pass
+// happens far more than how close it comes, so the two are given separately.
+//
+// POSITION_P95 below is a different measurement, kept because it explains the choice of model: the 95th percentile of the distance between
+// the ground point of our model and of full SGP4 from the same element sets at the same moment (mostly along the track), by height band and
+// hours since the epoch (tools/near-accuracy.mjs, test/near-accuracy.test.js). It is not used to classify passes.
 export const U_HOURS = [0, 6, 12, 24, 36, 48, 72, 96];
-export const U_TABLE = {
+export const POSITION_P95 = {
   "low-under-450": [1, 17, 66, 259, 580, 997, 2107, 3873],
   "low-450-600": [1, 1, 3, 11, 24, 42, 95, 168],
   "low-600-1000": [1, 1, 1, 2, 3, 5, 10, 18],
@@ -34,7 +41,7 @@ export const U_TABLE = {
   highElliptical: [1, 1, 1, 1, 2, 2, 2, 4],
   beyond: [1, 1, 1, 1, 1, 1, 1, 1],
 };
-// The measurement behind U_TABLE and the page's statements (tools/near-accuracy.mjs on the whole download): kept here so the page prints
+// The measurement behind POSITION_P95 and the page's statements (tools/near-accuracy.mjs on the whole download): kept here so the page prints
 // the same figures the sources document records, and a test checks the committed sample still agrees.
 export const ACCURACY = {
   downloadedAt: "2026-10-07T04:38:29Z", sets: 16689,
@@ -46,10 +53,14 @@ export const ACCURACY = {
   },
   // the second check: the published data of 2026-10-05 08:14 UTC propagated to the epochs of the 2026-10-07 element sets, 36 to 48 hours ahead
   ahead: { taken: "2026-10-05T08:14:54Z", all: [10456, 9.5, 127], "low-450-600": [7349, 12.2, 48], "low-600-1000": [830, 0.8, 18], "low-under-450": [963, 57, 1335] },
+  // the marks checked against the newer element sets (tools/near-pass-errors.mjs --marks, window 36 to 48 hours after the older data, 12
+  // places): [truth passes, share marked within, share marked within or borderline, share of "within" rows truly within, share of
+  // borderline rows truly within the distance plus their uncertainty, share of borderline rows truly within the distance]
+  marks: { 25: [6780, 0.961, 0.976, 0.974, 0.902, 0.101], 100: [26165, 0.99, 0.994, 0.99, 0.904, 0.094], 500: [120388, 0.996, 0.997, 0.997, 0.893, 0.109] },
 };
 export const U_BAND_LABELS = {
   "low-under-450": "below 450 km", "low-450-600": "450 to 600 km", "low-600-1000": "600 to 1,000 km", "low-1000-2000": "1,000 to 2,000 km",
-  medium: "medium Earth orbit", geostationary: "geostationary belt", highElliptical: "high elliptical", beyond: "beyond the geostationary belt",
+  medium: "medium Earth orbit", geostationary: "geosynchronous, inclined", highElliptical: "high elliptical", beyond: "beyond the geostationary belt",
 };
 
 export function uncertaintyBand(nRadPerMin, ecc) {
@@ -59,8 +70,9 @@ export function uncertaintyBand(nRadPerMin, ecc) {
   return alt < 450 ? "low-under-450" : alt < 600 ? "low-450-600" : alt < 1000 ? "low-600-1000" : "low-1000-2000";
 }
 
-export function uncertaintyKm(band, hoursSinceEpoch) {
-  const row = U_TABLE[band] || U_TABLE["low-under-450"];
+// The position error of the model alone (POSITION_P95), interpolated between the hours; for the accuracy explanation and its test.
+export function positionErrorKm(band, hoursSinceEpoch) {
+  const row = POSITION_P95[band] || POSITION_P95["low-under-450"];
   const h = Math.max(0, hoursSinceEpoch);
   if (h >= U_HOURS[U_HOURS.length - 1]) return row[row.length - 1];
   let k = 0;
@@ -68,6 +80,21 @@ export function uncertaintyKm(band, hoursSinceEpoch) {
   const f = (h - U_HOURS[k]) / (U_HOURS[k + 1] - U_HOURS[k]);
   return row[k] + f * (row[k + 1] - row[k]);
 }
+
+// The measured pass error for a satellite at a pass `ageH` hours after its element epoch: { km, s } (95th percentiles of the closest-distance
+// error and of the time error). kind: "full" for a full element set, "mean" for the swarm's packed elements. A band the measurement has no
+// row for takes the kind's "other" row (all its bands together). A full element set below 450 km, or of a satellite launched in the last 30
+// days, is never given less than the packed elements' error for its band: those are the satellites that are still raising their orbits.
+export function passError(band, kind, ageH, { floorMean = false, tables = PASS_ERRORS } = {}) {
+  const t = tables.tables[kind] || tables.tables.mean;
+  const row = t[band] || t.other;
+  const found = tables.ageEdges.findIndex((e) => ageH < e);
+  const idx = found < 0 ? tables.ageEdges.length : found;
+  let km = row.km[idx], s = row.s[idx];
+  if (kind === "full" && floorMean) { const m = passError(band, "mean", ageH, { tables }); km = Math.max(km, m.km); s = Math.max(s, m.s); }
+  return { km, s };
+}
+export const satPassError = (sat, ageH) => passError(sat.band, sat.exact ? "full" : "mean", ageH, { floorMean: sat.exact && (sat.band === "low-under-450" || sat.recent) });
 
 // within: the central estimate is inside the radius. borderline: outside it by less than the uncertainty. uncertain: inside it, but the
 // uncertainty is as large as the radius itself, so the answer could be anything; those are counted, not listed. null: not near.
@@ -113,10 +140,16 @@ export function swarmOmm(f32, u16, k, refMs, noradId) {
 }
 
 const epochMsOf = (rec) => (rec.jdsatepoch - 2440587.5) * 86400000;
+// OURS: the inclination under which a geostationary-belt satellite is treated as standing still over the equator
+export const GEO_MAX_INCL_DEG = 2;
+// OURS: "recently launched" for the floor of the uncertainty (precise.json lists everything launched in the last 30 days, pipeline/pack.py)
+const RECENT_DAYS = 30;
 
 // The satellites the page works with: active payloads (the count page's definition), each with its SGP4 record. Element sets older than
-// STALE_HOURS at `atMs`, and records SGP4 refuses, are counted and left out. Geostationary-belt satellites are kept apart (their ground
-// point hardly moves, so they have no "passes"); the page lists them separately when they are near.
+// STALE_HOURS at `atMs`, and records SGP4 refuses, are counted and left out. Geostationary satellites (in the geostationary belt and
+// inclined under GEO_MAX_INCL_DEG) are kept apart: their ground point stays near one point of the equator, so they have no passes; the page
+// lists them separately when they are near. Inclined geosynchronous satellites (QZSS, BeiDou IGSO, IRNSS and others) swing far north and
+// south each day and go through the pass search like any other.
 export function prepareSatellites(feed, atMs, opts = {}) {
   return runSteps(prepareSatellitesSteps(feed, atMs, opts));
 }
@@ -146,9 +179,10 @@ export function* prepareSatellitesSteps(feed, atMs, { staleHours = STALE_HOURS }
       k, id, name: (names[k] || "").trim() || `NORAD ${id}`, owner: d.owner ? meta.owners[d.owner - 1] || null : null,
       purpose: meta.purposes ? meta.purposes[d.purpose] || "Unspecified" : "Unspecified", launchDay: d.launchDay,
       orbit, band: uncertaintyBand(n, e), starlink: u16[6 * k + 5] === 1, exact: !!row, rec, epochMs,
+      recent: d.launchDay > 0 && atMs - (Date.UTC(1957, 9, 4) + (d.launchDay - 1) * 86400000) <= RECENT_DAYS * 86400000,
     };
     if (row) counts.exact++;
-    if (orbit === "geostationary") { counts.geostationary++; geo.push(sat); } else sats.push(sat);
+    if (orbit === "geostationary" && rec.inclo < GEO_MAX_INCL_DEG * DEG) { counts.geostationary++; geo.push(sat); } else sats.push(sat);
   }
   counts.used = sats.length + geo.length;
   return { sats, geo, counts };
@@ -176,6 +210,13 @@ export function groundDistanceKm(place, ecef) {
   return { km: haversineKm(place.lat, place.lon, g.lat, g.lon), lat: g.lat, lon: g.lon, hKm: g.hKm };
 }
 
+// The pass error at a moment as the rows carry it: u (km, distance) and us (s, time)
+const errorsAt = (sat, ageH) => { const e = satPassError(sat, ageH); return { u: e.km, us: e.s }; };
+
+// The uncertainty of where the ground point is at a given moment (for "right now"): the measured closest-distance error plus the ground
+// distance the satellite covers in the measured time error (its speed scaled down to the ground).
+export const nowUncertaintyKm = (d) => d.u + (d.us * d.kms * EARTH_RADIUS_KM) / (EARTH_RADIUS_KM + Math.max(0, d.hKm));
+
 // Everything the table shows about one moment.
 export function describeAt(sat, place, tMs) {
   const date = new Date(tMs);
@@ -186,7 +227,7 @@ export function describeAt(sat, place, tMs) {
   const ageH = (tMs - sat.epochMs) / 3600000;
   return {
     t: tMs, km: g.km, lat: g.lat, lon: g.lon, hKm: g.hKm, el: look.el, az: look.az, lit: isSunlit(st.eci, sunUnitVectorEci(date)),
-    kms: Math.hypot(st.vel.x, st.vel.y, st.vel.z), ageH, u: sat.exact ? 0 : uncertaintyKm(sat.band, ageH),
+    kms: Math.hypot(st.vel.x, st.vel.y, st.vel.z), ageH, ...errorsAt(sat, ageH),
   };
 }
 
@@ -340,26 +381,29 @@ export function* searchNear(prepared, place, { startMs, hours = WINDOW_HOURS, ra
       const p = st0.ecef, r = Math.hypot(p.x, p.y, p.z);
       if ((p.x * P.x + p.y * P.y + p.z * P.z) / r >= cosNear) {
         const here = describeAt(sat, place, t0);
-        const st = here && classify(here.km, here.u, radiusKm);
+        // at a fixed moment an error in time moves the ground point along its track: the uncertainty of the position now is the distance
+        // error plus the ground distance covered in the time error
+        const u = here && nowUncertaintyKm(here);
+        const st = here && classify(here.km, u, radiusKm);
         if (st === "uncertain") uncertainNow++;
-        else if (st) now.push({ sat, ...here, status: st });
+        else if (st) now.push({ sat, ...here, u, status: st });
       }
     }
     // search out to the radius plus the largest uncertainty a listed pass can have (less than the radius), so borderline passes are found
-    const uEnd = sat.exact ? 0 : uncertaintyKm(sat.band, (t1 - sat.epochMs) / 3600000);
+    const uEnd = satPassError(sat, (t1 - sat.epochMs) / 3600000).km;
     for (const m of closestApproaches(sat, place, t0, t1, radiusKm + Math.min(uEnd, radiusKm), { P, gmst0 })) {
-      const u = sat.exact ? 0 : uncertaintyKm(sat.band, (m.t - sat.epochMs) / 3600000);
-      const st = classify(m.km, u, radiusKm);
+      const e = satPassError(sat, (m.t - sat.epochMs) / 3600000);
+      const st = classify(m.km, e.km, radiusKm);
       if (st === "uncertain") uncertainPasses++;
-      else if (st) passes.push({ sat, t: m.t, km: m.km, u, status: st });
+      else if (st) passes.push({ sat, t: m.t, km: m.km, u: e.km, us: e.s, status: st });
     }
     done++;
     yield { done, total };
   }
-  // the geostationary belt: sampled every 30 minutes (their ground points move a few hundred km a day at most)
+  // geostationary satellites: sampled every 10 minutes (inclined under GEO_MAX_INCL_DEG, their ground points move at most a few km a minute)
   for (const sat of prepared.geo) {
     let minKm = Infinity, minT = t0, max = 0, ok = true;
-    for (let t = t0; t <= t1; t += 1800000) {
+    for (let t = t0; t <= t1; t += 600000) {
       const s = stateAt(sat, t);
       if (!s) { ok = false; break; }
       const km = groundDistanceKm(place, s.ecef).km;
@@ -385,7 +429,7 @@ export function* searchNear(prepared, place, { startMs, hours = WINDOW_HOURS, ra
 // its moment of closest approach (height, speed, direction from the place, sunlight). The passes come from searchNear, in time order.
 export function tableRows(passes, place, { order = "time", cap = TABLE_CAP } = {}) {
   const list = order === "distance" ? [...passes].sort((a, b) => a.km - b.km || a.t - b.t) : passes;
-  return list.slice(0, cap).map((p) => ({ ...describeAt(p.sat, place, p.t), sat: p.sat, km: p.km, u: p.u, status: p.status }));
+  return list.slice(0, cap).map((p) => ({ ...describeAt(p.sat, place, p.t), sat: p.sat, km: p.km, u: p.u, us: p.us, status: p.status }));
 }
 
 // The ground track of a pass, `minutes` either side of its closest approach, as [lat, lon] points every `stepSec` seconds (for the map).

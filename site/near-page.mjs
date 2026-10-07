@@ -7,7 +7,7 @@ import { decodeCoast } from "../src/data.js";
 import {
   RADII_KM, DEFAULT_RADIUS_KM, DEFAULT_PLACE, STORAGE_KEY, parseQuery, placeQuery, storedValue, restoreStored, checkTyped, cleanName, cleanTimeZone, coordName,
   fmtInt, fmtKm, shortDistance, plural, lookText, utcText, zoneText, isoUtc, dayTimeUtc, announcement, expectedText, expectedAtOnce, mapSvg,
-  chooseSource, pollDelayMs, sourceText, sourceWhen, SOURCE_REASONS,
+  chooseSource, pollDelayMs, sourceText, sourceWhen, SOURCE_REASONS, capFraction, pctText, staleState, timeErrorText, MIN_USABLE,
 } from "./near-ui.mjs";
 import { loadManifest } from "../src/live.js";
 
@@ -136,7 +136,9 @@ function start() {
 
   // ---------------------------------------------------------------- the calculation
   const prog = $("nm-progress"), bar = $("nm-bar"), stage = $("nm-stage"), out = $("nm-out"), live = $("nm-announce");
-  let worker = null, mainThread = null, runId = 0, gotAnswer = false, updating = false;
+  let worker = null, mainThread = null, runId = 0, gotAnswer = false, updating = false, pendingMsg = null, errored = false;
+  // live versions whose files could not be downloaded: not asked for again in this visit (the worker keeps the same list)
+  const failedVersions = new Set();
 
   // ---------------------------------------------------------------- new data: look at the manifest now and then
   // Only while the page is visible, at the manifest's pollSec (never under 300 s), longer after failures (pollDelayMs). When the live
@@ -153,9 +155,12 @@ function start() {
     else {
       pollFails = 0;
       if (man.pollSec) pollSec = man.pollSec;
+      // after an error, try again with whatever the manifest offers now
+      if (errored) { updating = true; calculate(); return; }
       if (last && last.info.bundledTaken) {
         const pick = chooseSource(man, Date.parse(last.info.bundledTaken), base + "live/", Date.now());
-        if (pick.source === "live" && (last.info.source !== "live" || pick.version !== last.info.version)) { updating = true; calculate(); return; }
+        const fresh = pick.source === "live" && !failedVersions.has(pick.version) && (last.info.source !== "live" || pick.version !== last.info.version);
+        if (fresh) { updating = true; calculate(); return; }
       }
     }
     schedulePoll();
@@ -177,21 +182,31 @@ function start() {
     } else if (m.type === "result") {
       gotAnswer = true;
       prog.hidden = true;
-      const prev = last, wasUpdate = updating;
-      updating = false;
+      const prev = last, wasUpdate = updating, wasError = errored;
+      updating = false; errored = false;
+      const newFailure = !!m.info.failedVersion && !failedVersions.has(m.info.failedVersion);
+      if (m.info.failedVersion) failedVersions.add(m.info.failedVersion);
+      const changed = !!prev && (prev.info.source !== m.info.source || prev.info.version !== m.info.version);
+      // a look for new data that ended with the same data (for example a new version whose download failed): nothing to redraw or say;
+      // the failure counts towards the longer wait before the next look
+      if (wasUpdate && !changed && !wasError) { if (newFailure) pollFails++; schedulePoll(); return; }
       // new data from the collector: redraw in place, keeping the scroll position, and say so once
       const y = window.scrollY;
       last = m;
       draw();
-      const changed = !!prev && (prev.info.source !== m.info.source || prev.info.version !== m.info.version);
       if (wasUpdate) window.scrollTo(0, y);
-      const done = announcement({ placeName: m.place.name, radiusKm: m.radiusKm, now: m.now.length, within: m.within, borderline: m.borderline });
-      live.textContent = changed ? `Updated with ${sourceText(m.info)}. ${done}` : done;
+      const done = announcement({ placeName: m.place.name, radiusKm: m.radiusKm, now: m.now.length, within: m.within, borderline: m.borderline, usable: m.info.counts.used >= MIN_USABLE });
+      live.textContent = changed && wasUpdate ? `Updated with ${sourceText(m.info)}. ${done}` : done;
       if (m.info.pollSec) pollSec = m.info.pollSec;
       schedulePoll();
     } else if (m.type === "error") {
       prog.hidden = true;
-      live.textContent = "The satellite data could not be loaded or worked through, so there is no answer this time. Reload the page to try again.";
+      errored = true; updating = false;
+      // the old answer would no longer match the page's state: it is removed, and the page tries again at the next look for new data
+      last = null; out.textContent = ""; out.hidden = true;
+      live.textContent = "The satellite data could not be loaded or worked through, so there is no answer this time. The page tries again in a few minutes, or reload it.";
+      pollFails++;
+      schedulePoll();
     }
   }
   function useMainThread() {
@@ -210,13 +225,15 @@ function start() {
     gotAnswer = false;
     if (!updating) showAll = false;  // a new place or distance starts with the short table; new data keeps what the visitor opened
     const msg = { type: "run", id: runId, base, place: { name: place.name, lat: place.lat, lon: place.lon, tz: place.tz || null }, radiusKm, startMs: Date.now() };
+    pendingMsg = msg;
     prog.hidden = false; bar.removeAttribute("value"); stage.textContent = "Starting...";
     if (!mainThread && typeof Worker === "function") {
       try {
         if (!worker) {
           worker = new Worker(calcUrl);
           worker.onmessage = (e) => handle(e.data);
-          worker.onerror = (e) => { if (e && e.preventDefault) e.preventDefault(); if (!gotAnswer) { worker.terminate(); worker = null; fallback(msg); } };
+          // a worker that cannot start: the newest request goes to the main thread instead
+          worker.onerror = (e) => { if (e && e.preventDefault) e.preventDefault(); if (!gotAnswer) { worker.terminate(); worker = null; fallback(pendingMsg); } };
         }
         worker.postMessage(msg);
         return;
@@ -249,7 +266,9 @@ function start() {
   function row(r, startMs, nowRow = false) {
     const s = last.sats[r.k];
     const tz = zone() || deviceZone || "UTC";
-    const when = el("td", { class: "nm-when" }, el("time", { datetime: isoUtc(r.t) }, nowRow ? "Now" : utcText(r.t, startMs).replace(/ UTC$/, "")), el("br"), small(zoneText(r.t, tz)));
+    const when = el("td", { class: "nm-when" }, el("time", { datetime: isoUtc(r.t) }, nowRow ? "Now" : utcText(r.t, startMs).replace(/ UTC$/, "")));
+    if (!nowRow) when.append(" ", small(timeErrorText(r.us)));
+    when.append(el("br"), small(zoneText(r.t, tz)));
     const dist = el("td", { class: "nm-dist" }, shortDistance(r.km, r.u), " ", r.status === "within" ? chip("within", "within") : chip("borderline", "border"));
     if (s.exact) dist.append(el("br"), small("full orbit data"));
     const look = el("td", { class: "nm-when" }, r.el > 0 ? lookText(r.el, r.az) : `below the horizon`, el("br"), small(r.lit ? "in sunlight" : "in Earth's shadow"));
@@ -258,9 +277,9 @@ function start() {
     return el("tr", {}, when, satCell(s), dist, look, hs, orbit);
   }
   const head = (cols) => el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { scope: "col" }, c))));
-  const COLS = () => ["When (UTC)", "Satellite", "Closest ground distance", "From the place", "Height, speed", "Orbit, purpose"];
-  const tableOf = (caption, rows) => el("div", { class: "tablewrap", role: "region", tabindex: "0", "aria-label": caption }, el("table", { class: "nm-table" }, el("caption", {}, caption), head(COLS()), el("tbody", {}, ...rows)));
-  const tableNote = () => el("p", { class: "meta" }, `Times in UTC, with ${zone() ? `the place's local time (${zone()})` : `your device's time (${deviceZone || "UTC"}); the place's own time zone is not known for typed coordinates`} below. Owners as the catalogue records them. "±" is the uncertainty of the ground distance, explained under How accurate is it.`);
+  const COLS = (now = false) => ["When (UTC)", "Satellite", now ? "Ground distance now" : "Closest ground distance", "From the place", "Height, speed", "Orbit, purpose"];
+  const tableOf = (caption, rows, now = false) => el("div", { class: "tablewrap", role: "region", tabindex: "0", "aria-label": caption }, el("table", { class: now ? "nm-table nm-now" : "nm-table" }, el("caption", {}, caption), head(COLS(now)), el("tbody", {}, ...rows)));
+  const tableNote = () => el("p", { class: "meta" }, `Times in UTC, with ${zone() ? `the place's local time (${zone()})` : `your device's time (${deviceZone || "UTC"}); the place's own time zone is not known for typed coordinates`} below. Owners as the catalogue records them. The "±" after a time and after a distance are the measured uncertainties of the time of closest approach and of the closest ground distance, explained under How accurate is it.`);
   // OURS: the table first shows this many rows; a button shows the rest of the hundred
   const FIRST_ROWS = 25;
   let showAll = false;
@@ -277,16 +296,25 @@ function start() {
       : ` The live feed was not used: ${SOURCE_REASONS[m.info.reason] || "it was not available"}.`;
     const t = el("time", { datetime: isoUtc(fetched) }, sourceWhen(m.info));
     out.append(el("p", { class: "nm-source", id: "nm-source" }, ...(m.info.source === "live" ? ["Using orbit data from ", t, ", live feed"] : ["Using the bundled snapshot of ", t]),
-      ` (CelesTrak element sets collected by this site). Worked out at `, el("time", { datetime: isoUtc(m.startMs) }, dayTimeUtc(m.startMs)), ` for ${fmtInt(c.used)} active satellites.${why} The page looks for newer data every few minutes while it is open.`));
+      ` (CelesTrak element sets collected by this site). Worked out at `, el("time", { datetime: isoUtc(m.startMs) }, dayTimeUtc(m.startMs)), ` for ${fmtInt(c.used)} of the ${fmtInt(c.active)} active satellites in the data.${why} The page looks for newer data every few minutes while it is open.`));
+
+    // old data: a loud warning when much of it is too old, and no answer at all when too little is left
+    const old = staleState(c);
+    if (old.level === "none") {
+      out.append(el("h3", { id: "nm-old-h" }, "The orbit data is too old for an answer"),
+        el("p", { class: "note warn", id: "nm-old" }, `${c.used ? `Only ${fmtInt(c.used)}` : "None"} of the ${fmtInt(c.active)} active satellites ${c.used === 1 ? "has" : "have"} orbit data from the last 3 days, so the page does not list passes or count satellites now: the answer would leave out almost everything. ${m.info.source === "live" ? "The site's live data has not been refreshed." : "The site's live data could not be used and the copy bundled with the site is old."} The page looks for newer data every few minutes; try again later.`));
+      return;
+    }
+    if (old.level === "warn") out.append(el("p", { class: "note warn", id: "nm-old" }, `Warning: ${fmtInt(c.stale)} of the ${fmtInt(c.active)} active satellites (${Math.round(old.share * 100)}%) are left out because their orbit data is more than 3 days old, so this answer misses many passes. ${m.info.source === "live" ? "The live data has not been refreshed for a while." : "The site's live data could not be used, and the bundled copy is old."}`));
 
     // right now
     out.append(el("h3", { id: "nm-now-h" }, `Right now within ${fmtKm(m.radiusKm)} of ${pname}`));
     const exp = expectedAtOnce(c.used, m.radiusKm);
     if (!m.now.length) {
-      out.append(el("p", { class: "nm-empty" }, `No satellite's ground point is within ${fmtKm(m.radiusKm)} of ${pname} at this moment. That is normal: if the ${fmtInt(c.used)} satellites were spread evenly over the Earth, ${expectedText(exp)} would be inside a circle this size at any moment, because the circle covers ${(100 * exp / c.used).toPrecision(2)} percent of the Earth's surface.`));
+      out.append(el("p", { class: "nm-empty" }, `No satellite's ground point is within ${fmtKm(m.radiusKm)} of ${pname} at this moment. That is normal: if the ${fmtInt(c.used)} satellites were spread evenly over the Earth, ${expectedText(exp)} would be inside a circle this size at any moment, because the circle covers ${pctText(capFraction(m.radiusKm))} of the Earth's surface.`));
     } else {
       out.append(el("p", {}, `${plural(m.now.length, "satellite")} ${m.now.length === 1 ? "has its" : "have their"} ground point within ${fmtKm(m.radiusKm)} (or borderline). Spread evenly, ${expectedText(exp)} would be expected at any moment.`));
-      out.append(tableOf(`Satellites over ${pname} now`, m.now.map((r) => row(r, m.startMs, true))));
+      out.append(tableOf(`Satellites over ${pname} now`, m.now.map((r) => row(r, m.startMs, true)), true));
     }
     if (c.uncertainNow) out.append(el("p", { class: "meta" }, `${plural(c.uncertainNow, "more satellite")} may be inside the circle now, but ${c.uncertainNow === 1 ? "its" : "their"} position is too uncertain to say (see below).`));
 
@@ -308,7 +336,12 @@ function start() {
       out.append(tableOf(`${order === "time" ? "The earliest" : "The nearest"} ${fmtInt(rows.length)} of ${fmtInt(m.total)} passes near ${pname} in the next 24 hours`, rows.map((r) => row(r, m.startMs))));
       if (all.length > rows.length) {
         const more = el("button", { type: "button", class: "nm-btn nm-small", id: "nm-more" }, `Show ${fmtInt(all.length)} rows`);
-        more.addEventListener("click", () => { showAll = true; const y = window.scrollY; draw(); window.scrollTo(0, y); });
+        // the button goes; focus moves to the first newly shown row, so a keyboard user carries on from where the table grew
+        more.addEventListener("click", () => {
+          showAll = true; const y = window.scrollY; draw(); window.scrollTo(0, y);
+          const tr = out.querySelectorAll("table.nm-table:not(.nm-now) tbody tr")[FIRST_ROWS];
+          if (tr) { tr.setAttribute("tabindex", "-1"); tr.focus({ preventScroll: true }); }
+        });
         out.append(el("p", {}, more));
       }
       if (m.total > all.length) out.append(el("p", { class: "meta", id: "nm-more-note" }, `${fmtInt(m.total - all.length)} more ${m.total - all.length === 1 ? "pass is" : "passes are"} not in the table, which keeps the ${order === "time" ? "earliest" : "nearest"} ${fmtInt(all.length)}; switch the order to see the ${order === "time" ? "nearest" : "earliest"}.`));
@@ -319,7 +352,7 @@ function start() {
     // the geostationary belt
     if (m.geo.length) {
       out.append(el("h3", { id: "nm-geo-h" }, "Geostationary satellites near the place"));
-      out.append(el("p", {}, "These hang over almost the same point of the equator all day, so they have no passes. Each is listed with how far its ground point is now and over the day."));
+      out.append(el("p", {}, "These are geostationary (inclined under 2 degrees): they hang over almost the same point of the equator all day, so they have no passes. Each is listed with how far its ground point is now and over the day. Inclined geosynchronous satellites, which swing north and south each day, are in the passes above."));
       const rows = m.geo.map((g) => {
         const s = m.sats[g.k];
         const dLat = g.lat - m.place.lat, dLon = ((g.lon - m.place.lon + 540) % 360) - 180;
@@ -333,9 +366,9 @@ function start() {
     // what was left out
     const notes = [];
     if (c.stale) notes.push(`${plural(c.stale, "satellite")} left out because ${c.stale === 1 ? "its" : "their"} orbit data was more than 3 days old.`);
-    if (c.uncertainPasses) notes.push(`${plural(c.uncertainPasses, "pass", "passes")} left out of the table: the central estimate is inside ${fmtKm(m.radiusKm)}, but the uncertainty is as large as the distance itself (mostly satellites below 450 km, whose drag our data does not carry).`);
+    if (c.uncertainPasses) notes.push(`${plural(c.uncertainPasses, "pass", "passes")} left out of the table: the central estimate is inside ${fmtKm(m.radiusKm)}, but the measured distance uncertainty for that kind of satellite is as large as the distance itself.`);
     if (c.refused) notes.push(`${plural(c.refused, "satellite")} left out because the orbit model could not use ${c.refused === 1 ? "its" : "their"} data.`);
-    notes.push(`${plural(c.geostationary, "satellite")} in the geostationary belt ${c.geostationary === 1 ? "is" : "are"} handled apart, as above; ${m.geo.length ? `${fmtInt(m.geo.length)} ${m.geo.length === 1 ? "is" : "are"} near this place` : "none is near this place (they sit over the equator)"}.`);
+    notes.push(`${plural(c.geostationary, "geostationary satellite")} ${c.geostationary === 1 ? "is" : "are"} handled apart, as above; ${m.geo.length ? `${fmtInt(m.geo.length)} ${m.geo.length === 1 ? "is" : "are"} near this place` : "none is near this place (they sit over the equator)"}.`);
     out.append(el("h3", { id: "nm-left-h" }, "What is left out"), el("ul", {}, ...notes.map((n) => el("li", {}, n))));
   }
 

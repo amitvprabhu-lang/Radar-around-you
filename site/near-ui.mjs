@@ -184,9 +184,27 @@ export const isoUtc = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z
 export const dayTimeUtc = (ms) => `${fmt({ day: "numeric", month: "long", year: "numeric" }, "UTC").format(new Date(ms))}, ${fmt({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }, "UTC").format(new Date(ms))} UTC`;
 
 // The sentence read out once a calculation is complete (the page's polite live region).
-export function announcement({ placeName, radiusKm, now, within, borderline }) {
+export function announcement({ placeName, radiusKm, now, within, borderline, usable = true }) {
+  if (!usable) return `No answer for ${placeName}: the orbit data is too old.`;
   const nowPart = now === 0 ? "none right now" : `${plural(now, "satellite")} right now`;
   return `Done: for ${placeName} within ${fmtKm(radiusKm)}, ${nowPart}, and ${plural(within, "pass", "passes")} in the next 24 hours, plus ${fmtInt(borderline)} borderline.`;
+}
+
+// The uncertainty of a time of closest approach, in words: "± 10 s", or "time uncertain by about 3 min" from 3 minutes up.
+export const timeErrorText = (s) => (!(s > 0) ? "" : s < 180 ? `± ${fmtInt(Math.max(5, Math.ceil(s / 5) * 5))} s` : `time uncertain by about ${fmtInt(Math.ceil(s / 60))} min`);
+// A share as a percentage with two significant figures ("0.0062%")
+export const pctText = (x) => (Number.isFinite(x) ? `${Number((x * 100).toPrecision(2)).toLocaleString("en-GB", { maximumSignificantDigits: 2 })}%` : "");
+
+// OURS: the answer is withheld when fewer active satellites than this have orbit data under STALE_HOURS old (the data is then too old to
+// mean anything), and a warning is shown when more than WARN_STALE_SHARE of them are left out as too old.
+export const MIN_USABLE = 1000;
+export const WARN_STALE_SHARE = 0.1;
+// counts: { active, stale, used } from site/near.mjs prepareSatellites. level: "ok", "warn" (shown with a warning) or "none" (no answer).
+export function staleState(counts) {
+  const active = counts && counts.active > 0 ? counts.active : 0;
+  const share = active ? (counts.stale || 0) / active : 1;
+  const level = !counts || !(counts.used >= MIN_USABLE) ? "none" : share > WARN_STALE_SHARE ? "warn" : "ok";
+  return { level, share };
 }
 
 // ---------- The mini map ----------

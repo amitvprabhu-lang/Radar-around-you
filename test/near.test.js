@@ -7,14 +7,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { json2satrec } from "satellite.js";
-import { haversineKm, EARTH_RADIUS_KM } from "../src/core.js";
+import { haversineKm, EARTH_RADIUS_KM, observerEcef } from "../src/core.js";
 import { rowToOmm } from "../src/sgp4.js";
 import { runSteps } from "../src/schedule.js";
 import {
   RADII_KM, DEFAULT_RADIUS_KM, capFraction, capAreaKm2, expectedAtOnce, EARTH_AREA_KM2, parseQuery, placeQuery, storedValue, restoreStored, checkTyped, cleanName,
   chooseSource, pollDelayMs, sourceText, expectedText, announcement, mapSvg, projectLocal, shortDistance, utcText, zoneText, NAME_MAX,
 } from "../site/near-ui.mjs";
-import { classify, uncertaintyKm, uncertaintyBand, closestApproaches, groundDistanceKm, stateAt, searchNear, prepareSatellites, decodeFeed, tableRows, planeWindows, placeVector, parabolaMinimum, goldenMinimum, U_TABLE } from "../site/near.mjs";
+import { classify, passError, satPassError, PASS_ERRORS, nowUncertaintyKm, GEO_MAX_INCL_DEG, uncertaintyBand, closestApproaches, groundDistanceKm, stateAt, searchNear, prepareSatellites, decodeFeed, tableRows, planeWindows, placeVector, parabolaMinimum, goldenMinimum } from "../site/near.mjs";
 import { nearSummary } from "../site/near-summary.mjs";
 import { nearPage, NEAR_TITLE, NEAR_DESCRIPTION, pct } from "../site/pages-near.mjs";
 import { readSatelliteFiles, nearCities } from "../site/near-site.mjs";
@@ -102,7 +102,7 @@ test("within, borderline and uncertain", () => {
   assert.equal(classify(10, 0, 25), "within"); assert.equal(classify(26, 0, 25), null);
   assert.equal(uncertaintyBand(60 * Math.sqrt(398600.4418 / (6378.137 + 550) ** 3), 0), "low-450-600");
   assert.equal(uncertaintyBand(60 * Math.sqrt(398600.4418 / (6378.137 + 35786) ** 3), 0), "geostationary");
-  assert.equal(uncertaintyKm("low-under-450", 24), U_TABLE["low-under-450"][3]);
+  assert.deepEqual(passError("low-450-600", "mean", 40), { km: PASS_ERRORS.tables.mean["low-450-600"].km[1], s: PASS_ERRORS.tables.mean["low-450-600"].s[1] });
 });
 
 // ------------------------------------------------------------------ geometry and the search
@@ -324,7 +324,7 @@ test("the calculation uses a newer live feed, falls back to the bundled copy whe
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     asked.push(url);
-    const b = files.get(url);
+    const b = files.get(url.split("?")[0]);
     if (!b) return new Response("", { status: 404 });
     return new Response(b, { status: 200 });
   };
@@ -357,10 +357,95 @@ test("the calculation uses a newer live feed, falls back to the bundled copy whe
   } finally { globalThis.fetch = realFetch; }
 });
 
-test("the distance rule is the app's haversine between the place and the geodetic ground point", () => {
-  const sat = satOf({ INCLINATION: 53 });
-  const st = stateAt(sat, T0);
-  const g = groundDistanceKm(PUNE, st.ecef);
-  assert.ok(Math.abs(g.km - haversineKm(PUNE.lat, PUNE.lon, g.lat, g.lon)) < 1e-9);
-  assert.ok(g.hKm > 400 && g.hKm < 700);
+test("the distance rule against independent values: a point 550 km above Mumbai is 120.15 km from Pune, one degree of latitude is 111.19 km", () => {
+  // a point straight above a place on the WGS84 ellipsoid (along its normal) has that place as its ground point
+  const above = (lat, lon, h) => { const o = observerEcef(lat, lon), la = lat * Math.PI / 180, lo = lon * Math.PI / 180; return { x: o.x + h * Math.cos(la) * Math.cos(lo), y: o.y + h * Math.cos(la) * Math.sin(lo), z: o.z + h * Math.sin(la) }; };
+  const g = groundDistanceKm(PUNE, above(19.0760, 72.8777, 550));
+  assert.ok(Math.abs(g.km - 120.152) < 0.01, String(g.km));  // spherical law of cosines on R = 6371 km, worked out separately
+  assert.ok(Math.abs(g.hKm - 550) < 1e-6 && Math.abs(g.lat - 19.076) < 1e-9);
+  assert.ok(Math.abs(groundDistanceKm({ lat: 10, lon: 20 }, above(11, 20, 800)).km - 6371 * Math.PI / 180) < 1e-6);
+  assert.ok(Math.abs(groundDistanceKm({ lat: 0, lon: 179.5 }, above(0, -179.5, 400)).km - 6371 * Math.PI / 180) < 1e-6, "across the date line");
+});
+
+// ------------------------------------------------------------------ the review round (2026-10-07)
+test("pass errors: the distance error and the time error by band, kind and age; full sets below 450 km or newly launched get the packed floor", () => {
+  const T = PASS_ERRORS.tables;
+  assert.deepEqual(passError("low-450-600", "mean", 10), { km: T.mean["low-450-600"].km[0], s: T.mean["low-450-600"].s[0] });
+  assert.deepEqual(passError("low-450-600", "mean", 100), { km: T.mean["low-450-600"].km[4], s: T.mean["low-450-600"].s[4] });
+  assert.deepEqual(passError("beyond", "mean", 50), { km: T.mean.other.km[2], s: T.mean.other.s[2] }, "a band without its own row uses the kind's other row");
+  const floor = passError("low-450-600", "full", 40, { floorMean: true });
+  assert.ok(floor.km >= T.mean["low-450-600"].km[1] && floor.s >= T.mean["low-450-600"].s[1]);
+  assert.ok(satPassError({ band: "low-under-450", exact: true, recent: false }, 40).km >= passError("low-under-450", "mean", 40).km);
+  // the uncertainty of a position at a fixed moment adds the ground covered in the time error
+  assert.ok(Math.abs(nowUncertaintyKm({ u: 2, us: 10, kms: 7.6, hKm: 550 }) - (2 + 10 * 7.6 * 6371 / 6921)) < 1e-9);
+  // every row of every table: numbers, never falling with age
+  for (const kind of ["mean", "full"]) for (const [band, row] of Object.entries(T[kind])) for (const key of ["km", "s"]) row[key].forEach((v, k) => { assert.ok(Number.isFinite(v) && v > 0, `${kind} ${band}`); if (k) assert.ok(v >= row[key][k - 1]); });
+});
+
+test("words for time errors, stale data and announcements; no NaN, undefined or Infinity in any of them", async () => {
+  const { timeErrorText, staleState, announcement, pctText, expectedText, MIN_USABLE } = await import("../site/near-ui.mjs");
+  assert.equal(timeErrorText(7.5), "± 10 s"); assert.equal(timeErrorText(175), "± 175 s"); assert.equal(timeErrorText(430), "time uncertain by about 8 min"); assert.equal(timeErrorText(0), "");
+  assert.equal(staleState({ active: 16000, stale: 100, used: 15900 }).level, "ok");
+  assert.equal(staleState({ active: 16000, stale: 5000, used: 11000 }).level, "warn");
+  assert.equal(staleState({ active: 16000, stale: 15990, used: 10 }).level, "none");
+  assert.equal(staleState({ active: 0, stale: 0, used: 0 }).level, "none");
+  assert.equal(staleState(null).level, "none");
+  assert.ok(MIN_USABLE >= 100);
+  assert.equal(announcement({ placeName: "Pune", radiusKm: 100, now: 0, within: 0, borderline: 0, usable: false }), "No answer for Pune: the orbit data is too old.");
+  for (const t of [pctText(0), pctText(NaN), expectedText(0), expectedText(expectedAtOnce(0, 100)), timeErrorText(NaN), timeErrorText(undefined)]) assert.ok(!/NaN|undefined|Infinity/.test(t), t);
+});
+
+test("geostationary only below 2 degrees of inclination: inclined geosynchronous satellites are found as passes (QZS-4 near Sydney, QZS-2, BeiDou IGSO-2)", () => {
+  const feed = decodeFeed(bundled);
+  const t0 = Date.parse(bundled.meta.taken);
+  const prep = prepareSatellites(feed, t0);
+  assert.ok(prep.geo.every((s) => s.rec.inclo < GEO_MAX_INCL_DEG * Math.PI / 180), "only true geostationary satellites stand apart");
+  const find = (name) => prep.sats.find((s) => s.name.startsWith(name));
+  for (const [name, place, r] of [["QZS-4", { lat: -33.87, lon: 151.21 }, 25], ["QZS-2", { lat: -33.87, lon: 151.21 }, 100], ["BEIDOU-2 IGSO-2", { lat: 1.35, lon: 103.82 }, 25]]) {
+    const sat = find(name);
+    assert.ok(sat, `${name} is in the pass search`);
+    // the truth for the test: the smallest distance sampled every minute over the 24 hours
+    let min = Infinity;
+    for (let t = t0; t <= t0 + 86400000; t += 60000) { const st = stateAt(sat, t); if (st) min = Math.min(min, groundDistanceKm(place, st.ecef).km); }
+    const res = runSteps(searchNear({ sats: [sat], geo: [], counts: prep.counts }, place, { startMs: t0, radiusKm: r }));
+    if (min <= r - 1) assert.ok(res.passes.length >= 1 && Math.min(...res.passes.map((p) => p.km)) <= min + 0.5, `${name}: sampled minimum ${min.toFixed(1)} km, found ${res.passes.map((p) => p.km.toFixed(1)).join(", ")}`);
+    else assert.fail(`${name}: expected to come within ${r} km in this data, sampled minimum ${min.toFixed(1)} km`);
+  }
+});
+
+test("files from two different deploys are refused with a clear error, and the calculation reports it instead of drawing wrong names", async () => {
+  const { run } = await import("../site/near-calc.mjs");
+  const pub = (f) => fs.readFileSync(path.join(root, "public", f));
+  assert.throws(() => decodeFeed({ ...bundled, names: bundled.names.split("\n").slice(1).join("\n") }), /names\.txt has/);
+  assert.throws(() => decodeFeed({ ...bundled, ids: Buffer.concat([pub("ids.bin"), Buffer.alloc(4)]) }), /ids\.bin has/);
+  assert.throws(() => decodeFeed({ ...bundled, meta: { ...bundled.meta, count: bundled.meta.count + 1 } }), /swarm\.bin has/);
+  // a whole run where the bundled names.txt is one line short: an error message, no result
+  const files = new Map(["meta.json", "manifest.json", "swarm.bin", "ids.bin", "details.bin", "precise.json"].map((f) => [`C/${f}`, pub(f)]));
+  files.set("C/names.txt", Buffer.from(bundled.names.split("\n").slice(1).join("\n")));
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => { const b = files.get(String(url).split("?")[0]); return b ? new Response(b, { status: 200 }) : new Response("", { status: 404 }); };
+  try {
+    const msgs = [];
+    await run({ id: 99, base: "C/", place: PUNE, radiusKm: 100, startMs: Date.parse(bundled.meta.taken) }, (m) => msgs.push(m), async () => {}, 1e9);
+    assert.ok(!msgs.some((m) => m.type === "result"));
+    const err = msgs.find((m) => m.type === "error");
+    assert.ok(err && /names\.txt has/.test(err.message), JSON.stringify(err));
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test("the bundled files are asked for under the bundled data time, meta.json under a unique address, and two runs at once download once", async () => {
+  const calc = await import("../site/near-calc.mjs");
+  const pub = (f) => fs.readFileSync(path.join(root, "public", f));
+  const files = new Map(["meta.json", "manifest.json", "swarm.bin", "ids.bin", "details.bin", "names.txt", "precise.json"].map((f) => [`D/${f}`, pub(f)]));
+  const asked = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => { asked.push(String(url)); await new Promise((r) => setTimeout(r, 5)); const b = files.get(String(url).split("?")[0]); return b ? new Response(b, { status: 200 }) : new Response("", { status: 404 }); };
+  try {
+    const now = Date.parse(bundled.meta.taken);
+    const [a, b] = await Promise.all([calc.loadFeed("D/", () => {}, now), calc.loadFeed("D/", () => {}, now)]);
+    assert.equal(a.feed, b.feed);
+    assert.equal(asked.filter((u) => u.startsWith("D/swarm.bin")).length, 1, asked.join(" "));
+    assert.ok(asked.includes(`D/swarm.bin?v=${encodeURIComponent(bundled.meta.taken)}`));
+    assert.ok(asked.some((u) => /^D\/meta\.json\?n=\d+$/.test(u)));
+  } finally { globalThis.fetch = realFetch; }
 });

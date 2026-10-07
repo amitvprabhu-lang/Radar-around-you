@@ -34,7 +34,7 @@ export function nearSummary(files, { source, dataTime, place = DEFAULT_PLACE, ra
   const res = runSteps(searchNear(prepared, place, { startMs, radiusKm }));
   const within = res.passes.filter((p) => p.status === "within").length;
   const rows = tableRows(res.passes, place, { order: "time", cap: EXAMPLE_ROWS }).map((r) => ({
-    name: r.sat.name, id: r.sat.id, owner: r.sat.owner, starlink: r.sat.starlink, exact: r.sat.exact, t: r.t, km: r.km, u: r.u, status: r.status, el: r.el, az: r.az, lit: r.lit, hKm: r.hKm, kms: r.kms,
+    name: r.sat.name, id: r.sat.id, owner: r.sat.owner, starlink: r.sat.starlink, exact: r.sat.exact, t: r.t, km: r.km, u: r.u, us: r.us, status: r.status, el: r.el, az: r.az, lit: r.lit, hKm: r.hKm, kms: r.kms,
   }));
   return {
     source, dataTime, active, lowestPerigeeKm: lowest, highShare: n ? high / n : 0,

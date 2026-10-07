@@ -22,14 +22,25 @@ let failedVersion = null;  // a live version whose files failed to download: not
 // base: the site's root address. Every run reads the live manifest again (it is small and asked for with no-store), so a run after the
 // collector has published new data uses it; the decoded feed is kept while the chosen data stays the same. Reports the download through
 // progress(loadedBytes, totalBytes or null).
-export async function loadFeed(base, progress = () => {}, nowMs = Date.now()) {
-  if (!baseMetaCache || baseMetaCache.base !== base) baseMetaCache = { base, meta: await getJson(base + "meta.json") };
+// One load at a time: a second run that starts while a download is going waits for it and then finds the data in the cache.
+let loading = Promise.resolve();
+export function loadFeed(base, progress = () => {}, nowMs = Date.now()) {
+  const next = loading.then(() => loadFeedNow(base, progress, nowMs));
+  loading = next.catch(() => {});
+  return next;
+}
+// The bundled files are asked for with the bundled data time in the address, and meta.json with a unique one: a service worker or browser
+// cache that keeps old copies of the bundled files (public/sw.js refreshes them in the background) can then never mix the files of two
+// deploys, because every deploy's files have their own addresses. A mix that still slips through (counts that disagree) is caught by
+// decodeFeed's length checks and ends in the page's error state, never in wrong names.
+async function loadFeedNow(base, progress, nowMs) {
+  if (!baseMetaCache || baseMetaCache.base !== base) baseMetaCache = { base, meta: await getJson(base + "meta.json?n=" + Date.now(), { cache: "no-store" }) };
   const baseMeta = baseMetaCache.meta, bundledTaken = Date.parse(baseMeta.taken);
   const manifest = await loadManifest((u, i) => fetch(u, i), base + "live/", 6000);
   let pick = chooseSource(manifest, bundledTaken, base + "live/", nowMs);
   if (pick.source === "live" && pick.version === failedVersion) pick = { source: "bundled", reason: "failed", version: null };
   const key = pick.source === "live" ? `live:${pick.version}` : "bundled";
-  if (cache && cache.base === base && cache.key === key) return { ...cache, info: { ...cache.info, state: pick.state || null, reason: pick.reason || null, pollSec: manifest && manifest.pollSec ? manifest.pollSec : null } };
+  if (cache && cache.base === base && cache.key === key) return { ...cache, info: { ...cache.info, state: pick.state || null, reason: pick.reason || null, failedVersion, pollSec: manifest && manifest.pollSec ? manifest.pollSec : null } };
   let loaded = 0, total = null;
   const count = (p) => p.then((x) => { loaded += x.byteLength || x.length || 0; progress(loaded, total); return x; });
   const fetchSet = (path) => Promise.all([count(getBytes(path("swarm.bin"))), count(getBytes(path("ids.bin"))), count(getBytes(path("details.bin"))), count(getText(path("names.txt"))), count(getJson(path("precise.json")))]);
@@ -42,14 +53,16 @@ export async function loadFeed(base, progress = () => {}, nowMs = Date.now()) {
       info = { source: "live", version: pick.version, fetchedAt: pick.fetchedAt, state: pick.state, refreshSec: pick.refreshSec, taken: meta.taken };
     } catch {
       failedVersion = pick.version; files = null; meta = baseMeta; loaded = 0; pick = { source: "bundled", reason: "failed" };
+      // an older live version already loaded is still newer than the bundled copy: keep using it
+      if (cache && cache.base === base && cache.key.startsWith("live:")) return { ...cache, info: { ...cache.info, failedVersion } };
     }
   }
   if (!files) {
-    if (cache && cache.base === base && cache.key === "bundled") return { ...cache, info: { ...cache.info, reason: pick.reason } };
+    if (cache && cache.base === base && cache.key === "bundled") return { ...cache, info: { ...cache.info, reason: pick.reason, failedVersion } };
     const sizes = await getJson(base + "manifest.json").catch(() => []);
     const sz = Object.fromEntries((Array.isArray(sizes) ? sizes : []).map((m) => [m.file, m.raw]));
     total = SAT_FILES.reduce((s, f) => s + (sz[f] || 0), 0) || null;
-    files = await fetchSet((f) => base + f);
+    files = await fetchSet((f) => `${base}${f}?v=${encodeURIComponent(baseMeta.taken)}`);
     info = { source: "bundled", version: null, reason: pick.reason, fetchedAt: baseMeta.taken, taken: baseMeta.taken };
   }
   const [swarm, ids, details, names, precise] = files;
@@ -57,6 +70,7 @@ export async function loadFeed(base, progress = () => {}, nowMs = Date.now()) {
   info.bytes = loaded;
   info.pollSec = manifest && manifest.pollSec ? manifest.pollSec : null;
   info.bundledTaken = baseMeta.taken;
+  info.failedVersion = failedVersion;
   cache = { base, key: info.source === "live" ? `live:${info.version}` : "bundled", feed, info };
   return cache;
 }
@@ -105,7 +119,7 @@ export async function run(msg, post, pause, budgetMs) {
     const sats = new Map();
     const row = (x) => {
       if (!sats.has(x.sat.k)) sats.set(x.sat.k, satInfo(x.sat, startMs));
-      return { k: x.sat.k, t: x.t, km: x.km, u: x.u, status: x.status, el: x.el, az: x.az, lit: x.lit, hKm: x.hKm, kms: x.kms, lat: x.lat, lon: x.lon, ageH: x.ageH };
+      return { k: x.sat.k, t: x.t, km: x.km, u: x.u, us: x.us, status: x.status, el: x.el, az: x.az, lit: x.lit, hKm: x.hKm, kms: x.kms, lat: x.lat, lon: x.lon, ageH: x.ageH };
     };
     const withTrack = (x) => ({ ...row(x), track: trackAround(x.sat, x.t) });
     const byTime = tableRows(res.passes, place, { order: "time", cap: TABLE_CAP }).map(withTrack);
