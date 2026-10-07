@@ -28,7 +28,7 @@ export const MAX_RUN_BYTES = 80 * 1024 * 1024;
 export const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 // radar_safe_path and radar_safe_page_path, copied; JavaScript's $ (without the m flag) matches only at the very end, like PHP's \z
 export const LIVE_PATH_RE = /^[a-z]{2,24}\/[0-9]{8}T[0-9]{6}Z\/[A-Za-z0-9][A-Za-z0-9._-]{0,60}$/;
-export const PAGE_PATH_RE = /^(?:how-many-satellites-in-orbit\/index\.html|sitemap-live\.xml|satellites-by-country\/index\.html|satellites-by-country\/(?:united-states|china|united-kingdom|cis-former-ussr|japan)\/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now|starlink-tracker|natural-disasters-now|rocket-launches|iss-today|tonights-sky)\/index\.html|tonights-sky\/(?:pune|newyork|london|tromso|tokyo|sydney)\/index\.html)$/;
+export const PAGE_PATH_RE = /^(?:how-many-satellites-in-orbit\/index\.html|sitemap-live\.xml|satellites-by-country\/index\.html|satellites-by-country\/(?:united-states|china|united-kingdom|cis-former-ussr|japan)\/index\.html|(?:earthquakes-today|aurora-tonight|asteroid-close-approaches|tropical-storms-now|wildfires-today|right-now|starlink-tracker|natural-disasters-now|rocket-launches|iss-today|tonights-sky)\/index\.html|tonights-sky\/(?:pune|newyork|london|tromso|tokyo|sydney)\/index\.html|satellites-and-debris-by-country\/index\.html|satellites-by-country\/(?:france|india|intelsat|european-space-agency|germany|italy|globalstar|canada|south-korea|ses|orbcomm|spain|eutelsat|turkiye|australia|taiwan|sea-launch|argentina|o3b-networks)\/index\.html)$/;
 export const LIVE_SITEMAP = "sitemap-live.xml";
 // OURS: how long the step may take, so a slow or silent network cannot hold up a deploy
 export const REQUEST_TIMEOUT_MS = 10000;

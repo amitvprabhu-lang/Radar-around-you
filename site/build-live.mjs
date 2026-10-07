@@ -28,11 +28,14 @@ import { countSatellites, assertPlausible } from "./satcount.mjs";
 import { satelliteCountPage, sitemapLive } from "./pages-satcount.mjs";
 import { countryPageSet, coastFromBuffer } from "./pages-country.mjs";
 import { LIVE_PAGES, LIVE_FILES, SATCOUNT_FILE, SATELLITE_FILES, RIGHT_NOW_FILE, FAMILY_PAGES, familyPage } from "./livepages.mjs";
+import { COUNTRY_PAGES, HUB_FILE } from "./satcountry.mjs";
+import { OWNER_PAGES } from "./objects.mjs";
 import { isoZ, parseTime } from "./hazard.mjs";
 import { hubRows, rightNowPage } from "./pages-hazard.mjs";
 import { LIVE_FAMILY, FAMILY_RENDERERS } from "./liveregistry.mjs";
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 import { HISTORY_FILE, readHistory, historyAdd, previousEntry } from "./insight.mjs";
+import { objectsForCountries } from "./objects-family.mjs";
 
 const NEED = ["details.bin", "satmeta.json", "swarm.bin"];
 const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
@@ -44,6 +47,7 @@ export const GENERATOR_FILES = ["satcount.mjs", "pages-satcount.mjs", "layout.mj
   "hazard.mjs", "pages-hazard.mjs", "livepages.mjs", "liveregistry.mjs", "indexnow.mjs", "events.mjs", "pages-events.mjs", "liveseo.mjs", "insight.mjs", "live-pages-js.mjs", "../src/dedupe.js",
   "sky.mjs", "pages-sky.mjs", "sky-family.mjs", "sky-data.mjs", "../src/plan.js", "../src/sgp4.js", "../src/tonight.js", "../src/trains.js",
   "../src/core.js", "../src/data.js", "../src/info.js", "../src/scales.js", "../src/asteroids.js", "../public/coast.bin", "../public/places.json",
+  "objects.mjs", "pages-objects.mjs", "objects-js.mjs", "objects-family.mjs",
   "../public/cities.json", "../public/stars.bin", "../public/constellations.json", "../public/starnames.json"];
 export const COAST_FILE = fileURLToPath(new URL("../public/coast.bin", import.meta.url));
 export const PLACES_FILE = fileURLToPath(new URL("../public/places.json", import.meta.url));
@@ -54,8 +58,9 @@ export function generatorHash(files = GENERATOR_FILES) {
 }
 
 // pageFunctions and hubPage can be replaced in tests, to show that a page that fails to render is skipped on its own. starlinkMin replaces
-// the Starlink page's minimum (site/events.mjs, STARLINK_MIN) for the small test fleets.
-export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = FAMILY_RENDERERS, hubPage = rightNowPage, starlinkMin } = {}) {
+// the Starlink page's minimum (site/events.mjs, STARLINK_MIN) for the small test fleets; objectBounds and ownerMin replace the catalogue's
+// plausible range and the owner pages' guard (site/objects.mjs) for the small test catalogue.
+export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.noindex, bounds, generator = generatorHash(), coastFile = COAST_FILE, placesFile = PLACES_FILE, min, indexnowKey = readIndexNowKey(), pageFunctions = FAMILY_RENDERERS, hubPage = rightNowPage, starlinkMin, objectBounds, ownerMin } = {}) {
   if (indexnowKey != null && !INDEXNOW_KEY_RE.test(indexnowKey)) throw new Error("build-live: the IndexNow key must be 8 to 128 letters, digits and dashes");
   const key = noindex ? null : indexnowKey || null;  // a noindex site is never pinged, so its index names no key
   const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, "manifest.json"), "utf8"));
@@ -70,6 +75,8 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     },
     json(name, file) { return JSON.parse(this.bytes(name, file).toString("utf8")); },
     time: (name) => (feeds[name] && (feeds[name].sourceTime || feeds[name].fetchedAt)) || null,
+    // { "<file name>": "<path in the live folder>" } of a feed, for pages that point the browser at a published file
+    files: (name) => ({ ...((feeds[name] && feeds[name].files) || {}) }),
   };
 
   const indexPath = path.join(outDir, "index.json");
@@ -101,11 +108,23 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
   const getCoast = () => (coast = coast || coastFromBuffer(fs.readFileSync(coastFile)));
   const getPlaces = () => (places = places || JSON.parse(fs.readFileSync(placesFile, "utf8")));
 
-  // ---- the satellite pages: all or nothing, as before
+  // the context every family page is read with (built here because the country pages read the satcat feed through it too)
+  const ctx = { now, bounds, starlinkMin, objectBounds, ownerMin, get places() { return getPlaces(); } };
+
+  // ---- the satellite pages: all or nothing, as before. The five country pages also gain the objects section from the satcat feed when
+  // it is usable (site/objects-family.mjs); they then carry its version too, so they are rebuilt when either feed changes. The count page
+  // and the hub depend on the satellites feed only and are kept byte for byte while it is unchanged.
   let satSummary = null;
   const satFeed = feeds.satellites;
   const satVersion = version("satellites");
-  const satKeep = keepable(SATCOUNT_FILE, ["satellites"]);
+  let countryObjects = { byCode: {}, reasons: [] };
+  try { countryObjects = objectsForCountries(rd, ctx); } catch (e) { countryObjects = { byCode: {}, reasons: [e.message] }; }
+  const codeOf = (f) => { const p = COUNTRY_PAGES.find((x) => x.file === f); return p ? (OWNER_PAGES.find((x) => x.country && x.slug === p.slug) || {}).code : null; };
+  const satVersionsOf = (f) => ({ satellites: satVersion, ...(codeOf(f) && countryObjects.byCode[codeOf(f)] && version("satcat") ? { satcat: version("satcat") } : {}) });
+  const satDataTime = (f, taken) => { const o = codeOf(f) && countryObjects.byCode[codeOf(f)]; return o && parseTime(o.catTime) > parseTime(taken) ? o.catTime : taken; };
+  const keepSat = (f) => sameShell && prev.pages[f] && same(prev.pages[f].feeds, satVersionsOf(f)) && prev.files[f] && exists(f);
+  const satKeep = SATELLITE_FILES.every((f) => keepSat(f) || !(prev && prev.pages && prev.pages[f]) && f !== SATCOUNT_FILE && f !== HUB_FILE) && keepSat(SATCOUNT_FILE);
+  if (countryObjects.reasons.length) for (const r of countryObjects.reasons) warnings.push({ file: "country pages", reason: `no objects section for ${r}` });
   try {
     if (!satFeed || !satVersion || !satFeed.files) throw new Error("build-live: the manifest has no satellites feed");
     for (const f of NEED) if (!satFeed.files[f]) throw new Error(`build-live: the manifest does not name ${f}`);
@@ -117,10 +136,11 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
     if (satKeep) {
       for (const f of SATELLITE_FILES) carry(f);
     } else {
-      const country = countryPageSet(sat, { coast: getCoast(), updated: now, ...(min === undefined ? {} : { min }) });
+      const country = countryPageSet(sat, { coast: getCoast(), updated: now, ...(min === undefined ? {} : { min }), objects: countryObjects.byCode });
       texts.set(SATCOUNT_FILE, renderPage(satelliteCountPage(counts, { updated: now }), { noindex }));
       for (const p of country.pages) texts.set(p.file, renderPage(p, { noindex }));
-      for (const f of SATELLITE_FILES) if (texts.has(f)) pages[f] = { feeds: { satellites: satVersion }, dataTime: taken };
+      // a page built from the same versions as its copy on the site keeps that copy (its new text would differ only in the build time)
+      for (const f of SATELLITE_FILES) if (texts.has(f)) { if (keepSat(f)) { texts.delete(f); carry(f); } else pages[f] = { feeds: satVersionsOf(f), dataTime: satDataTime(f, taken) }; }
       // a country page left out this run keeps its earlier copy, if there is one
       for (const s of country.skipped) skipped.push({ ...s, kept: carry(s.file) });
     }
@@ -132,8 +152,7 @@ export function buildLive({ dataDir, outDir, now = new Date(), noindex = SITE.no
 
   // ---- the family pages (the hazard pages and the later families of site/livepages.mjs), each on its own
   const summaries = {}, missing = satSummary ? {} : { satellites: "data that failed its checks" };
-  // the place list is read only by a page that asks for it (the fire page), and at most once
-  const ctx = { now, bounds, starlinkMin, get places() { return getPlaces(); } };
+  // the place list is read only by a page that asks for it (the fire page), and at most once (ctx is made above, with the satellite pages)
   // the headline numbers of earlier builds (history.json beside index.json), for the "change since the previous build" findings
   const historyPath = path.join(outDir, HISTORY_FILE);
   let historyText = "";

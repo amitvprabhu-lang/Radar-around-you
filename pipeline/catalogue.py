@@ -45,7 +45,8 @@ def name_table(page_html, header_first):
     """Code to name pairs from the first two cells of every table row (CelesTrak's source and launch-site pages)."""
     out = {}
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", page_html, re.S):
-        cells = [html.unescape(re.sub(r"<[^>]+>", "", c)).strip() for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)]
+        # a line break inside a cell is a space ("European Organization for the<br>Exploitation of ..." on the source code page, 2026-10-07)
+        cells = [re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", " ", c, flags=re.I)))).strip() for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)]
         if len(cells) >= 2 and cells[0] != header_first:
             out[cells[0]] = cells[1]
     return out

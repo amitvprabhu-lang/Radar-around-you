@@ -3,12 +3,15 @@
 It raises Unchanged when the source has nothing new, FeedFailure for a bad or missing answer (the runner keeps the
 last good copy), and Halt when a usage policy says to stop.
 """
+import email.utils
 import gzip
+import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import catalogue as CAT
 from . import config, hazards, pack, validate
+from . import satcat as SC
 from .runner import FeedFailure, Result, Unchanged, dumps, iso, parse
 
 F = config.FEEDS
@@ -186,6 +189,46 @@ def satellites(ctx):
     return Result(files, meta["count"], newest, f"{rep['precise']} exact orbits, {rep['new']} launched in the last 30 days, median element age {h['ageHours']['median']} h")
 
 
+SATCAT_CSV_URL = "https://celestrak.org/pub/satcat.csv"
+SATCAT_MIN_OBJECTS = 15000   # OURS: plausible objects in Earth orbit; 34,982 on 2026-10-07
+SATCAT_MAX_OBJECTS = 100000
+
+
+def satcat(ctx):
+    """Once a day: the whole catalogue as one CSV, counted by owner and kind (pipeline/satcat.py). One request, never repeated after an error."""
+    cat = ctx.private_json("catalogue.json.gz")
+    if not cat or not isinstance(cat.get("owners"), dict):
+        raise FeedFailure("satcat: the owner names come from the catalogue, which has not been built yet (it is fetched first, once a day)")
+    ctx.sleep(PAUSE_S)  # keeps this request apart from the other CelesTrak requests of the same run
+    r = ctx.get("satcat", SATCAT_CSV_URL)
+    fs = ctx.fs("satcat")
+    digest = hashlib.sha256(r.body).hexdigest()
+    if digest == fs.get("bodySha256") and fs.get("files"):
+        raise Unchanged()  # the same catalogue as last time: nothing to publish, so the pages are not rebuilt
+    modified = r.header("last-modified")
+    t = None
+    if modified:
+        try:
+            t = email.utils.parsedate_to_datetime(modified).astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            t = None
+    if t is None or t > ctx.now + timedelta(hours=1):
+        t = ctx.now  # no usable Last-Modified: the fetch time is the honest upper bound
+    try:
+        text = r.body.decode("utf-8")
+        files, s = SC.summarise(text, iso(t), cat["owners"], SATCAT_MIN_OBJECTS, SATCAT_MAX_OBJECTS)
+    except UnicodeDecodeError as e:
+        raise FeedFailure(f"satcat: not UTF-8 text ({e})")
+    except SC.SatcatError as e:
+        raise FeedFailure(str(e))
+    total = s["totals"]["total"]
+    prev = fs.get("count")
+    if prev and total < prev * (1 - MAX_COUNT_DROP):
+        raise FeedFailure(f"satcat: objects in Earth orbit fell from {prev} to {total}")
+    fs["bodySha256"] = digest
+    return Result(files, total, iso(t), f"{total} objects in Earth orbit, {len(s['owners'])} owners, {len(files) - 1} owner files")
+
+
 # ---------------------------------------------------------------- aurora, storm and fire feeds
 def spaceweather(ctx):
     got = {}
@@ -258,4 +301,5 @@ def launches(ctx):
 
 BUILDERS = {"catalogue": catalogue, "satellites": satellites, "quakes": quakes, "events": events,
             "aurora": aurora, "kp": kp, "clouds": clouds, "planes": planes,
-            "spaceweather": spaceweather, "storms": storms, "fires": fires, "closeapproaches": closeapproaches, "launches": launches}
+            "spaceweather": spaceweather, "storms": storms, "fires": fires, "closeapproaches": closeapproaches, "launches": launches,
+            "satcat": satcat}

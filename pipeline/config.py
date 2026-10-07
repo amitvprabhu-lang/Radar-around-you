@@ -104,6 +104,13 @@ FEEDS = {f.id: f for f in [
          "The catalogue refresh interval is not stated on the pages read. Larger lists are rate limited, so this is fetched once a day.",
          "Usage policy page read; no licence text on that page.",
          "Catalogue: CelesTrak", 86400, 259200, halt_group="celestrak"),
+    # read 2026-10-07 (docs/country-objects-sources.md): the whole catalogue as one CSV, for the satellites and debris by country pages
+    Feed("satcat", "Whole satellite catalogue, counted by owner", "CelesTrak",
+         "https://celestrak.org/pub/satcat.csv",
+         "https://celestrak.org/usage-policy.php",
+         "Usage policy: \"The SATCAT updates manually once or twice a day.\" It asks to download data once per update and to stop at the first non-200 answer, so this is fetched once a day. The CSV was 6,764,885 bytes on 2026-10-07.",
+         "Usage policy page read; no licence text on that page. Whether derived counts and per-object details may be republished is NOT CONFIRMED.",
+         "Catalogue counts: CelesTrak SATCAT", 86400, 259200, halt_group="celestrak"),
 ]}
 
 # Reference data that is not live. Listed in the manifest so the Data status sheet is honest about it.

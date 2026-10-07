@@ -7,6 +7,8 @@ import { COUNTRY_PAGES, HUB_FILE, NOT_RECORDED, MIN_ACTIVE_FOR_PAGE, NEAR_EQUATO
 import { SATCOUNT_FILE, LIVE_FILES, sitemapLive, barChartSvg, columnChartSvg, num, pct, dateLong, timeUtc, CELESTRAK, SATCAT, STATUS } from "./pages-satcount.mjs";
 import { worldMapSvg, uniqueDots } from "./svgmap.mjs";
 import { decodeCoast } from "../src/data.js";
+import { OWNER_PAGES, RANKING_FILE } from "./objects.mjs";
+import { countrySection } from "./pages-objects.mjs";
 
 export { HUB_FILE, LIVE_FILES, sitemapLive };
 // The table the collector reads to turn each catalogue owner code into a name (pipeline/feeds.py fetches this page).
@@ -109,6 +111,8 @@ ${withPage.length ? `
 <p>These owners have a page with their satellites by orbit, purpose and launch year, and a map of where they are.</p>
 <ul class="grid">${cards}</ul>
 ` : ""}
+<p>Rocket bodies, inactive satellites and debris of every owner, from the whole catalogue: <a href="${href(file, RANKING_FILE)}">satellites and debris by country</a>.</p>
+
 <h2 id="ranking">All owners ranked by active satellites</h2>
 ${barChartSvg({ id: "chart-owners", title: "Active satellites by owner", desc: `The ${Math.min(10, rows.length)} owners with the most active satellites. ${lead.name} is highest with ${num(lead.active)}.`, rows: rows.slice(0, 10).map((o) => ({ label: o.name, value: o.active })) })}
 ${table({ caption: "Every owner with an active satellite, ranked", head: ["Rank", "Owner, as recorded", "Active satellites", "Share of all active (percent)", "Starlink"], numeric: [0, 2, 3, 4], rows: tableRows })}
@@ -171,7 +175,9 @@ export function mapSummaryText(points) {
 
 // page: an entry of COUNTRY_PAGES. positions: [lat, lon, orbit] of this owner's active satellites at the data time (ownerPositions).
 // coast: decoded coastlines. pages: the country pages built in this run, for the link row.
-export function countryPage(counts, page, { updated, positions, coast, pages = COUNTRY_PAGES }) {
+// objects: the summary with this owner's detail from site/objects-family.mjs (ownerSummary), or null; with it the page gains the section of
+// satellites, rocket bodies and debris in orbit from the whole catalogue (site/pages-objects.mjs, countrySection).
+export function countryPage(counts, page, { updated, positions, coast, pages = COUNTRY_PAGES, objects = null }) {
   const o = counts.owners.find((r) => r.name === page.owner);
   if (!o || o.active === 0) throw new Error(`pages-country: ${page.owner} has no active satellites; check pageGuard first`);
   const upIso = updated.toISOString(), file = page.file, total = counts.active;
@@ -181,8 +187,10 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
   const ownerShare = pct(share(o.active, total));
   const owner = esc(o.name), phrase = esc(page.phrase), Phrase = esc(cap(page.phrase));
   const method = `${href(file, HUB_FILE)}#${METHOD_ID}`;
-  const title = `${page.name} satellites: live count, ${date}`;
-  const description = `${cap(page.phrase)}: ${num(o.active)} active satellites on ${date}, ${ownerShare} percent of the catalogue's. Orbits, purposes, launch years and a map.`;
+  const code = (OWNER_PAGES.find((x) => x.country && x.slug === page.slug) || {}).code;
+  const section = objects && code ? countrySection(objects, code, file) : null;
+  const title = section ? section.title : `${page.name} satellites: live count, ${date}`;
+  const description = section ? `${cap(page.phrase)}: ${num(o.active)} active satellites on ${date}, ${ownerShare} percent of all, and${section.descTail}` : `${cap(page.phrase)}: ${num(o.active)} active satellites on ${date}, ${ownerShare} percent of the catalogue's. Orbits, purposes, launch years and a map.`;
 
   // orbits: this owner against the whole catalogue
   const oShare = (k) => share(o.orbits[k], o.active), wShare = (k) => share(counts.orbits[k], total);
@@ -239,7 +247,7 @@ export function countryPage(counts, page, { updated, positions, coast, pages = C
     : named.length === 0 ? `${n30 === 1 ? "It has" : n30 === 2 ? "Both have" : `All ${num(n30)} have`} only a launch designator so far, for example ${esc(desig[0].name)}, so ${v(n30, "it is", "they are")} not named in the catalogue yet.`
     : `${num(named.length)} ${v(named.length, "has", "have")} a name in the catalogue and ${num(desig.length)} ${v(desig.length, "has", "have")} only a launch designator so far, for example ${esc(desig[0].name)}.`;
 
-  const links = [`<a href="${href(file, HUB_FILE)}">all owners ranked</a>`]
+  const links = [`<a href="${href(file, HUB_FILE)}">all owners ranked</a>`].concat(section ? [`<a href="${href(file, RANKING_FILE)}">satellites and debris by country</a>`] : [])
     .concat(pages.filter((p) => p.slug !== page.slug).map((p) => `<a href="${href(file, p.file)}">${esc(p.name)}</a>`));
 
   const rankBits = [above ? `${said(above)} is ahead with ${num(above.active)}` : "", below ? `${said(below, !above)} follows with ${num(below.active)}` : ""].filter(Boolean).join("; ");
@@ -298,6 +306,7 @@ ${table({ caption: "By launch year", head: ["Launch year", "Satellites"], numeri
 ${counts.named && o.earliest.length ? `<p>Earliest launches among satellites the catalogue lists as active:</p>
 ${table({ caption: "Earliest launches still listed as active", head: ["Launch date", "Satellites"], rows: o.earliest.map((e) => [esc(dateLong(e.date)), esc(capList(e.names, 3, "more launched the same day"))]) })}` : ""}
 
+${section ? section.html : ""}
 <h2 id="how">How this was counted</h2>
 <p>${num(o.active)} of the ${num(total)} satellites on the <a href="${href(file, SATCOUNT_FILE)}">count page</a> carry the owner "${owner}".${o.starlink > 0 ? " Starlink here means a name containing STARLINK." : ""}${o.unknownYear ? ` ${num(o.unknownYear)} ${v(o.unknownYear, "has no launch date and is", "have no launch date and are")} left out of the chart.` : ""} Full method: <a href="${method}">how these numbers are made</a>.</p>
 
@@ -311,7 +320,7 @@ ${faq.map(([q, a]) => `<h3>${esc(q)}</h3>\n<p>${a}</p>`).join("\n")}
     file, crumbTitle: page.name, crumbs: [{ name: "Satellites by country", file: HUB_FILE }],
     title, description,
     h1: `How many satellites does ${page.phrase} have?`, kicker: "Live count",
-    lead: `As of ${esc(date)}, ${esc(time)}, the catalogue records <strong>${num(o.active)} active satellites</strong> for ${phrase}, ${ownerShare} percent of the catalogue's active satellites.`,
+    lead: `As of ${esc(date)}, ${esc(time)}, the catalogue records <strong>${num(o.active)} active satellites</strong> for ${phrase}, ${ownerShare} percent of the catalogue's active satellites.${section ? section.leadTail : ""}`,
     meta: metaLine(counts.taken, upIso),
     cta: { label: "See them on the live globe", query: "" },
     body,
@@ -321,7 +330,8 @@ ${faq.map(([q, a]) => `<h3>${esc(q)}</h3>\n<p>${a}</p>`).join("\n")}
 
 // The hub and every country page that passes the guard, built from one feed. Nothing is written here; the callers write the pages only
 // after every page is built. skipped lists each page left out and why. The map time is the data time.
-export function countryPageSet(satellites, { coast, updated, min = MIN_ACTIVE_FOR_PAGE }) {
+// objects: { <owner code>: ownerSummary } for the country pages that gain the objects section (site/objects-family.mjs), or nothing.
+export function countryPageSet(satellites, { coast, updated, min = MIN_ACTIVE_FOR_PAGE, objects = {} }) {
   const counts = countOwners(satellites);
   const skipped = [], built = [];
   for (const p of COUNTRY_PAGES) {
@@ -329,6 +339,6 @@ export function countryPageSet(satellites, { coast, updated, min = MIN_ACTIVE_FO
     if (why) skipped.push({ slug: p.slug, file: p.file, reason: why }); else built.push(p);
   }
   const pages = [hubPage(counts, { updated, pages: built })]
-    .concat(built.map((p) => countryPage(counts, p, { updated, coast, pages: built, positions: ownerPositions(satellites, p.owner) })));
+    .concat(built.map((p) => countryPage(counts, p, { updated, coast, pages: built, positions: ownerPositions(satellites, p.owner), objects: objects[(OWNER_PAGES.find((x) => x.country && x.slug === p.slug) || {}).code] || null })));
   return { counts, pages, skipped };
 }

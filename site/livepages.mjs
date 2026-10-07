@@ -10,6 +10,7 @@ import { HUB_FILE, COUNTRY_PAGES } from "./satcountry.mjs";
 import { HAZARD_PAGES, RIGHT_NOW_FILE } from "./hazard.mjs";
 import { EVENT_PAGES } from "./events.mjs";
 import { SKY_PAGES } from "./sky.mjs";
+import { OBJECT_PAGES } from "./objects.mjs";
 
 export const SATCOUNT_FILE = "how-many-satellites-in-orbit/index.html";
 
@@ -17,6 +18,7 @@ export const FAMILY_PAGES = [
   ...HAZARD_PAGES,
   ...EVENT_PAGES,
   ...SKY_PAGES,
+  ...OBJECT_PAGES,
 ];
 export const familyPage = (key) => FAMILY_PAGES.find((p) => p.key === key) || null;
 
@@ -29,7 +31,7 @@ export const LIVE_PAGES = [
   { file: SATCOUNT_FILE, kind: "count", feeds: ["satellites"], name: "Satellite count" },
   { file: HUB_FILE, kind: "country-hub", feeds: ["satellites"], name: "Satellites by country" },
   ...COUNTRY_PAGES.map((p) => ({ file: p.file, kind: "country", feeds: ["satellites"], name: `Satellites of ${p.phrase}` })),
-  ...FAMILY_PAGES.map((p) => ({ file: p.file, kind: p.family, key: p.key, feeds: p.feeds, name: p.name })),
+  ...FAMILY_PAGES.map((p) => ({ file: p.file, kind: p.family, key: p.key, feeds: p.feeds, name: p.name, ...(p.homeRow === false ? { homeRow: false } : {}) })),
   { file: RIGHT_NOW_FILE, kind: "hub", feeds: [...new Set(["satellites", ...familyFeeds])], name: "Right now: every live figure" },
 ];
 export const LIVE_FILES = LIVE_PAGES.map((p) => p.file);

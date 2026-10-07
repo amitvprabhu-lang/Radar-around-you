@@ -45,7 +45,9 @@ test("the satellites by country hub is listed under live data with a fixed note,
   const live = out.slice(out.indexOf("## Live data"));
   assert.ok(live.includes("- [Satellites by country](https://example.org/satellites-by-country/): Every owner in the satellite catalogue ranked by active satellites, as the catalogue records owners, with more detail for a few of them."));
   assert.ok(!out.includes("Alpha has 2"), "no volatile number");
-  assert.ok(!/satellites-by-country\/[a-z]/.test(out), "only the hub");
+  // the five country pages are not listed (the hub stands for them); the owner pages of the satellites and debris family are, with fixed notes
+  for (const slug of ["united-states", "china", "united-kingdom", "cis-former-ussr", "japan"]) assert.ok(!out.includes(`satellites-by-country/${slug}/`), slug);
+  assert.ok(live.includes("- [India: satellites and debris](https://example.org/satellites-by-country/india/): The objects in Earth orbit that CelesTrak's catalogue records under India"));
   assert.throws(() => buildLlmsTxt({ pages: pages.filter((p) => p.file !== HUB_FILE), url: "https://example.org", name: "N", summary: "S" }), /no page satellites-by-country\/index\.html/);
 });
 
