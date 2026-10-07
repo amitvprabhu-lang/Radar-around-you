@@ -67,6 +67,14 @@ const server = http.createServer((req, res) => {
 const A = await new Promise((r) => server.listen(0, "127.0.0.1", () => r(`http://127.0.0.1:${server.address().port}`)));
 const PAGE = `${A}/satellites-near-me/`;
 
+// The state the bundled copy should give right now: the page's own preparation and rules on the built site's files.
+const N = await import("./site/near.mjs");
+const UI = await import("./site/near-ui.mjs");
+function expectedBundledState() {
+  const files = { meta: baseMeta, swarm: pub("swarm.bin"), ids: pub("ids.bin"), details: pub("details.bin"), names: pub("names.txt").toString("utf8"), precise: JSON.parse(pub("precise.json")) };
+  return UI.staleState(N.prepareSatellites(N.decodeFeed(files), Date.now()).counts).level;
+}
+
 // ------------------------------------------------------------------ helpers
 const browser = await launch();
 async function open(query = "", { width = 1200, height = 900, js = true, init = null, clock = false, permissions = null, throttle = 0 } = {}) {
@@ -209,6 +217,30 @@ for (const [mode, want] of [["aging", "warn"], ["ancient", "none"]]) {
 }
 state.mode = "v1";
 
+// ------------------------------------------------------------------ 2c. a station row at 25 km, and a new launch's wide uncertainty
+{
+  state.mode = "v1";
+  // where the ISS and a new launch below 450 km will be an hour from now, in the pretend live data (V1)
+  const v1 = { meta: { ...baseMeta, ...JSON.parse(V1.files.get("satmeta.json")) }, swarm: V1.files.get("swarm.bin"), ids: V1.files.get("ids.bin"), details: V1.files.get("details.bin"), names: V1.files.get("names.txt").toString("utf8"), precise: JSON.parse(V1.files.get("precise.json")) };
+  const prep = N.prepareSatellites(N.decodeFeed(v1), NOW);
+  const spot = (sat) => { const g = N.groundDistanceKm({ lat: 0, lon: 0 }, N.stateAt(sat, NOW + 3600000).ecef); return `?lat=${(g.lat + 0.05).toFixed(4)}&lon=${g.lon.toFixed(4)}`; };
+  const iss = prep.sats.find((s) => s.id === 25544);
+  const { p, ctx, errors } = await open(spot(iss) + "&r=25&name=Under%20the%20ISS");
+  await done(p);
+  const row = await p.evaluate(() => { const tr = [...document.querySelectorAll("#nm-out table.nm-table:not(.nm-now) tbody tr")].find((x) => /ISS \(ZARYA\)/.test(x.textContent)); if (tr) tr.id = "nm-shot-iss"; return tr ? tr.textContent : ""; });
+  check("the ISS is listed at 25 km with a station's small uncertainty", /km ± 1 /.test(row) && /± 10 s/.test(row) && /within/.test(row), row);
+  if (process.env.SHOTS) { await p.evaluate(() => document.getElementById("nm-shot-iss").scrollIntoView()); await p.screenshot({ path: path.join(process.env.SHOTS, "near-1200-iss-25km.png") }); }
+  await ctx.close();
+  const fresh = prep.sats.find((s) => s.exact && s.recent && !s.station && s.band === "low-under-450");
+  const f = await open(spot(fresh) + "&r=100&name=Under%20a%20new%20launch");
+  await done(f.p);
+  const frow = await f.p.evaluate((name) => { const tr = [...document.querySelectorAll("#nm-out table.nm-table:not(.nm-now) tbody tr")].find((x) => x.querySelector("strong").textContent === name); if (tr) tr.id = "nm-shot-new"; return tr ? tr.textContent : ""; }, fresh.name);
+  check("a new launch still raising its orbit carries the wide uncertainty of its group", /launched in the last 30 days/.test(frow) && Number((/km ± (\d+)/.exec(frow) || [0, 0])[1]) >= 20 && /± \d{3} s|time uncertain by about \d+ min/.test(frow), frow);
+  if (process.env.SHOTS) { await f.p.evaluate(() => document.getElementById("nm-shot-new").scrollIntoView()); await f.p.screenshot({ path: path.join(process.env.SHOTS, "near-1200-new-launch.png") }); }
+  check("no console errors (station and new launch)", errors.length === 0 && f.errors.length === 0, [...errors, ...f.errors].join(" | "));
+  await f.ctx.close();
+}
+
 // ------------------------------------------------------------------ 3. the live feed older than the bundle, or missing: the bundled copy
 for (const mode of ["older", "missing"]) {
   state.mode = mode;
@@ -216,8 +248,11 @@ for (const mode of ["older", "missing"]) {
   check(`${mode} live feed: an answer from the bundled copy`, await done(p));
   const src = await source(p);
   check(`${mode} live feed: the page says it used the bundled snapshot and why`, /Using the bundled snapshot of .* UTC/.test(src) && (mode === "older" ? /older than the bundled copy/.test(src) : /could not be read/.test(src)), src);
-  // the bundled copy's age depends on the day of the run: a full answer, a warning or the too-old message are all right, without NaN
-  check(`${mode} live feed: a full answer, a warning or the too-old message, and no NaN`, await p.evaluate(() => { const t = document.getElementById("nm-out").textContent; return !/NaN|undefined|Infinity/.test(t) && (/too old|Warning:|Next 24 hours/.test(t)); }));
+  // the bundled copy's age depends on the day of the run, so the expected state is worked out here with the page's own rules
+  const want = expectedBundledState();
+  const got = await p.evaluate(() => ({ text: document.getElementById("nm-out").textContent, tooOld: !!document.getElementById("nm-old-h"), warn: /^Warning:/.test((document.getElementById("nm-old") || {}).textContent || "") }));
+  const state = got.tooOld ? "none" : got.warn ? "warn" : "ok";
+  check(`${mode} live feed: the state the bundled copy's age calls for (${want}), and no NaN`, state === want && !/NaN|undefined|Infinity/.test(got.text), `page ${state}, expected ${want}`);
   check(`${mode} live feed: no console errors`, errors.length === 0, errors.join(" | "));
   await ctx.close();
 }
@@ -309,14 +344,19 @@ state.mode = "v1";
   // the main-thread fallback (no Worker) with the 4x slowdown, a new distance after the data is loaded
   const { p, ctx } = await open("", { throttle: 4, init: () => { delete window.Worker; } });
   await done(p);
-  const before = await announce(p), t = Date.now();
-  await p.evaluate(() => { window.__long = []; });
-  await p.selectOption("#nm-radius", "50");
-  await done(p, before);
-  const longest = await p.evaluate(() => Math.max(0, ...window.__long));
-  console.log(`     with a 4x CPU slowdown on the main thread (no worker): calculation for 50 km ${Date.now() - t} ms, longest task ${Math.round(longest)} ms`);
-  // the worker is the normal path (checked above at 200 ms); this fallback, slowed down, has measured 116 to 288 ms on this Mac, so its bound is 300 ms
-  check("with a 4x CPU slowdown and no worker, the sliced calculation keeps tasks under 300 ms", longest < 300, `${longest} ms`);
+  // one new distance, timed; a second attempt only if the first one had a task over the bound (a busy machine can stall one task)
+  const attempt = async (r) => {
+    const before = await announce(p), t = Date.now();
+    await p.evaluate(() => { window.__long = []; });
+    await p.selectOption("#nm-radius", r);
+    await done(p, before);
+    const longest = await p.evaluate(() => Math.max(0, ...window.__long));
+    console.log(`     with a 4x CPU slowdown on the main thread (no worker): calculation for ${r} km ${Date.now() - t} ms, longest task ${Math.round(longest)} ms`);
+    return longest;
+  };
+  let longest = await attempt("50");
+  if (longest >= 200) longest = await attempt("25");
+  check("with a 4x CPU slowdown and no worker, the sliced calculation keeps tasks under 200 ms (one retry allowed)", longest < 200, `${longest} ms`);
   await ctx.close();
 }
 

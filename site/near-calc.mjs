@@ -8,7 +8,6 @@ import { decodeFeed, prepareSatellitesSteps, searchNear, tableRows, trackAround 
 import { TABLE_CAP, chooseSource } from "./near-ui.mjs";
 
 const SAT_FILES = ["swarm.bin", "ids.bin", "details.bin", "names.txt", "precise.json"];
-let cache = null;          // { base, feed, info }
 let prepared = null;       // { key, value }
 let latest = 0;            // the newest run asked for; an older run stops at its next pause
 
@@ -17,62 +16,66 @@ async function getJson(url, init) { const r = await fetch(url, init); if (!r.ok)
 async function getText(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.text(); }
 
 let baseMetaCache = null;  // { base, meta }: the bundled meta.json, read once
-let failedVersion = null;  // a live version whose files failed to download: not tried again in this session
+// Live versions that could not be downloaded or decoded: never tried again in this session. The newest one is reported to the page.
+const failedVersions = new Set();
+let lastFailed = null;
+// The decoded data: the last good live version and the bundled copy, each kept for the next run.
+let goodLive = null, bundled = null;
 
 // base: the site's root address. Every run reads the live manifest again (it is small and asked for with no-store), so a run after the
-// collector has published new data uses it; the decoded feed is kept while the chosen data stays the same. Reports the download through
+// collector has published new data uses it; decoded data is kept while the chosen data stays the same. Reports the download through
 // progress(loadedBytes, totalBytes or null).
-// One load at a time: a second run that starts while a download is going waits for it and then finds the data in the cache.
+// One load at a time: a second run that starts while a download is going waits for it and then finds the data kept.
 let loading = Promise.resolve();
 export function loadFeed(base, progress = () => {}, nowMs = Date.now()) {
   const next = loading.then(() => loadFeedNow(base, progress, nowMs));
   loading = next.catch(() => {});
   return next;
 }
+// The choice, in order: the live version the manifest names, if it is new and not known to be broken; else the last good live version this
+// session loaded (still newer than the bundled copy, because the bundled copy is only used when the live feed is older or missing); else
+// the bundled copy. A live version is broken when a file is missing or the files do not fit together (decodeFeed's length checks).
 // The bundled files are asked for with the bundled data time in the address, and meta.json with a unique one: a service worker or browser
 // cache that keeps old copies of the bundled files (public/sw.js refreshes them in the background) can then never mix the files of two
-// deploys, because every deploy's files have their own addresses. A mix that still slips through (counts that disagree) is caught by
-// decodeFeed's length checks and ends in the page's error state, never in wrong names.
+// deploys, because every deploy's files have their own addresses. A mix that still slips through is refused by decodeFeed and ends in the
+// page's error state, never in wrong names.
 async function loadFeedNow(base, progress, nowMs) {
-  if (!baseMetaCache || baseMetaCache.base !== base) baseMetaCache = { base, meta: await getJson(base + "meta.json?n=" + Date.now(), { cache: "no-store" }) };
+  if (!baseMetaCache || baseMetaCache.base !== base) { baseMetaCache = { base, meta: await getJson(base + "meta.json?n=" + Date.now(), { cache: "no-store" }) }; goodLive = null; bundled = null; }
   const baseMeta = baseMetaCache.meta, bundledTaken = Date.parse(baseMeta.taken);
   const manifest = await loadManifest((u, i) => fetch(u, i), base + "live/", 6000);
-  let pick = chooseSource(manifest, bundledTaken, base + "live/", nowMs);
-  if (pick.source === "live" && pick.version === failedVersion) pick = { source: "bundled", reason: "failed", version: null };
-  const key = pick.source === "live" ? `live:${pick.version}` : "bundled";
-  if (cache && cache.base === base && cache.key === key) return { ...cache, info: { ...cache.info, state: pick.state || null, reason: pick.reason || null, failedVersion, pollSec: manifest && manifest.pollSec ? manifest.pollSec : null } };
+  const pollSec = manifest && manifest.pollSec ? manifest.pollSec : null;
+  const pick = chooseSource(manifest, bundledTaken, base + "live/", nowMs);
+  const extra = (info) => ({ ...info, pollSec, failedVersion: lastFailed, bundledTaken: baseMeta.taken });
   let loaded = 0, total = null;
   const count = (p) => p.then((x) => { loaded += x.byteLength || x.length || 0; progress(loaded, total); return x; });
   const fetchSet = (path) => Promise.all([count(getBytes(path("swarm.bin"))), count(getBytes(path("ids.bin"))), count(getBytes(path("details.bin"))), count(getText(path("names.txt"))), count(getJson(path("precise.json")))]);
-  let files = null, meta = baseMeta, info = null;
-  if (pick.source === "live") {
-    total = SAT_FILES.reduce((s, f) => s + (pick.sizes[f] || 0), 0) || null;
+  if (pick.source === "live" && !failedVersions.has(pick.version)) {
+    if (goodLive && goodLive.version === pick.version) return { feed: goodLive.feed, info: extra({ ...goodLive.info, state: pick.state }) };
+    total = SAT_FILES.reduce((t, f) => t + (pick.sizes[f] || 0), 0) || null;
     try {
       const [set, satmeta] = await Promise.all([fetchSet((f) => pick.paths[f]), getJson(pick.paths["satmeta.json"])]);
-      files = set; meta = { ...baseMeta, ...satmeta };
-      info = { source: "live", version: pick.version, fetchedAt: pick.fetchedAt, state: pick.state, refreshSec: pick.refreshSec, taken: meta.taken };
+      const meta = { ...baseMeta, ...satmeta };
+      const [swarm, ids, details, names, precise] = set;
+      const feed = decodeFeed({ meta, swarm, ids, details, names, precise });
+      const info = { source: "live", version: pick.version, fetchedAt: pick.fetchedAt, state: pick.state, refreshSec: pick.refreshSec, taken: meta.taken, bytes: loaded };
+      goodLive = { version: pick.version, feed, info };
+      return { feed, info: extra(info) };
     } catch {
-      failedVersion = pick.version; files = null; meta = baseMeta; loaded = 0; pick = { source: "bundled", reason: "failed" };
-      // an older live version already loaded is still newer than the bundled copy: keep using it
-      if (cache && cache.base === base && cache.key.startsWith("live:")) return { ...cache, info: { ...cache.info, failedVersion } };
+      failedVersions.add(pick.version); lastFailed = pick.version; loaded = 0;
     }
   }
-  if (!files) {
-    if (cache && cache.base === base && cache.key === "bundled") return { ...cache, info: { ...cache.info, reason: pick.reason, failedVersion } };
-    const sizes = await getJson(base + "manifest.json").catch(() => []);
-    const sz = Object.fromEntries((Array.isArray(sizes) ? sizes : []).map((m) => [m.file, m.raw]));
-    total = SAT_FILES.reduce((s, f) => s + (sz[f] || 0), 0) || null;
-    files = await fetchSet((f) => `${base}${f}?v=${encodeURIComponent(baseMeta.taken)}`);
-    info = { source: "bundled", version: null, reason: pick.reason, fetchedAt: baseMeta.taken, taken: baseMeta.taken };
-  }
-  const [swarm, ids, details, names, precise] = files;
-  const feed = decodeFeed({ meta, swarm, ids, details, names, precise });
-  info.bytes = loaded;
-  info.pollSec = manifest && manifest.pollSec ? manifest.pollSec : null;
-  info.bundledTaken = baseMeta.taken;
-  info.failedVersion = failedVersion;
-  cache = { base, key: info.source === "live" ? `live:${info.version}` : "bundled", feed, info };
-  return cache;
+  // the newest data this session has: a good live version loaded before (newer than the bundled copy by the choice above)
+  if (goodLive && Date.parse(goodLive.info.fetchedAt) > bundledTaken) return { feed: goodLive.feed, info: extra({ ...goodLive.info, reason: pick.source === "live" ? "failed" : pick.reason }) };
+  const reason = pick.source === "live" ? "failed" : pick.reason;
+  if (bundled) return { feed: bundled.feed, info: extra({ ...bundled.info, reason }) };
+  const sizes = await getJson(base + "manifest.json").catch(() => []);
+  const sz = Object.fromEntries((Array.isArray(sizes) ? sizes : []).map((m) => [m.file, m.raw]));
+  total = SAT_FILES.reduce((t, f) => t + (sz[f] || 0), 0) || null;
+  const [swarm, ids, details, names, precise] = await fetchSet((f) => `${base}${f}?v=${encodeURIComponent(baseMeta.taken)}`);
+  const feed = decodeFeed({ meta: baseMeta, swarm, ids, details, names, precise });
+  const info = { source: "bundled", version: null, fetchedAt: baseMeta.taken, taken: baseMeta.taken, bytes: loaded };
+  bundled = { feed, info };
+  return { feed, info: extra({ ...info, reason }) };
 }
 
 const satInfo = (sat, startMs) => {

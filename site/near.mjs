@@ -53,10 +53,12 @@ export const ACCURACY = {
   },
   // the second check: the published data of 2026-10-05 08:14 UTC propagated to the epochs of the 2026-10-07 element sets, 36 to 48 hours ahead
   ahead: { taken: "2026-10-05T08:14:54Z", all: [10456, 9.5, 127], "low-450-600": [7349, 12.2, 48], "low-600-1000": [830, 0.8, 18], "low-under-450": [963, 57, 1335] },
-  // the marks checked against the newer element sets (tools/near-pass-errors.mjs --marks, window 36 to 48 hours after the older data, 12
-  // places): [truth passes, share marked within, share marked within or borderline, share of "within" rows truly within, share of
-  // borderline rows truly within the distance plus their uncertainty, share of borderline rows truly within the distance]
-  marks: { 25: [6780, 0.961, 0.976, 0.974, 0.902, 0.101], 100: [26165, 0.99, 0.994, 0.99, 0.904, 0.094], 500: [120388, 0.996, 0.997, 0.997, 0.893, 0.109] },
+  // the marks checked out of sample (tools/near-pass-errors.mjs --marks): the three older data sets, windows 12 to 24, 36 to 48 and 60 to
+  // 72 hours after each, at the 20 places of CHECK_PLACES (none of them used to make the tables); percentages. truth: passes the newer element
+  // sets put inside the distance; recallWithin, recallListed: the share of them the page marked within, or within or borderline;
+  // precisionWithin: the share of "within" rows truly inside; borderInside, borderNear: the share of borderline rows truly inside the distance,
+  // or inside it plus their uncertainty; kmCoverage, sCoverage: the share of listed rows whose true distance and time fall inside their "±".
+  marks: { places: 20, 25: {truth: 79824, recallWithin: 92.9, recallListed: 93.9, precisionWithin: 97.5, borderInside: 9.1, borderNear: 88.3, kmCoverage: 95.3, sCoverage: 95.9}, 100: {truth: 287388, recallWithin: 98.1, recallListed: 98.6, precisionWithin: 98.8, borderInside: 10.8, borderNear: 88.5, kmCoverage: 94.3, sCoverage: 95.5}, 500: {truth: 1504664, recallWithin: 99.6, recallListed: 99.7, precisionWithin: 99.6, borderInside: 11.6, borderNear: 86.3, kmCoverage: 94.6, sCoverage: 95.6} },
 };
 export const U_BAND_LABELS = {
   "low-under-450": "below 450 km", "low-450-600": "450 to 600 km", "low-600-1000": "600 to 1,000 km", "low-1000-2000": "1,000 to 2,000 km",
@@ -81,20 +83,26 @@ export function positionErrorKm(band, hoursSinceEpoch) {
   return row[k] + f * (row[k + 1] - row[k]);
 }
 
-// The measured pass error for a satellite at a pass `ageH` hours after its element epoch: { km, s } (95th percentiles of the closest-distance
-// error and of the time error). kind: "full" for a full element set, "mean" for the swarm's packed elements. A band the measurement has no
-// row for takes the kind's "other" row (all its bands together). A full element set below 450 km, or of a satellite launched in the last 30
-// days, is never given less than the packed elements' error for its band: those are the satellites that are still raising their orbits.
+// The kind of orbit data a satellite's passes are worked out from, as the measurement (tools/near-pass-errors.mjs) splits them: "station"
+// (a full element set of a crewed station: the swarm's display kind 4, which pipeline/pack.py gives to the stations it lists, the ISS 25544
+// and Tiangong 48274), "fullNew" (a full element set of a satellite launched in the last 30 days, most still raising their orbits), "full"
+// (any other full element set) and "mean" (the swarm's packed mean elements without drag).
+export const passKind = (sat) => (!sat.exact ? "mean" : sat.station ? "station" : sat.recent ? "fullNew" : "full");
+
+// The measured pass error at a pass `ageH` hours after the element epoch: { km, s } (95th percentiles of the closest-distance error and of
+// the time error). A band the measurement has no row for takes the kind's "other" row (its bands together), and a kind with no rows the
+// compact data's. With floorMean (a full set, not a station, below 450 km or launched in the last 30 days) the value is never less than
+// the compact data's for the band.
 export function passError(band, kind, ageH, { floorMean = false, tables = PASS_ERRORS } = {}) {
-  const t = tables.tables[kind] || tables.tables.mean;
-  const row = t[band] || t.other;
+  const T = tables.tables;
+  const row = (T[kind] && (T[kind][band] || T[kind].other)) || T.mean[band] || T.mean.other;
   const found = tables.ageEdges.findIndex((e) => ageH < e);
   const idx = found < 0 ? tables.ageEdges.length : found;
   let km = row.km[idx], s = row.s[idx];
-  if (kind === "full" && floorMean) { const m = passError(band, "mean", ageH, { tables }); km = Math.max(km, m.km); s = Math.max(s, m.s); }
+  if (kind !== "mean" && floorMean) { const m = passError(band, "mean", ageH, { tables }); km = Math.max(km, m.km); s = Math.max(s, m.s); }
   return { km, s };
 }
-export const satPassError = (sat, ageH) => passError(sat.band, sat.exact ? "full" : "mean", ageH, { floorMean: sat.exact && (sat.band === "low-under-450" || sat.recent) });
+export const satPassError = (sat, ageH) => { const kind = passKind(sat); return passError(sat.band, kind, ageH, { floorMean: kind !== "mean" && kind !== "station" && (sat.band === "low-under-450" || sat.recent) }); };
 
 // within: the central estimate is inside the radius. borderline: outside it by less than the uncertainty. uncertain: inside it, but the
 // uncertainty is as large as the radius itself, so the answer could be anything; those are counted, not listed. null: not near.
@@ -178,7 +186,7 @@ export function* prepareSatellitesSteps(feed, atMs, { staleHours = STALE_HOURS }
     const sat = {
       k, id, name: (names[k] || "").trim() || `NORAD ${id}`, owner: d.owner ? meta.owners[d.owner - 1] || null : null,
       purpose: meta.purposes ? meta.purposes[d.purpose] || "Unspecified" : "Unspecified", launchDay: d.launchDay,
-      orbit, band: uncertaintyBand(n, e), starlink: u16[6 * k + 5] === 1, exact: !!row, rec, epochMs,
+      orbit, band: uncertaintyBand(n, e), starlink: u16[6 * k + 5] === 1, station: u16[6 * k + 5] === 4, exact: !!row, rec, epochMs,
       recent: d.launchDay > 0 && atMs - (Date.UTC(1957, 9, 4) + (d.launchDay - 1) * 86400000) <= RECENT_DAYS * 86400000,
     };
     if (row) counts.exact++;
@@ -312,7 +320,9 @@ export function closestApproaches(sat, place, t0, t1, searchKm, { P = placeVecto
   const cosTheta = Math.cos(theta);
   const wMax = maxRate(sat.rec);
   const periodMs = (2 * Math.PI) / (sat.rec.no / 60000);
-  const stepIn = Math.max(1000, Math.min(10000, periodMs / 500, (theta / wMax) / 2));
+  // the step inside the zone: at least two steps across the narrowest pass, at most a 500th of an orbit; slow orbits (geosynchronous) get
+  // long steps, up to two minutes
+  const stepIn = Math.max(1000, Math.min(120000, periodMs / 500, (theta / wMax) / 2));
   const angleAt = (t) => {
     const st = stateAt(sat, t, gmst0 + EARTH_RATE_MS * (t - t0));
     if (!st) return NaN;
@@ -336,21 +346,27 @@ export function closestApproaches(sat, place, t0, t1, searchKm, { P = placeVecto
   };
   const finish = (bestT) => {
     let t = fit(sq, bestT, [stepIn, Math.max(500, stepIn / 10)], 200);
-    t = fit(km2, t, [8000, 800], 100);
+    t = fit(km2, t, [Math.max(8000, stepIn), Math.max(800, stepIn / 10)], 100);
     if (t - t0 < 1000 || t1 - t < 1000) return;  // at an edge of the window
     const d2 = km2(t);
     if (d2 <= searchKm * searchKm) found.push({ t, km: Math.sqrt(d2) });
   };
+  // Inside the zone every local minimum of the sampled angle is a closest approach: a slow satellite (an inclined geosynchronous one) can come
+  // near twice in one stretch, so after a minimum the search waits for the angle to fall again and starts a new one.
   for (const [wa, wb] of planeWindows(sat.rec, P, t0, t1, theta + PLANE_MARGIN, gmst0)) {
-    let t = wa, best = null;
+    let t = wa, best = null, rising = false, prev = Infinity;
     while (t <= wb) {
       const ang = angleAt(t);
       if (!(ang >= 0)) return found;  // SGP4 gave up (decay): nothing more for this satellite
       if (ang <= theta) {
-        if (!best || ang < best.ang) best = { t, ang };
+        if (rising) { if (ang < prev) { rising = false; best = { t, ang }; } }
+        else if (!best || ang <= best.ang) best = { t, ang };
+        else if (ang > prev) { finish(best.t); best = null; rising = true; }
+        prev = ang;
         t += stepIn;
       } else {
-        if (best) { finish(best.t); best = null; }
+        if (best) finish(best.t);
+        best = null; rising = false; prev = Infinity;
         t += Math.max(500, (ang - theta) / wMax);
       }
     }
@@ -422,7 +438,11 @@ export function* searchNear(prepared, place, { startMs, hours = WINDOW_HOURS, ra
   now.sort((a, b) => a.km - b.km);
   passes.sort((a, b) => a.t - b.t || a.km - b.km);
   geo.sort((a, b) => a.minKm - b.minKm);
-  return { startMs: t0, endMs: t1, radiusKm, now, passes, geo, counts: { ...prepared.counts, uncertainNow, uncertainPasses } };
+  // how many satellites' element sets will be in the oldest measured age (72 hours and more) before the 24 hours end: their passes then
+  // carry the widest uncertainty (site/near-errors.mjs), so the page says so when they are many
+  const lastEdge = PASS_ERRORS.ageEdges[PASS_ERRORS.ageEdges.length - 1];
+  const agingByEnd = [...prepared.sats, ...prepared.geo].filter((s) => (t1 - s.epochMs) / 3600000 >= lastEdge).length;
+  return { startMs: t0, endMs: t1, radiusKm, now, passes, geo, counts: { ...prepared.counts, uncertainNow, uncertainPasses, agingByEnd } };
 }
 
 // The rows the table shows: the first `cap` passes in time order ("time") or nearest first ("distance"), each with the full description of

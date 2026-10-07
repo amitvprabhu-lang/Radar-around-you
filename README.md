@@ -149,7 +149,7 @@ build.mjs   esbuild bundler: one self-contained page by default (every build the
             bundle goes to app.<first 10 hex digits of its sha256>.js next to the page, named in the head with defer, plus a small guard that shows a reload
             message when that script cannot be downloaded
 e2e.mjs, e2e-live.mjs, e2e-site.mjs, e2e-embed.mjs, e2e-near.mjs, harness.mjs, smoke/   browser tests and debugging scripts
-tools/      scripts run by hand: make-icons.mjs (app icons), make-og-image.mjs (the share image), near-accuracy.mjs and near-pass-errors.mjs (the satellites near me accuracy measurements, its test sample and the pass-error tables in site/near-errors.mjs), build-constellations.mjs
+tools/      scripts run by hand: make-icons.mjs (app icons), make-og-image.mjs (the share image), near-accuracy.mjs and near-pass-errors.mjs (the satellites near me accuracy measurements over one or more older published data folders, its test sample and the pass-error tables in site/near-errors.mjs), build-constellations.mjs
 build_data.py, fetch_*.py, build_snapshot.py   data pipeline (inputs live in raw/ and raw2/, which are git-ignored and not in the repository; the fetch scripts read your contact address from the CONTACT_EMAIL environment variable and put it in the User-Agent header, as the data providers ask)
 docs/       research reports, the technical plan, screenshots from the latest end-to-end run
 v1/         the first prototype, kept for reference

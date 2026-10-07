@@ -134,6 +134,18 @@ export function measureAhead(rows, old) {
   return res;
 }
 
+// An older published folder as rows [id, epoch offset min, mean motion, e, i, node, perigee, mean anomaly (uint16), display kind, launch day]
+export function readOld(dir) {
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, "satmeta.json"), "utf8"));
+  const sw = fs.readFileSync(path.join(dir, "swarm.bin")), ids = fs.readFileSync(path.join(dir, "ids.bin")), det = fs.readFileSync(path.join(dir, "details.bin"));
+  const ab = sw.buffer.slice(sw.byteOffset, sw.byteOffset + sw.byteLength);
+  const F = new Float32Array(ab, 0, meta.count * 2), U = new Uint16Array(ab, meta.count * 8, meta.count * 6);
+  const I = new Uint32Array(ids.buffer.slice(ids.byteOffset, ids.byteOffset + ids.byteLength));
+  const rows = [];
+  for (let k = 0; k < meta.count; k++) rows.push([I[k], F[2 * k], F[2 * k + 1], U[6 * k], U[6 * k + 1], U[6 * k + 2], U[6 * k + 3], U[6 * k + 4], U[6 * k + 5], det.readUInt16LE(8 * k + 4)]);
+  return { refMs: meta.ref, taken: meta.taken, rows, precise: JSON.parse(fs.readFileSync(path.join(dir, "precise.json"), "utf8")) };
+}
+
 // pack.py's rejection rules (pipeline/pack.py rejection), so the measurement uses the sets the feed would publish.
 export function usable(r, refMs) {
   const ep = epochMs(r.EPOCH);
@@ -168,15 +180,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const { sample, counts } = stratifiedSample(rows, refMs);
   const full = measure(rows, refMs);
   let old = null;
-  if (oldDir) {
-    const meta = JSON.parse(fs.readFileSync(path.join(oldDir, "satmeta.json"), "utf8"));
-    const sw = fs.readFileSync(path.join(oldDir, "swarm.bin")), ids = fs.readFileSync(path.join(oldDir, "ids.bin"));
-    const ab = sw.buffer.slice(sw.byteOffset, sw.byteOffset + sw.byteLength);
-    const F = new Float32Array(ab, 0, meta.count * 2), U = new Uint16Array(ab, meta.count * 8, meta.count * 6);
-    const I = new Uint32Array(ids.buffer.slice(ids.byteOffset, ids.byteOffset + ids.byteLength));
-    old = { refMs: meta.ref, taken: meta.taken, rows: [], precise: JSON.parse(fs.readFileSync(path.join(oldDir, "precise.json"), "utf8")) };
-    for (let k = 0; k < meta.count; k++) old.rows.push([I[k], F[2 * k], F[2 * k + 1], U[6 * k], U[6 * k + 1], U[6 * k + 2], U[6 * k + 3], U[6 * k + 4]]);
-  }
+  // rows [id, epoch offset, mean motion, e, i, node, perigee, mean anomaly, display kind, launch day] (tools/near-pass-errors.mjs readOld)
+  if (oldDir) old = readOld(oldDir);
   const report = { refIso: new Date(refMs).toISOString(), sets: rows.length, bandCounts: counts, full, ahead: old ? measureAhead(rows, old) : null };
   console.log(JSON.stringify(report, (k, v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v), 1));
   if (process.argv.includes("--write-sample")) {
@@ -188,7 +193,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       note: "A stratified sample of CelesTrak's GP list GROUP=active (FORMAT=json), for test/near-accuracy.test.js. Made by tools/near-accuracy.mjs. Columns as public/precise.json.",
       source: "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json", downloadedAt: new Date(refMs).toISOString(), refMs, bandCounts: counts, cols: COLS, rows: sample,
       addedForFullSets: { note: "Not part of the stratified sample: added because the older collection had their full element sets. The position measurement leaves them out.", ids: added },
-      old: old ? { note: "The same satellites as packed in the published swarm.bin of an older collection: [id, epoch offset min, mean motion rad/min, e, i, node, perigee, mean anomaly as uint16]", taken: old.taken, refMs: old.refMs, rows: old.rows.filter((r) => ids.has(r[0])),
+      old: old ? { note: "The same satellites as packed in the published swarm.bin of an older collection: [id, epoch offset min, mean motion rad/min, e, i, node, perigee, mean anomaly as uint16, display kind, launch day]", taken: old.taken, refMs: old.refMs, rows: old.rows.filter((r) => ids.has(r[0])),
         precise: { note: "The full element sets of the older collection's precise.json for these satellites", cols: old.precise.cols, rows: old.precise.rows.filter((r) => ids.has(r[0])) } } : null,
     };
     const f = fileURLToPath(new URL("../test/fixtures/near-accuracy.json", import.meta.url));

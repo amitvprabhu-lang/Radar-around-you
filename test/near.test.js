@@ -269,7 +269,8 @@ test("wording: distances with their uncertainty, times in UTC and in the place's
   assert.equal(utcText(Date.parse("2026-10-07T05:08:54Z"), Date.parse("2026-10-07T05:00:00Z")), "05:08:54 UTC");
   assert.equal(utcText(Date.parse("2026-10-08T01:00:00Z"), Date.parse("2026-10-07T05:00:00Z")), "Thu 8 Oct, 01:00:00 UTC");
   assert.equal(zoneText(Date.parse("2026-10-07T05:08:54Z"), "Asia/Kolkata"), "Wed 7 Oct, 10:38");
-  assert.equal(announcement({ placeName: "Pune", radiusKm: 100, now: 0, within: 2921, borderline: 365 }), "Done: for Pune within 100 km, none right now, and 2,921 passes in the next 24 hours, plus 365 borderline.");
+  assert.equal(announcement({ placeName: "Pune", radiusKm: 100, within: 2921, borderline: 365 }), "Done: for Pune within 100 km, none right now, and 2,921 passes in the next 24 hours, plus 365 borderline.");
+  assert.equal(announcement({ placeName: "Pune", radiusKm: 100, nowWithin: 1, nowBorder: 2, within: 5, borderline: 0 }), "Done: for Pune within 100 km, 1 within and 2 borderline right now, and 5 passes in the next 24 hours, plus 0 borderline.");
 });
 
 test("the map: north up, the circle to scale, nothing but numbers and fixed words in the SVG", () => {
@@ -338,12 +339,18 @@ test("the calculation uses a newer live feed, falls back to the bundled copy whe
     put("V2", "2026-10-04T17:00:00Z"); manifest("V2", "2026-10-04T17:00:00Z");
     r = await loadFeed("B/", () => {}, now);
     assert.equal(r.info.version, "V2", "a new version is picked up on the next run");
+    // a manifest whose feed is older than the bundled copy: the good live data loaded before (V2) is newer still, so it stays
     manifest("V0", "2026-10-01T00:00:00Z");
     r = await loadFeed("B/", () => {}, now);
-    assert.equal(r.info.source, "bundled"); assert.equal(r.info.reason, "older"); assert.equal(r.info.fetchedAt, bundled.meta.taken);
-    manifest("VX", "2026-10-04T18:00:00Z");  // listed, but its files are missing
+    assert.equal(r.info.source, "live"); assert.equal(r.info.version, "V2"); assert.equal(r.info.reason, "older");
+    manifest("VX", "2026-10-04T18:00:00Z");  // listed, but its files are missing: V2 stays
     r = await loadFeed("B/", () => {}, now);
-    assert.equal(r.info.source, "bundled"); assert.equal(r.info.reason, "failed");
+    assert.equal(r.info.source, "live"); assert.equal(r.info.version, "V2"); assert.equal(r.info.failedVersion, "VX");
+    // with no good live data newer than it (a new site address, so nothing kept), the bundled copy is used, and says why
+    for (const f of ["meta.json", "manifest.json", "swarm.bin", "ids.bin", "details.bin", "names.txt", "precise.json"]) files.set(`B2/${f}`, files.get(`B/${f}`));
+    files.set("B2/live/manifest.json", files.get("B/live/manifest.json"));
+    r = await loadFeed("B2/", () => {}, now);
+    assert.equal(r.info.source, "bundled"); assert.equal(r.info.reason, "failed"); assert.equal(r.info.fetchedAt, bundled.meta.taken);
     // a whole run answers with the place, the counts and rows that are within the radius plus their uncertainty
     manifest("V2", "2026-10-04T17:00:00Z");
     const msgs = [];

@@ -184,9 +184,9 @@ export const isoUtc = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z
 export const dayTimeUtc = (ms) => `${fmt({ day: "numeric", month: "long", year: "numeric" }, "UTC").format(new Date(ms))}, ${fmt({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }, "UTC").format(new Date(ms))} UTC`;
 
 // The sentence read out once a calculation is complete (the page's polite live region).
-export function announcement({ placeName, radiusKm, now, within, borderline, usable = true }) {
+export function announcement({ placeName, radiusKm, nowWithin = 0, nowBorder = 0, within, borderline, usable = true }) {
   if (!usable) return `No answer for ${placeName}: the orbit data is too old.`;
-  const nowPart = now === 0 ? "none right now" : `${plural(now, "satellite")} right now`;
+  const nowPart = nowWithin + nowBorder === 0 ? "none right now" : `${fmtInt(nowWithin)} within and ${fmtInt(nowBorder)} borderline right now`;
   return `Done: for ${placeName} within ${fmtKm(radiusKm)}, ${nowPart}, and ${plural(within, "pass", "passes")} in the next 24 hours, plus ${fmtInt(borderline)} borderline.`;
 }
 
@@ -200,11 +200,14 @@ export const pctText = (x) => (Number.isFinite(x) ? `${Number((x * 100).toPrecis
 export const MIN_USABLE = 1000;
 export const WARN_STALE_SHARE = 0.1;
 // counts: { active, stale, used } from site/near.mjs prepareSatellites. level: "ok", "warn" (shown with a warning) or "none" (no answer).
+// OURS: a note is shown when more than this share of the usable satellites reach the oldest measured age before the 24 hours end
+export const WARN_AGING_SHARE = 0.25;
 export function staleState(counts) {
   const active = counts && counts.active > 0 ? counts.active : 0;
   const share = active ? (counts.stale || 0) / active : 1;
   const level = !counts || !(counts.used >= MIN_USABLE) ? "none" : share > WARN_STALE_SHARE ? "warn" : "ok";
-  return { level, share };
+  const agingShare = counts && counts.used > 0 ? (counts.agingByEnd || 0) / counts.used : 0;
+  return { level, share, aging: level !== "none" && agingShare > WARN_AGING_SHARE, agingShare };
 }
 
 // ---------- The mini map ----------

@@ -151,9 +151,9 @@ function start() {
   async function poll() {
     pollDue = false;
     const man = await loadManifest((u, i) => fetch(u, i), base + "live/", 6000);
+    // the back-off grows with each failure (no manifest, a broken version, an error) and is reset only by an answer with new data
     if (!man) pollFails++;
     else {
-      pollFails = 0;
       if (man.pollSec) pollSec = man.pollSec;
       // after an error, try again with whatever the manifest offers now
       if (errored) { updating = true; calculate(); return; }
@@ -189,13 +189,15 @@ function start() {
       const changed = !!prev && (prev.info.source !== m.info.source || prev.info.version !== m.info.version);
       // a look for new data that ended with the same data (for example a new version whose download failed): nothing to redraw or say;
       // the failure counts towards the longer wait before the next look
-      if (wasUpdate && !changed && !wasError) { if (newFailure) pollFails++; schedulePoll(); return; }
+      if (newFailure) pollFails++;
+      if (changed || wasError) pollFails = 0;
+      if (wasUpdate && !changed && !wasError) { schedulePoll(); return; }
       // new data from the collector: redraw in place, keeping the scroll position, and say so once
       const y = window.scrollY;
       last = m;
       draw();
       if (wasUpdate) window.scrollTo(0, y);
-      const done = announcement({ placeName: m.place.name, radiusKm: m.radiusKm, now: m.now.length, within: m.within, borderline: m.borderline, usable: m.info.counts.used >= MIN_USABLE });
+      const done = announcement({ placeName: m.place.name, radiusKm: m.radiusKm, nowWithin: m.now.filter((r) => r.status === "within").length, nowBorder: m.now.filter((r) => r.status !== "within").length, within: m.within, borderline: m.borderline, usable: m.info.counts.used >= MIN_USABLE });
       live.textContent = changed && wasUpdate ? `Updated with ${sourceText(m.info)}. ${done}` : done;
       if (m.info.pollSec) pollSec = m.info.pollSec;
       schedulePoll();
@@ -305,6 +307,7 @@ function start() {
         el("p", { class: "note warn", id: "nm-old" }, `${c.used ? `Only ${fmtInt(c.used)}` : "None"} of the ${fmtInt(c.active)} active satellites ${c.used === 1 ? "has" : "have"} orbit data from the last 3 days, so the page does not list passes or count satellites now: the answer would leave out almost everything. ${m.info.source === "live" ? "The site's live data has not been refreshed." : "The site's live data could not be used and the copy bundled with the site is old."} The page looks for newer data every few minutes; try again later.`));
       return;
     }
+    if (old.aging && old.level !== "warn") out.append(el("p", { class: "note warn", id: "nm-aging" }, `Note: ${fmtInt(c.agingByEnd)} of the ${fmtInt(c.used)} satellites worked out (${Math.round(old.agingShare * 100)}%) will have orbit data more than 3 days old before these 24 hours end, so their later passes carry the widest uncertainty in the table under How accurate is it. Newer data usually arrives within hours.`));
     if (old.level === "warn") out.append(el("p", { class: "note warn", id: "nm-old" }, `Warning: ${fmtInt(c.stale)} of the ${fmtInt(c.active)} active satellites (${Math.round(old.share * 100)}%) are left out because their orbit data is more than 3 days old, so this answer misses many passes. ${m.info.source === "live" ? "The live data has not been refreshed for a while." : "The site's live data could not be used, and the bundled copy is old."}`));
 
     // right now

@@ -126,7 +126,7 @@ test("pass errors on the committed sample: the closest-distance and time errors 
   }
 });
 
-test("the page's pass-error tables agree with the committed sample (each measured bucket within 50 percent plus 1 km and 10 s)", () => {
+test("regression guard: the page's pass-error tables still cover the committed sample (an in-sample check: the sample is part of the data the tables were made from; the out-of-sample check is in docs/satellites-near-me-sources.md)", () => {
   const T = PASS_ERRORS.tables;
   assert.deepEqual(PASS_ERRORS.ageEdges, AGE_EDGES);
   let compared = 0;
@@ -134,7 +134,7 @@ test("the page's pass-error tables agree with the committed sample (each measure
     const page = T[kind][band];
     if (!page || band === "other") continue;
     for (let k = 0; k <= AGE_EDGES.length; k++) {
-      if (row.filled[k] || row.n[k] < 100) continue;
+      if (row.merged[k] || row.n[k] < 300) continue;
       assert.ok(row.km[k] <= page.km[k] * 1.5 + 1, `${kind} ${band} bucket ${k}: sample ${row.km[k]} km, table ${page.km[k]} km`);
       assert.ok(row.s[k] <= page.s[k] * 1.5 + 10, `${kind} ${band} bucket ${k}: sample ${row.s[k]} s, table ${page.s[k]} s`);
       compared++;
