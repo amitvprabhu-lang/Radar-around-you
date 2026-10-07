@@ -44,7 +44,8 @@ export const HOME_LIVE_HEADING = "Live figures from the data feeds";
 export function liveLinks(pages = LIVE_PAGES) {
   const words = (file) => file.replace(/\/index\.html$/, "").split("/").pop().replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
   const first = pages.filter((p) => p.file === RIGHT_NOW_FILE);
-  return [...first, ...pages.filter((p) => p.file !== RIGHT_NOW_FILE)].map((p) => ({ file: p.file, name: p.name || words(p.file) }));
+  // a page marked homeRow: false (the owner pages of site/objects.mjs, which their ranking page links) is not repeated here
+  return [...first, ...pages.filter((p) => p.file !== RIGHT_NOW_FILE && p.homeRow !== false)].map((p) => ({ file: p.file, name: p.name || words(p.file) }));
 }
 
 // The live block: the strip of six figures (dashes in the HTML; the inline script in site/home-strip.mjs fills them in the browser from

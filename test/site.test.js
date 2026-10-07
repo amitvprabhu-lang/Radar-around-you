@@ -55,9 +55,9 @@ test("the site has the expected pages and no duplicates", () => {
   // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about,
   // the satellites by country hub and its 5 country pages, from the bundled hazard data the earthquake page and the right-now hub, and
   // from the bundled satellite data the Starlink tracker (the launch and GDACS data are not bundled with a data time), and from the bundled
-  // cloud forecast and precise.json the eight sky pages (site/sky.mjs, SKY_PAGES), the widget gallery (site/embed.mjs) and /satellites-near-me/
-  // (site/near-site.mjs)
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1 + SKY_PAGES.length + 1 + 1);
+  // cloud forecast and precise.json the eight sky pages (site/sky.mjs, SKY_PAGES), the widget gallery (site/embed.mjs), /satellites-near-me/
+  // (site/near-site.mjs) and, from the bundled catalogue summary (public/satcat-summary.json), the satellites and debris ranking (the owner pages need detail files, not bundled)
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1 + SKY_PAGES.length + 1 + 1 + 1);
   assert.ok(pageFiles.includes("satellites-near-me/index.html"));
   assert.ok(pageFiles.includes(GALLERY_FILE));
   assert.deepEqual(result.liveSkipped, []);
@@ -838,9 +838,12 @@ test("the live pages row is built from the registry: the right-now hub first, th
   assert.equal(new Set(LIVE_PAGES.map((p) => p.name)).size, LIVE_PAGES.length, "the names are distinct");
   const row = homePage().match(/<nav class="home-live-links" aria-label="Live pages">[\s\S]*?<\/nav>/)[0];
   const links = [...row.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]);
-  assert.equal(links.length, LIVE_PAGES.length);
+  // every registered page except those marked homeRow: false (the owner pages of site/objects.mjs, which the ranking page links)
+  const inRow = LIVE_PAGES.filter((p) => p.homeRow !== false);
+  assert.ok(inRow.length < LIVE_PAGES.length && inRow.some((p) => p.file === "satellites-and-debris-by-country/index.html"));
+  assert.equal(links.length, inRow.length);
   assert.deepEqual(links[0], ["right-now/", "Right now: every live figure"]);
-  assert.deepEqual(new Set(links.map(([h]) => h + "index.html")), new Set(LIVE_FILES), "every registered live page, each once");
+  assert.deepEqual(new Set(links.map(([h]) => h + "index.html")), new Set(inRow.map((p) => p.file)), "every registered live page in the row, each once");
   for (const [h, t] of links) {
     // the link text is the name escaped by layout.mjs's esc (which leaves apostrophes as they are: "Tonight's sky")
     assert.equal(t, esc(LIVE_PAGES.find((p) => p.file === h + "index.html").name), h);

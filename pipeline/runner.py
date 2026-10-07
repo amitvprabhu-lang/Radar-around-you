@@ -286,7 +286,7 @@ class Runner:
                 continue
             keep = state["feeds"].get(fid, {}).get("version")
             versions = sorted(os.listdir(d))
-            for v in versions[:-config.KEEP_VERSIONS]:
+            for v in versions[:-config.KEEP_VERSIONS_BY_FEED.get(fid, config.KEEP_VERSIONS)]:
                 if v != keep:
                     shutil.rmtree(os.path.join(d, v), ignore_errors=True)
 

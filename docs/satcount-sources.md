@@ -12,7 +12,7 @@ Everything here was read on 2026-10-05 from the place named. Anything marked NOT
 
 ## CelesTrak usage policy (https://celestrak.org/usage-policy.php)
 - Read 2026-10-05. It covers how often data may be requested and caching ("Only download the data you need, when you are going to use it, and only download data once per update", with update frequencies listed; GP data every 2 hours).
-- It does not address republishing, redistributing or building apps on the data, credit, commercial use, or statistics derived from the data. This is silence, not permission. NOT CONFIRMED whether publishing aggregate counts is acceptable. Mitigations: aggregate counts only, no per-satellite list, a visible credit and links to CelesTrak on the page. Consider asking CelesTrak directly.
+- It does not address republishing, redistributing or building apps on the data, credit, commercial use, or statistics derived from the data. This is silence, not permission. NOT CONFIRMED whether publishing aggregate counts is acceptable. Mitigations: aggregate counts only, no per-satellite list, a visible credit and links to CelesTrak on the page. Consider asking CelesTrak directly. (Since 2026-10-07 the satellites and debris pages publish per-object rows from the whole catalogue on the owner's instruction; the same question, still open, is recorded in `docs/country-objects-sources.md`.)
 
 ## Orbit groups (OUR working definitions, NOT CONFIRMED against a cited standard)
 - These are the numbers in `ORBIT_BOUNDS` in `site/satcount.mjs`; change them there first and then here.

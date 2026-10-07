@@ -289,11 +289,13 @@ test("the hub lists every live page it can link, links each one that exists, and
   }
 });
 
-test("the registry of live pages holds the count page, the country hub, five country pages, five hazard pages, three fleet and events pages, the sky pages and the hub", () => {
+test("the registry of live pages holds the count page, the country hub, five country pages, five hazard pages, three fleet and events pages, the sky pages, the satellites and debris pages and the hub", () => {
   const sky = LIVE_PAGES.filter((p) => p.kind === "sky").length;
+  const objects = LIVE_PAGES.filter((p) => p.kind === "objects").length;
   assert.equal(sky, 8);
-  assert.equal(LIVE_FILES.length, 16 + sky);
-  assert.equal(new Set(LIVE_FILES).size, 16 + sky);
+  assert.equal(objects, 20, "the ranking and 19 owner pages (site/objects.mjs)");
+  assert.equal(LIVE_FILES.length, 16 + sky + objects);
+  assert.equal(new Set(LIVE_FILES).size, 16 + sky + objects);
   assert.equal(LIVE_FILES[0], SATCOUNT_FILE);
   assert.deepEqual(LIVE_PAGES.filter((p) => p.kind === "hazard").map((p) => p.file), HAZARD_PAGES.map((p) => p.file));
   assert.equal(LIVE_FILES.at(-1), RIGHT_NOW_FILE);

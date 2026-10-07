@@ -78,9 +78,11 @@ const siteScripts = requested.filter(([t, u]) => t === "script" && !u.startsWith
 check("the app script answers 200 as JavaScript, once, and is the only script the home page requests", appAnswers.length === 1 && appAnswers[0].status === 200 && /javascript/.test(appAnswers[0].type || "") && siteScripts.length === 1 && siteScripts[0][1] === "/" + appFile, JSON.stringify({ appAnswers, siteScripts }));
 if (!appFile || !fs.existsSync(site + appFile)) { console.error("the home page names no app script that exists; was dist/site built with npm run build:hosting?"); process.exit(2); }
 console.log(`     home page: ${requested.length} requests while starting (${Buffer.byteLength(homeRaw)} bytes of HTML, ${fs.statSync(site + appFile).size} bytes of script)`);
-// the home page's row of live pages: every registered live page, the right-now hub first; each one this build wrote answers 200 raw
+// the home page's row of live pages: every registered live page (except those marked homeRow: false, the owner pages the satellites and
+// debris ranking links), the right-now hub first; each one this build wrote answers 200 raw
 const liveRow = await p.evaluate(() => [...document.querySelectorAll(".home-live-links a")].map((a) => [a.getAttribute("href"), a.textContent]));
-check("the home page lists every registered live page, the right-now hub first, each by its name", liveRow.length === LIVE_PAGES.length && liveRow[0][0] === "right-now/" && LIVE_PAGES.every((pg) => liveRow.some(([h, t]) => h + "index.html" === pg.file && t === pg.name)), JSON.stringify(liveRow));
+const inRow = LIVE_PAGES.filter((pg) => pg.homeRow !== false);
+check("the home page lists every registered live page, the right-now hub first, each by its name", liveRow.length === inRow.length && liveRow[0][0] === "right-now/" && inRow.every((pg) => liveRow.some(([h, t]) => h + "index.html" === pg.file && t === pg.name)), JSON.stringify(liveRow));
 const rowStatus = [];
 for (const [h] of liveRow) {
   if (!fs.existsSync(site + h + "index.html")) continue;  // arrives with the server's pull job, not with the deploy

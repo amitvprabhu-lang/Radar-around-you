@@ -17,6 +17,7 @@ import { HAZARD_PAGE_FUNCTIONS } from "./pages-hazard.mjs";
 import { summariseLaunches, summariseDisasters, summariseStarlink, EVENT_HISTORY } from "./events.mjs";
 import { EVENT_PAGE_FUNCTIONS, EVENT_HUB_ROWS } from "./pages-events.mjs";
 import { SKY_BUILDERS, SKY_RENDER } from "./sky-family.mjs";
+import { OBJECT_BUILDERS, OBJECT_RENDER } from "./objects-family.mjs";
 
 const BUILDERS = {
   quakes: {
@@ -61,8 +62,8 @@ const BUILDERS = {
     hubRow: EVENT_HUB_ROWS.launches, history: EVENT_HISTORY.launches,
   },
 };
-Object.assign(BUILDERS, SKY_BUILDERS);
-const RENDER = { ...HAZARD_PAGE_FUNCTIONS, ...EVENT_PAGE_FUNCTIONS, ...SKY_RENDER };
+Object.assign(BUILDERS, SKY_BUILDERS, OBJECT_BUILDERS);
+const RENDER = { ...HAZARD_PAGE_FUNCTIONS, ...EVENT_PAGE_FUNCTIONS, ...SKY_RENDER, ...OBJECT_RENDER };
 
 export const LIVE_FAMILY = FAMILY_PAGES.map((p) => ({ ...p, ...BUILDERS[p.key], render: RENDER[p.key], hubRow: (BUILDERS[p.key] && BUILDERS[p.key].hubRow) || null, history: (BUILDERS[p.key] && BUILDERS[p.key].history) || null }));
 export const liveFamily = (key) => LIVE_FAMILY.find((p) => p.key === key) || null;

@@ -17,6 +17,8 @@ import { EVENTS_DIR, EVENTS_NOW } from "./helpers/eventsfixture.mjs";
 import { realClouds, realPrecise, SKY_NOW, SAT_TIME } from "./helpers/skyfixture.mjs";
 import { SKY_PAGES } from "../site/sky.mjs";
 import { xmlProblem } from "./helpers/xml.mjs";
+import { objectsDataDir, OBJECTS_NOW, TEST_OBJECT_BOUNDS } from "./helpers/satcatfixture.mjs";
+import { OBJECT_PAGES } from "../site/objects.mjs";
 
 const tmps = [];
 const mk = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), "seo-")); tmps.push(d); return d; };
@@ -55,16 +57,20 @@ function skyDataDir() {
   return dir;
 }
 const SKY_FILES = SKY_PAGES.map((p) => p.file);
-const outA = mk(), outB = mk(), outC = mk();
+// A fourth build for the satellites and debris pages: the satcat feed of the trimmed catalogue of 7 October (test/fixtures/satcat) with the
+// country fleet, at that data's time.
+const OBJECT_FILES = OBJECT_PAGES.map((p) => p.file);
+const outA = mk(), outB = mk(), outC = mk(), outD = mk();
 const rA = buildLive({ dataDir: dataDir(REAL_DIR), outDir: outA, now: REAL_NOW, ...opts });
 const rB = buildLive({ dataDir: dataDir(EVENTS_DIR), outDir: outB, now: EVENTS_NOW, ...opts });
 const rC = buildLive({ dataDir: skyDataDir(), outDir: outC, now: SKY_NOW, ...opts });
-const where = (f) => (EVENT_FILES.includes(f) ? outB : SKY_FILES.includes(f) ? outC : outA);
+const rD = buildLive({ dataDir: objectsDataDir({ dir: mk() }), outDir: outD, now: OBJECTS_NOW, ...opts, objectBounds: TEST_OBJECT_BOUNDS });
+const where = (f) => (EVENT_FILES.includes(f) ? outB : SKY_FILES.includes(f) ? outC : OBJECT_FILES.includes(f) ? outD : outA);
 const hubFor = (f) => fs.readFileSync(path.join(where(f), RIGHT_NOW_FILE), "utf8");
 const PAGES = new Map(LIVE_FILES.filter((f) => fs.existsSync(path.join(where(f), f))).map((f) => [f, fs.readFileSync(path.join(where(f), f), "utf8")]));
 const pagesOf = (d) => JSON.parse(fs.readFileSync(path.join(d, "index.json"), "utf8")).pages;
-const index = { ...pagesOf(outA), ...Object.fromEntries(EVENT_FILES.map((f) => [f, pagesOf(outB)[f]])), ...Object.fromEntries(SKY_FILES.map((f) => [f, pagesOf(outC)[f]])) };
-const sitemaps = [outA, outB, outC].map((d) => fs.readFileSync(path.join(d, "sitemap-live.xml"), "utf8")).join("\n");
+const index = { ...pagesOf(outA), ...Object.fromEntries(EVENT_FILES.map((f) => [f, pagesOf(outB)[f]])), ...Object.fromEntries(SKY_FILES.map((f) => [f, pagesOf(outC)[f]])), ...Object.fromEntries(OBJECT_FILES.map((f) => [f, pagesOf(outD)[f]])) };
+const sitemaps = [outA, outB, outC, outD].map((d) => fs.readFileSync(path.join(d, "sitemap-live.xml"), "utf8")).join("\n");
 const llms = buildLlmsTxt({ pages: ["about/index.html", "methods/index.html", "moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html", LIVE_FILES[0], LIVE_FILES[1]].map((file) => ({ file, h1: file, description: "d" })), url: SITE.url, name: SITE.name, summary: "s" });
 
 const ldOf = (h) => [...h.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => { try { return JSON.parse(m[1].replace(/\\u003c/g, "<")); } catch { return null; } });
@@ -141,7 +147,7 @@ const RULES = {
   },
 };
 // design section 8.2, for the new families (the earlier pages get it in a later pass): "What this means" is the first section after the lead
-const NEW_FILES = [...EVENT_FILES, ...SKY_FILES];
+const NEW_FILES = [...EVENT_FILES, ...SKY_FILES, ...OBJECT_FILES];
 RULES["meaning-first"] = (f, h) => (!NEW_FILES.includes(f) || ((mainOf(h).match(/<h2[^>]*>([^<]*)<\/h2>/) || [])[1] || "") === "What this means" ? null : "the first section is not \"What this means\"");
 const audit = (f) => Object.entries(RULES).map(([rule, fn]) => [rule, fn(f, PAGES.get(f))]).filter(([, why]) => why);
 
@@ -237,7 +243,7 @@ const BASELINE_GAPS = {
 };
 
 test("every live page the build can produce was built from the fixtures", () => {
-  assert.deepEqual([rA.failed, rB.failed, rC.failed], [[], [], []]);
+  assert.deepEqual([rA.failed, rB.failed, rC.failed, rD.failed], [[], [], [], []]);
   assert.deepEqual([...PAGES.keys()], LIVE_FILES, `missing: ${LIVE_FILES.filter((f) => !PAGES.has(f)).join(", ")}`);
 });
 
@@ -245,7 +251,7 @@ test("audit of the earlier live pages (printed for the report)", (t) => {
   for (const f of LIVE_FILES.filter((x) => !NEW_FILES.includes(x))) t.diagnostic(`${f}: ${audit(f).map(([r, w]) => `${r} (${w})`).join("; ") || "passes"}`);
 });
 
-test("the fleet and events pages and the sky pages pass every rule of the checklist", () => {
+test("the fleet and events pages, the sky pages and the satellites and debris pages pass every rule of the checklist", () => {
   for (const f of NEW_FILES) {
     const gaps = audit(f);
     assert.deepEqual(gaps, [], `${f} fails: ${gaps.map(([r, w]) => `${r} (${w})`).join("; ")}`);

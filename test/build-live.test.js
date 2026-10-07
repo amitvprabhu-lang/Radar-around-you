@@ -287,8 +287,9 @@ function newVersion(m, dir, feed, file, version, edit = (t) => t) {
   m.feeds[feed] = { ...m.feeds[feed], version, files: { ...m.feeds[feed].files, [file]: rel } };
 }
 // the sky pages (site/sky.mjs) need the clouds feed and precise.json, which the hazard data of 5 October does not have, so these tests
-// leave them out of their lists; test/build-live-sky.test.js covers them
-const SKY_FILES = new Set(FAMILY_PAGES.filter((p) => p.family === "sky").map((p) => p.file));
+// leave them out of their lists; test/build-live-sky.test.js covers them. The same for the satellites and debris pages (site/objects.mjs),
+// which need the satcat feed; test/objects.test.js covers them.
+const SKY_FILES = new Set(FAMILY_PAGES.filter((p) => p.family === "sky" || p.family === "objects").map((p) => p.file));
 const noSky = (list) => list.filter((x) => !SKY_FILES.has(x.file));
 const readIndex = (out) => JSON.parse(fs.readFileSync(path.join(out, "index.json"), "utf8"));
 
