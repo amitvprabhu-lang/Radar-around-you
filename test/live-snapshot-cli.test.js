@@ -175,7 +175,7 @@ test("the connections of a failed request are closed, not left to the server (re
 
 test("package.json: build:hosting runs the snapshot after the site build, and the browser suite turns it off", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.match(pkg.scripts["build:hosting"], /npm run site && node site\/live-snapshot\.mjs$/);
+  assert.match(pkg.scripts["build:hosting"], /npm run site && node site\/live-snapshot\.mjs && node site\/near-refresh\.mjs$/);
   assert.doesNotMatch(pkg.scripts.site, /live-snapshot/, "npm run site (and so CI) stays offline");
   assert.match(pkg.scripts["e2e:site"], /^LIVE_SNAPSHOT=0 npm run build:hosting/);
 });

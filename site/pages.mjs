@@ -10,7 +10,8 @@ import { auroraGuide, stormGuide, quakeGuide, fireGuide, asteroidGuide, satellit
 // checks: allChecks(cities), which may hold nulls when the comparison tables are absent
 // countryPages: the satellites by country hub and country pages, already built by countryPageSet (site/pages-country.mjs)
 // livePages: the hazard pages and the right-now hub built from the bundled snapshot (site/build.mjs, hazardSnapshotPages)
-export function buildPages({ cities, consIdx, starsDoc, checks, details = null, satcount = null, updated = null, countryPages = [], livePages = [] }) {
+// nearPage: /satellites-near-me/ (site/near-site.mjs), when the build made it
+export function buildPages({ cities, consIdx, starsDoc, checks, details = null, satcount = null, updated = null, countryPages = [], livePages = [], nearPage = null }) {
   const guides = [auroraGuide(), stormGuide(), quakeGuide(), fireGuide(), asteroidGuide(), satelliteGuide()];
   return [
     moonPage(checks), seasonsPage(checks, cities), eclipsesPage(checks, cities), planetsPage(), showersPage(cities),
@@ -19,6 +20,6 @@ export function buildPages({ cities, consIdx, starsDoc, checks, details = null, 
     starsIndex(starsDoc, consIdx, details),
     guidesIndex(guides), ...guides, methodsPage(checks), aboutPage(),
     ...(satcount ? [satelliteCountPage(satcount, { updated })] : []), ...countryPages, ...livePages,
-    galleryPage(),
+    galleryPage(), ...(nearPage ? [nearPage] : []),
   ];
 }

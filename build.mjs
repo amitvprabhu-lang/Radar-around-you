@@ -99,7 +99,7 @@ export function assemble(template, js, { external = false } = {}) {
 
 // satellite.js 7 also ships a WebAssembly variant that cannot be bundled for the browser. The app only uses its plain
 // JavaScript SGP4, so anything under wasm/ is replaced with an empty module.
-const stubWasm = {
+export const stubWasm = {
   name: "stub-satellite-wasm",
   setup(b) {
     b.onResolve({ filter: /(^|\/)wasm(-build)?\// }, () => ({ path: "wasm-stub", namespace: "stub" }));

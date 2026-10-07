@@ -82,6 +82,7 @@ export const NAV = [
   ["satellites-by-country/", "By country"],
   ["right-now/", "Right now"],
   ["tonights-sky/", "Tonight's sky"],
+  ["satellites-near-me/", "Near me"],
   ["sky/", "Sky by city"],
   ["guides/", "Guides"],
   ["methods/", "How we know"],
