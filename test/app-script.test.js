@@ -233,7 +233,7 @@ test("the command line: --external-script writes the script next to the page; wi
 
 test("package.json: only build:hosting uses the external script; the harness builds and their suites stay single-file", () => {
   const s = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).scripts;
-  assert.match(s["build:hosting"], /^node build\.mjs --site-pages --external-script && npm run site && node site\/live-snapshot\.mjs$/);
+  assert.match(s["build:hosting"], /^node build\.mjs --site-pages --external-script && npm run site && node site\/live-snapshot\.mjs && node site\/near-refresh\.mjs$/);
   for (const k of ["build", "build:snapshot", "build:sitepages", "e2e", "e2e:live"]) assert.ok(!s[k].includes("--external-script"), k);
   assert.match(s["e2e:site"], /^LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-site\.mjs$/, "the site suite tests the external script");
 });

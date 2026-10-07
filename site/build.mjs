@@ -21,6 +21,7 @@ import { HOME_STYLE, HOME_PRE_APP, homeBodyHtml, COUNTRY_HUB_FILE } from "./home
 import { readIndexNowKey, INDEXNOW_KEY_RE } from "./indexnow.mjs";
 import { LIVE_SCRIPT_FILE, liveScriptSource } from "./live-pages-js.mjs";
 import { writeEmbed } from "./embed.mjs";
+import { nearBuild } from "./near-site.mjs";
 import { indexConstellations } from "../src/constellations.js";
 import { APP_SCRIPT_RE, appScriptOf, appScriptName } from "../build.mjs";
 
@@ -199,7 +200,9 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   const taken = isoZ(parseTime(satcount.taken));
   const live = hazardSnapshotPages({ ...hazards, satellites }, { now, coast, satellites: { active: satcount.active, dataTime: taken }, satelliteFiles: SATELLITE_FILES.filter((f) => f === SATELLITE_FILES[0] || country.pages.some((p) => p.file === f)) });
   for (const sk of live.skipped) console.log(`site: skipped ${sk.file}: ${sk.reason}`);
-  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages, livePages: live.pages });
+  // /satellites-near-me/ (site/near-site.mjs): the page from the bundled satellite data, and its two scripts
+  const near = nearBuild();
+  const pages = buildPages({ cities, consIdx, starsDoc, checks, details, satcount, updated: now, countryPages: country.pages, livePages: live.pages, nearPage: near.page });
   const seen = new Set();
   for (const p of pages) { if (seen.has(p.file)) throw new Error(`site: duplicate page ${p.file}`); seen.add(p.file); }
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -217,6 +220,7 @@ export function build({ outDir = path.join(root, "dist/site"), appFile = path.jo
   fs.writeFileSync(path.join(outDir, LIVE_SCRIPT_FILE), liveScriptSource());
   // the five embeddable widget pages (site/embed.mjs): noindex, so not in the sitemap; the gallery page is in `pages`
   writeEmbed(outDir, { coast });
+  for (const sc of near.scripts) fs.writeFileSync(path.join(outDir, sc.file), sc.code);
   const files = ["index.html", ...pages.map((p) => p.file)];
   if (!noindex) {
     // the live pages have their own sitemap with an accurate last modified time, so the main one leaves them out

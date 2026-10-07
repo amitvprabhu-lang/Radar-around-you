@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { build, wrapApp, asDocument, sitemap, robots, assertChecks, loadCities, APP_FEATURES, APP_TITLE, APP_DESCRIPTION } from "../site/build.mjs";
@@ -54,8 +55,10 @@ test("the site has the expected pages and no duplicates", () => {
   // home, 5 data pages, city index and 6 cities, constellation index and 88, stars, guide index and 6 guides, methods, satellite count, about,
   // the satellites by country hub and its 5 country pages, from the bundled hazard data the earthquake page and the right-now hub, and
   // from the bundled satellite data the Starlink tracker (the launch and GDACS data are not bundled with a data time), and from the bundled
-  // cloud forecast and precise.json the eight sky pages (site/sky.mjs, SKY_PAGES), and the widget gallery (site/embed.mjs)
-  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1 + SKY_PAGES.length + 1);
+  // cloud forecast and precise.json the eight sky pages (site/sky.mjs, SKY_PAGES), the widget gallery (site/embed.mjs) and /satellites-near-me/
+  // (site/near-site.mjs)
+  assert.equal(result.pages, 1 + 5 + 1 + cities.length + 1 + 88 + 1 + 1 + 6 + 1 + 1 + 1 + 1 + 5 + 2 + 1 + SKY_PAGES.length + 1 + 1);
+  assert.ok(pageFiles.includes("satellites-near-me/index.html"));
   assert.ok(pageFiles.includes(GALLERY_FILE));
   assert.deepEqual(result.liveSkipped, []);
   assert.deepEqual(result.skipped, [], "every country page passes the guard on the bundled snapshot");
@@ -902,4 +905,22 @@ test("the build writes the share image: a 1200 by 630 PNG under 250 KB, the comm
   assert.ok(tool.includes('from "../harness.mjs"') && tool.includes("site/assets/og-image.png"));
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.ok(!Object.values(pkg.scripts).some((c) => c.includes("make-og-image")), "never run by the Hostinger build");
+});
+
+test("/satellites-near-me/: built with its two scripts, in the sitemap, llms.txt and the navigation, linked from the home page", () => {
+  const h = read("satellites-near-me/index.html");
+  const calc = /data-calc="(near-calc\.[0-9a-f]{10}\.js)"/.exec(h), script = /<script src="(near-page\.[0-9a-f]{10}\.js)" defer><\/script>/.exec(h);
+  assert.ok(calc && script, "the page names both scripts");
+  for (const f of [calc[1], script[1]]) {
+    const code = read(`satellites-near-me/${f}`);
+    assert.equal(crypto.createHash("sha256").update(code).digest("hex").slice(0, 10), f.split(".")[1], `${f} matches its name`);
+    assert.ok(/^[\x00-\x7f]*$/.test(code), `${f} is ASCII`);
+    assert.ok(!/WebAssembly/.test(code), `${f} has no WebAssembly`);
+  }
+  assert.ok(Buffer.byteLength(read(`satellites-near-me/${script[1]}`)) < 40000, "the page script stays small");
+  assert.ok(read("sitemap.xml").includes(`<loc>${SITE.url}/satellites-near-me/</loc>`));
+  assert.ok(read("llms.txt").includes(`(${SITE.url}/satellites-near-me/)`));
+  assert.ok(read("moon-phases/index.html").includes('<a href="../satellites-near-me/">Near me</a>'), "in the navigation");
+  assert.ok(homePage().includes('<a href="satellites-near-me/">satellites near you</a>'), "the home page's live block links it");
+  assert.ok(h.includes("the satellite data bundled with the site when this page was built"), "the site build uses the bundled copy and says so");
 });

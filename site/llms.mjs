@@ -7,6 +7,7 @@ import { HUB_FILE } from "./satcountry.mjs";
 import { RIGHT_NOW_FILE } from "./hazard.mjs";
 import { FAMILY_PAGES } from "./livepages.mjs";
 import { GALLERY_FILE } from "./embed.mjs";
+import { NEAR_FILE } from "./near-ui.mjs";
 
 const clean = (s) => String(s).replace(/\s+/g, " ").trim();
 // OURS: the live pages' descriptions hold today's numbers, so this file uses fixed notes instead.
@@ -28,6 +29,8 @@ const LIVE_HAZARD_LIST = [[RIGHT_NOW_FILE, "Right now"], ...FAMILY_PAGES.map((p)
 const noteOf = (file) => HAZARD_NOTES[file] || (FAMILY_PAGES.find((p) => p.file === file) || {}).note;
 // OURS: the fixed note for the widget gallery, listed with the live data when the build has the page
 export const EMBED_NOTE = "Five free live widgets (earthquakes, an aurora meter, tropical storms, wildfires and tonight's sky) for other sites to embed, with one credit line.";
+// OURS: the fixed note for /satellites-near-me/, listed with the live data when the build has the page
+export const NEAR_NOTE = "Which satellites pass within 25 to 500 km of any place now and in the next 24 hours, worked out in the browser from the site's orbit data, with the uncertainty of each distance.";
 const REFERENCE = ["moon-phases/index.html", "eclipses/index.html", "meteor-showers/index.html", "planets/index.html", "seasons/index.html", "constellations/index.html", "stars/index.html", "sky/index.html"];
 
 export function buildLlmsTxt({ pages, url, name, summary }) {
@@ -48,6 +51,7 @@ export function buildLlmsTxt({ pages, url, name, summary }) {
     "## Guides", ...guides.map((f) => entry(f)), "",
     "## Live data", entry(SATCOUNT_FILE, LIVE_NOTE), entry(HUB_FILE, HUB_NOTE),
     ...LIVE_HAZARD_LIST.map(([f, title]) => `- [${title}](${url}/${urlPath(f)}): ${noteOf(f)}`),
+    ...(byFile.has(NEAR_FILE) ? [entry(NEAR_FILE, NEAR_NOTE)] : []),
     ...(byFile.has(GALLERY_FILE) ? [entry(GALLERY_FILE, EMBED_NOTE)] : []), "",
   ];
   return lines.join("\n");

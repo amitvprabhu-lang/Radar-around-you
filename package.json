@@ -13,11 +13,12 @@
     "build:snapshot": "LIVE_BASE= node build.mjs src/main.js template.html dist/radar-snapshot.html",
     "e2e:live": "npm run build && node e2e-live.mjs",
     "site": "node site/build.mjs",
-    "build:hosting": "node build.mjs --site-pages --external-script && npm run site && node site/live-snapshot.mjs",
+    "build:hosting": "node build.mjs --site-pages --external-script && npm run site && node site/live-snapshot.mjs && node site/near-refresh.mjs",
     "test:hosting": "php hosting/tests/run.php",
     "build:sitepages": "LIVE_BASE= node build.mjs --site-pages src/main.js template.html dist/radar-sitepages.html",
     "e2e:site": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-site.mjs",
-    "e2e:embed": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-embed.mjs"
+    "e2e:embed": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-embed.mjs",
+    "e2e:near": "LIVE_SNAPSHOT=0 npm run build:hosting && node e2e-near.mjs"
   },
   "type": "module",
   "dependencies": {
