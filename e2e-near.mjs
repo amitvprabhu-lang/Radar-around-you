@@ -220,23 +220,26 @@ state.mode = "v1";
 // ------------------------------------------------------------------ 2c. a station row at 25 km, and a new launch's wide uncertainty
 {
   state.mode = "v1";
-  // where the ISS and a new launch below 450 km will be an hour from now, in the pretend live data (V1)
+  // where the ISS and a new launch below 450 km will be 20 minutes from now, in the pretend live data (V1), so their rows are among the
+  // earliest the table shows
   const v1 = { meta: { ...baseMeta, ...JSON.parse(V1.files.get("satmeta.json")) }, swarm: V1.files.get("swarm.bin"), ids: V1.files.get("ids.bin"), details: V1.files.get("details.bin"), names: V1.files.get("names.txt").toString("utf8"), precise: JSON.parse(V1.files.get("precise.json")) };
   const prep = N.prepareSatellites(N.decodeFeed(v1), NOW);
-  const spot = (sat) => { const g = N.groundDistanceKm({ lat: 0, lon: 0 }, N.stateAt(sat, NOW + 3600000).ecef); return `?lat=${(g.lat + 0.05).toFixed(4)}&lon=${g.lon.toFixed(4)}`; };
+  const spot = (sat) => { const g = N.groundDistanceKm({ lat: 0, lon: 0 }, N.stateAt(sat, NOW + 1200000).ecef); return `?lat=${(g.lat + 0.05).toFixed(4)}&lon=${g.lon.toFixed(4)}`; };
   const iss = prep.sats.find((s) => s.id === 25544);
   const { p, ctx, errors } = await open(spot(iss) + "&r=25&name=Under%20the%20ISS");
   await done(p);
+  await p.click("#nm-more").catch(() => {});
   const row = await p.evaluate(() => { const tr = [...document.querySelectorAll("#nm-out table.nm-table:not(.nm-now) tbody tr")].find((x) => /ISS \(ZARYA\)/.test(x.textContent)); if (tr) tr.id = "nm-shot-iss"; return tr ? tr.textContent : ""; });
   check("the ISS is listed at 25 km with a station's small uncertainty", /km ± 1 /.test(row) && /± 10 s/.test(row) && /within/.test(row), row);
-  if (process.env.SHOTS) { await p.evaluate(() => document.getElementById("nm-shot-iss").scrollIntoView()); await p.screenshot({ path: path.join(process.env.SHOTS, "near-1200-iss-25km.png") }); }
+  if (process.env.SHOTS && row) { await p.evaluate(() => document.getElementById("nm-shot-iss").scrollIntoView()); await p.screenshot({ path: path.join(process.env.SHOTS, "near-1200-iss-25km.png") }); }
   await ctx.close();
   const fresh = prep.sats.find((s) => s.exact && s.recent && !s.station && s.band === "low-under-450");
   const f = await open(spot(fresh) + "&r=100&name=Under%20a%20new%20launch");
   await done(f.p);
+  await f.p.click("#nm-more").catch(() => {});
   const frow = await f.p.evaluate((name) => { const tr = [...document.querySelectorAll("#nm-out table.nm-table:not(.nm-now) tbody tr")].find((x) => x.querySelector("strong").textContent === name); if (tr) tr.id = "nm-shot-new"; return tr ? tr.textContent : ""; }, fresh.name);
   check("a new launch still raising its orbit carries the wide uncertainty of its group", /launched in the last 30 days/.test(frow) && Number((/km ± (\d+)/.exec(frow) || [0, 0])[1]) >= 20 && /± \d{3} s|time uncertain by about \d+ min/.test(frow), frow);
-  if (process.env.SHOTS) { await f.p.evaluate(() => document.getElementById("nm-shot-new").scrollIntoView()); await f.p.screenshot({ path: path.join(process.env.SHOTS, "near-1200-new-launch.png") }); }
+  if (process.env.SHOTS && frow) { await f.p.evaluate(() => document.getElementById("nm-shot-new").scrollIntoView()); await f.p.screenshot({ path: path.join(process.env.SHOTS, "near-1200-new-launch.png") }); }
   check("no console errors (station and new launch)", errors.length === 0 && f.errors.length === 0, [...errors, ...f.errors].join(" | "));
   await f.ctx.close();
 }
@@ -251,8 +254,8 @@ for (const mode of ["older", "missing"]) {
   // the bundled copy's age depends on the day of the run, so the expected state is worked out here with the page's own rules
   const want = expectedBundledState();
   const got = await p.evaluate(() => ({ text: document.getElementById("nm-out").textContent, tooOld: !!document.getElementById("nm-old-h"), warn: /^Warning:/.test((document.getElementById("nm-old") || {}).textContent || "") }));
-  const state = got.tooOld ? "none" : got.warn ? "warn" : "ok";
-  check(`${mode} live feed: the state the bundled copy's age calls for (${want}), and no NaN`, state === want && !/NaN|undefined|Infinity/.test(got.text), `page ${state}, expected ${want}`);
+  const shown = got.tooOld ? "none" : got.warn ? "warn" : "ok";
+  check(`${mode} live feed: the state the bundled copy's age calls for (${want}), and no NaN`, shown === want && !/NaN|undefined|Infinity/.test(got.text), `page ${shown}, expected ${want}`);
   check(`${mode} live feed: no console errors`, errors.length === 0, errors.join(" | "));
   await ctx.close();
 }
