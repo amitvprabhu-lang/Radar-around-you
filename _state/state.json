@@ -1,0 +1,1518 @@
+{
+ "feeds": {
+  "aurora": {
+   "checkedAt": "2026-10-11T04:00:34Z",
+   "cond": {
+    "main": {
+     "etag": "W/\"e0537-65d889c301651\"",
+     "expires": "2026-10-11T04:01:27Z",
+     "lastModified": "Sun, 11 Oct 2026 03:59:37 GMT"
+    }
+   },
+   "count": 16054,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T04:00:34Z",
+   "files": {
+    "aurora.bin": "aurora/20261011T040034Z/aurora.bin",
+    "aurora.json": "aurora/20261011T040034Z/aurora.json"
+   },
+   "lastAttempt": "2026-10-11T04:00:34Z",
+   "nextTryAt": "2026-10-11T04:14:34Z",
+   "note": "",
+   "sizes": {
+    "aurora.bin": 65160,
+    "aurora.json": 72
+   },
+   "sourceTime": "2026-10-11T03:49:00Z",
+   "status": "ok",
+   "version": "20261011T040034Z"
+  },
+  "catalogue": {
+   "checkedAt": "2026-10-10T09:03:44Z",
+   "cond": {
+    "gp:cosmos-1408-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "gp:cosmos-2251-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "gp:fengyun-1c-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "gp:iridium-33-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "owners": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:active": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:amateur": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:argos": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:beidou": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:cosmos-2251-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:cubesat": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:dmc": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:education": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:engineering": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:eutelsat": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:fengyun-1c-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:galileo": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:geo": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:geodetic": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:glo-ops": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:globalstar": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:gnss": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:gps-ops": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:hulianwang": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:intelsat": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:iridium-33-debris": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:iridium-NEXT": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:kuiper": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:last-30-days": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:military": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:oneweb": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:orbcomm": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:other-comm": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:planet": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:qianfan": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:radar": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:resource": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:sar": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:sarsat": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:satnogs": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:sbas": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:science": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:ses": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:spire": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:starlink": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:stations": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:tdrss": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:telesat": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:weather": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "satcat:x-comm": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "sites": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    }
+   },
+   "count": 23221,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-10T09:03:44Z",
+   "files": {},
+   "lastAttempt": "2026-10-10T09:00:15Z",
+   "nextTryAt": "2026-10-11T09:02:44Z",
+   "note": "44 groups, 132 owners, 42 launch sites",
+   "sizes": {
+    "catalogue.json.gz": 79292,
+    "debris.json.gz": 173087
+   },
+   "sourceTime": "2026-10-10T09:00:15Z",
+   "status": "ok"
+  },
+  "closeapproaches": {
+   "checkedAt": "2026-10-11T03:40:44Z",
+   "cond": {
+    "main": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    }
+   },
+   "count": 45,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T03:40:44Z",
+   "files": {
+    "closeapproaches.json": "closeapproaches/20261011T034044Z/closeapproaches.json"
+   },
+   "lastAttempt": "2026-10-11T03:40:44Z",
+   "nextTryAt": "2026-10-11T09:39:44Z",
+   "note": "closest: 2026 TP6 at 0.57 lunar distances",
+   "sizes": {
+    "closeapproaches.json": 9356
+   },
+   "sourceTime": "2026-10-11T03:40:44Z",
+   "status": "ok",
+   "version": "20261011T034044Z"
+  },
+  "clouds": {
+   "checkedAt": "2026-10-11T03:10:20Z",
+   "cond": {
+    "city:london": {
+     "etag": null,
+     "expires": "2026-10-11T03:21:54Z",
+     "lastModified": "Sun, 11 Oct 2026 02:51:40 GMT"
+    },
+    "city:newyork": {
+     "etag": null,
+     "expires": "2026-10-11T03:29:29Z",
+     "lastModified": "Sun, 11 Oct 2026 02:57:42 GMT"
+    },
+    "city:pune": {
+     "etag": null,
+     "expires": "2026-10-11T03:41:09Z",
+     "lastModified": "Sun, 11 Oct 2026 03:10:13 GMT"
+    },
+    "city:sydney": {
+     "etag": null,
+     "expires": "2026-10-11T03:28:41Z",
+     "lastModified": "Sun, 11 Oct 2026 02:57:43 GMT"
+    },
+    "city:tokyo": {
+     "etag": null,
+     "expires": "2026-10-11T03:27:29Z",
+     "lastModified": "Sun, 11 Oct 2026 02:55:34 GMT"
+    },
+    "city:tromso": {
+     "etag": null,
+     "expires": "2026-10-11T03:10:48Z",
+     "lastModified": "Sun, 11 Oct 2026 02:40:00 GMT"
+    }
+   },
+   "count": 6,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T03:10:20Z",
+   "files": {
+    "clouds.json": "clouds/20261011T031020Z/clouds.json"
+   },
+   "lastAttempt": "2026-10-11T03:10:12Z",
+   "nextTryAt": "2026-10-11T04:09:20Z",
+   "note": "6 of 6 places refreshed",
+   "sizes": {
+    "clouds.json": 12135
+   },
+   "sourceTime": "2026-10-11T02:29:49Z",
+   "status": "ok",
+   "version": "20261011T031020Z"
+  },
+  "events": {
+   "checkedAt": "2026-10-11T04:00:34Z",
+   "cond": {
+    "Green:1": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "Green:2": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "Green:3": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "Orange;Red:1": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    }
+   },
+   "count": 280,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T04:00:34Z",
+   "files": {
+    "events.json": "events/20261011T040034Z/events.json"
+   },
+   "lastAttempt": "2026-10-11T04:00:13Z",
+   "nextTryAt": "2026-10-11T04:14:34Z",
+   "note": "1 red, 8 orange",
+   "sizes": {
+    "events.json": 95319
+   },
+   "sourceTime": "2026-10-11T03:53:06Z",
+   "status": "ok",
+   "version": "20261011T040034Z"
+  },
+  "fires": {
+   "checkedAt": "2026-10-11T03:40:44Z",
+   "cond": {
+    "J1_VIIRS_C2_Global_24h.csv": {
+     "etag": "\"28248a6e30de8b7e71f2ae9cc81e6152\"",
+     "expires": null,
+     "lastModified": "Sun, 11 Oct 2026 02:40:33 GMT"
+    },
+    "J2_VIIRS_C2_Global_24h.csv": {
+     "etag": "\"af694a0433591572a71ce6033b226d99\"",
+     "expires": null,
+     "lastModified": "Sun, 11 Oct 2026 02:43:43 GMT"
+    },
+    "SUOMI_VIIRS_C2_Global_24h.csv": {
+     "etag": "\"52d182306311df0055ec58c82edeb061\"",
+     "expires": null,
+     "lastModified": "Sun, 11 Oct 2026 02:48:58 GMT"
+    }
+   },
+   "count": 20860,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T03:40:44Z",
+   "files": {
+    "fires.bin": "fires/20261011T034044Z/fires.bin",
+    "fires.json": "fires/20261011T034044Z/fires.json"
+   },
+   "lastAttempt": "2026-10-11T03:40:35Z",
+   "nextTryAt": "2026-10-11T04:39:44Z",
+   "note": "299254 detections in 20860 cells",
+   "sizes": {
+    "fires.bin": 250320,
+    "fires.json": 389
+   },
+   "sourceTime": "2026-10-10T23:50:00Z",
+   "status": "ok",
+   "version": "20261011T034044Z"
+  },
+  "kp": {
+   "checkedAt": "2026-10-11T03:40:27Z",
+   "cond": {
+    "main": {
+     "etag": "W/\"1146-65d8854217829\"",
+     "expires": "2026-10-11T03:40:49Z",
+     "lastModified": "Sun, 11 Oct 2026 03:39:28 GMT"
+    }
+   },
+   "count": 16,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T03:40:27Z",
+   "files": {
+    "kp.json": "kp/20261011T034027Z/kp.json"
+   },
+   "lastAttempt": "2026-10-11T03:40:27Z",
+   "nextTryAt": "2026-10-11T04:09:27Z",
+   "note": "",
+   "sizes": {
+    "kp.json": 601
+   },
+   "sourceTime": "2026-10-11T00:00:00Z",
+   "status": "ok",
+   "version": "20261011T034027Z"
+  },
+  "launches": {
+   "checkedAt": "2026-10-11T03:40:46Z",
+   "cond": {
+    "main": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    }
+   },
+   "count": 30,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T03:40:46Z",
+   "files": {
+    "launches.json": "launches/20261011T034046Z/launches.json"
+   },
+   "lastAttempt": "2026-10-11T03:40:44Z",
+   "nextTryAt": "2026-10-11T04:39:46Z",
+   "note": "next: Falcon 9 Block 5 | Starlink Group 15-25 at 2026-10-12T23:00:00Z",
+   "sizes": {
+    "launches.json": 23684
+   },
+   "sourceTime": "2026-10-11T03:40:44Z",
+   "status": "ok",
+   "version": "20261011T034046Z"
+  },
+  "planes": {
+   "checkedAt": "2026-10-11T04:00:41Z",
+   "cond": {
+    "city:london": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "city:newyork": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "city:pune": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "city:sydney": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "city:tokyo": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "city:tromso": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    }
+   },
+   "count": 275,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T04:00:41Z",
+   "files": {
+    "planes.json": "planes/20261011T040041Z/planes.json"
+   },
+   "lastAttempt": "2026-10-11T04:00:34Z",
+   "nextTryAt": "2026-10-11T04:09:41Z",
+   "note": "6 of 6 places refreshed",
+   "sizes": {
+    "planes.json": 34698
+   },
+   "sourceTime": "2026-10-11T04:00:41Z",
+   "status": "ok",
+   "version": "20261011T040041Z"
+  },
+  "quakes": {
+   "checkedAt": "2026-10-11T04:00:13Z",
+   "cond": {
+    "main": {
+     "etag": null,
+     "expires": "2026-10-11T04:00:26Z",
+     "lastModified": "Sun, 11 Oct 2026 03:59:26 GMT"
+    }
+   },
+   "count": 358,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T04:00:13Z",
+   "files": {
+    "quakes.json": "quakes/20261011T040013Z/quakes.json"
+   },
+   "lastAttempt": "2026-10-11T04:00:13Z",
+   "nextTryAt": "2026-10-11T04:09:13Z",
+   "note": "",
+   "sizes": {
+    "quakes.json": 85781
+   },
+   "sourceTime": "2026-10-11T03:59:26Z",
+   "status": "ok",
+   "version": "20261011T040013Z"
+  },
+  "satcat": {
+   "bodySha256": "7e9c3278fe37612ea53eb7c157a6cc45be47e2ac67e89bfba8f2824d2fbb5bcc",
+   "checkedAt": "2026-10-10T09:04:08Z",
+   "cond": {
+    "main": {
+     "etag": "\"feff81f49058dd1:0\"",
+     "expires": null,
+     "lastModified": "Sat, 10 Oct 2026 08:25:49 GMT"
+    }
+   },
+   "count": 34982,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-10T09:04:08Z",
+   "files": {
+    "o-ab.json": "satcat/20261010T090408Z/o-ab.json",
+    "o-argn.json": "satcat/20261010T090408Z/o-argn.json",
+    "o-aus.json": "satcat/20261010T090408Z/o-aus.json",
+    "o-bel.json": "satcat/20261010T090408Z/o-bel.json",
+    "o-braz.json": "satcat/20261010T090408Z/o-braz.json",
+    "o-ca.json": "satcat/20261010T090408Z/o-ca.json",
+    "o-chbz.json": "satcat/20261010T090408Z/o-chbz.json",
+    "o-cis.json": "satcat/20261010T090408Z/o-cis.json",
+    "o-egyp.json": "satcat/20261010T090408Z/o-egyp.json",
+    "o-esa.json": "satcat/20261010T090408Z/o-esa.json",
+    "o-eume.json": "satcat/20261010T090408Z/o-eume.json",
+    "o-eute.json": "satcat/20261010T090408Z/o-eute.json",
+    "o-fin.json": "satcat/20261010T090408Z/o-fin.json",
+    "o-fr.json": "satcat/20261010T090408Z/o-fr.json",
+    "o-ger.json": "satcat/20261010T090408Z/o-ger.json",
+    "o-glob.json": "satcat/20261010T090408Z/o-glob.json",
+    "o-grec.json": "satcat/20261010T090408Z/o-grec.json",
+    "o-im.json": "satcat/20261010T090408Z/o-im.json",
+    "o-ind.json": "satcat/20261010T090408Z/o-ind.json",
+    "o-indo.json": "satcat/20261010T090408Z/o-indo.json",
+    "o-iran.json": "satcat/20261010T090408Z/o-iran.json",
+    "o-isra.json": "satcat/20261010T090408Z/o-isra.json",
+    "o-it.json": "satcat/20261010T090408Z/o-it.json",
+    "o-itso.json": "satcat/20261010T090408Z/o-itso.json",
+    "o-jpn.json": "satcat/20261010T090408Z/o-jpn.json",
+    "o-luxe.json": "satcat/20261010T090408Z/o-luxe.json",
+    "o-mala.json": "satcat/20261010T090408Z/o-mala.json",
+    "o-mex.json": "satcat/20261010T090408Z/o-mex.json",
+    "o-neth.json": "satcat/20261010T090408Z/o-neth.json",
+    "o-nor.json": "satcat/20261010T090408Z/o-nor.json",
+    "o-o3b.json": "satcat/20261010T090408Z/o-o3b.json",
+    "o-orb.json": "satcat/20261010T090408Z/o-orb.json",
+    "o-paki.json": "satcat/20261010T090408Z/o-paki.json",
+    "o-pol.json": "satcat/20261010T090408Z/o-pol.json",
+    "o-por.json": "satcat/20261010T090408Z/o-por.json",
+    "o-prc.json": "satcat/20261010T090408Z/o-prc.json",
+    "o-roc.json": "satcat/20261010T090408Z/o-roc.json",
+    "o-saud.json": "satcat/20261010T090408Z/o-saud.json",
+    "o-seal.json": "satcat/20261010T090408Z/o-seal.json",
+    "o-ses.json": "satcat/20261010T090408Z/o-ses.json",
+    "o-sing.json": "satcat/20261010T090408Z/o-sing.json",
+    "o-skor.json": "satcat/20261010T090408Z/o-skor.json",
+    "o-spn.json": "satcat/20261010T090408Z/o-spn.json",
+    "o-swed.json": "satcat/20261010T090408Z/o-swed.json",
+    "o-tbd.json": "satcat/20261010T090408Z/o-tbd.json",
+    "o-thai.json": "satcat/20261010T090408Z/o-thai.json",
+    "o-turk.json": "satcat/20261010T090408Z/o-turk.json",
+    "o-uae.json": "satcat/20261010T090408Z/o-uae.json",
+    "o-uk.json": "satcat/20261010T090408Z/o-uk.json",
+    "o-us.json": "satcat/20261010T090408Z/o-us.json",
+    "summary.json": "satcat/20261010T090408Z/summary.json"
+   },
+   "lastAttempt": "2026-10-10T09:04:03Z",
+   "nextTryAt": "2026-10-11T09:03:08Z",
+   "note": "34982 objects in Earth orbit, 130 owners, 50 owner files",
+   "sizes": {
+    "o-ab.json": 1788,
+    "o-argn.json": 3212,
+    "o-aus.json": 3899,
+    "o-bel.json": 997,
+    "o-braz.json": 2186,
+    "o-ca.json": 7054,
+    "o-chbz.json": 1220,
+    "o-cis.json": 577358,
+    "o-egyp.json": 1308,
+    "o-esa.json": 10746,
+    "o-eume.json": 2171,
+    "o-eute.json": 6085,
+    "o-fin.json": 2495,
+    "o-fr.json": 56003,
+    "o-ger.json": 8509,
+    "o-glob.json": 7969,
+    "o-grec.json": 1992,
+    "o-im.json": 2088,
+    "o-ind.json": 16487,
+    "o-indo.json": 1993,
+    "o-iran.json": 1486,
+    "o-isra.json": 2186,
+    "o-it.json": 8355,
+    "o-itso.json": 14352,
+    "o-jpn.json": 27555,
+    "o-luxe.json": 1207,
+    "o-mala.json": 1281,
+    "o-mex.json": 1096,
+    "o-neth.json": 1056,
+    "o-nor.json": 2527,
+    "o-o3b.json": 3006,
+    "o-orb.json": 5865,
+    "o-paki.json": 1120,
+    "o-pol.json": 1286,
+    "o-por.json": 1169,
+    "o-prc.json": 529735,
+    "o-roc.json": 3144,
+    "o-saud.json": 1659,
+    "o-seal.json": 3297,
+    "o-ses.json": 6112,
+    "o-sing.json": 1901,
+    "o-skor.json": 7494,
+    "o-spn.json": 5616,
+    "o-swed.json": 1225,
+    "o-tbd.json": 18528,
+    "o-thai.json": 1230,
+    "o-turk.json": 3928,
+    "o-uae.json": 2151,
+    "o-uk.json": 62423,
+    "o-us.json": 1589499,
+    "summary.json": 24801
+   },
+   "sourceTime": "2026-10-10T08:25:49Z",
+   "status": "ok",
+   "version": "20261010T090408Z"
+  },
+  "satellites": {
+   "checkedAt": "2026-10-11T02:30:46Z",
+   "cond": {
+    "gp:active": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "gp:stations": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    },
+    "gp:visual": {
+     "etag": null,
+     "expires": null,
+     "lastModified": null
+    }
+   },
+   "count": 19379,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T02:30:46Z",
+   "files": {
+    "details.bin": "satellites/20261011T023046Z/details.bin",
+    "ids.bin": "satellites/20261011T023046Z/ids.bin",
+    "names.txt": "satellites/20261011T023046Z/names.txt",
+    "precise.json": "satellites/20261011T023046Z/precise.json",
+    "satmeta.json": "satellites/20261011T023046Z/satmeta.json",
+    "swarm.bin": "satellites/20261011T023046Z/swarm.bin"
+   },
+   "lastAttempt": "2026-10-11T02:30:12Z",
+   "nextTryAt": "2026-10-11T04:29:46Z",
+   "note": "249 exact orbits, 206 launched in the last 30 days, median element age 20.3 h",
+   "sizes": {
+    "details.bin": 155032,
+    "ids.bin": 77516,
+    "names.txt": 281292,
+    "precise.json": 29978,
+    "satmeta.json": 5787,
+    "swarm.bin": 387580
+   },
+   "sourceTime": "2026-10-10T23:48:27Z",
+   "status": "ok",
+   "version": "20261011T023046Z"
+  },
+  "spaceweather": {
+   "checkedAt": "2026-10-11T04:00:42Z",
+   "cond": {
+    "alerts": {
+     "etag": "W/\"cf6b-65d889dd4c68f\"",
+     "expires": "2026-10-11T04:01:27Z",
+     "lastModified": "Sun, 11 Oct 2026 04:00:05 GMT"
+    },
+    "mag": {
+     "etag": "W/\"184eca-65d889d13474a\"",
+     "expires": "2026-10-11T04:01:39Z",
+     "lastModified": "Sun, 11 Oct 2026 03:59:52 GMT"
+    },
+    "wind": {
+     "etag": "W/\"29f029-65d889d14aeb1\"",
+     "expires": "2026-10-11T04:01:21Z",
+     "lastModified": "Sun, 11 Oct 2026 03:59:52 GMT"
+    }
+   },
+   "count": 72,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T04:00:42Z",
+   "files": {
+    "spaceweather.json": "spaceweather/20261011T040042Z/spaceweather.json"
+   },
+   "lastAttempt": "2026-10-11T04:00:41Z",
+   "nextTryAt": "2026-10-11T04:09:42Z",
+   "note": "16 geomagnetic messages in the last 72 h",
+   "sizes": {
+    "spaceweather.json": 11434
+   },
+   "sourceTime": "2026-10-11T03:56:00Z",
+   "status": "ok",
+   "version": "20261011T040042Z"
+  },
+  "storms": {
+   "checkedAt": "2026-10-11T04:00:42Z",
+   "cond": {
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_001adv_CONE.kmz": {
+     "etag": "\"3bda-65d32026ac221\"",
+     "expires": "2026-10-07T02:45:43Z",
+     "lastModified": "Tue, 06 Oct 2026 20:40:30 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_001adv_TRACK.kmz": {
+     "etag": "\"1fad-65d3202c6c88c\"",
+     "expires": "2026-10-07T02:45:38Z",
+     "lastModified": "Tue, 06 Oct 2026 20:40:36 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_002adv_CONE.kmz": {
+     "etag": "\"3a7c-65d37450ef7a9\"",
+     "expires": "2026-10-07T08:41:32Z",
+     "lastModified": "Wed, 07 Oct 2026 02:57:03 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_002adv_TRACK.kmz": {
+     "etag": "\"1fa5-65d374558686e\"",
+     "expires": "2026-10-07T08:41:37Z",
+     "lastModified": "Wed, 07 Oct 2026 02:57:08 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_003adv_CONE.kmz": {
+     "etag": "\"34b6-65d3c52cdd042\"",
+     "expires": "2026-10-07T14:46:02Z",
+     "lastModified": "Wed, 07 Oct 2026 08:58:48 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_003adv_TRACK.kmz": {
+     "etag": "\"1f96-65d3c52cebaa9\"",
+     "expires": "2026-10-07T14:46:02Z",
+     "lastModified": "Wed, 07 Oct 2026 08:58:48 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_004Aadv_TRACK.kmz": {
+     "etag": "\"1f8b-65d43d63906db\"",
+     "expires": "2026-10-07T20:55:32Z",
+     "lastModified": "Wed, 07 Oct 2026 17:56:38 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_004adv_CONE.kmz": {
+     "etag": "\"34c4-65d416ec85e64\"",
+     "expires": "2026-10-07T17:55:43Z",
+     "lastModified": "Wed, 07 Oct 2026 15:04:33 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_004adv_TRACK.kmz": {
+     "etag": "\"1f90-65d416ecca408\"",
+     "expires": "2026-10-07T17:55:48Z",
+     "lastModified": "Wed, 07 Oct 2026 15:04:33 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_005Aadv_TRACK.kmz": {
+     "etag": "\"1f92-65d48f4c8941f\"",
+     "expires": "2026-10-08T02:55:24Z",
+     "lastModified": "Thu, 08 Oct 2026 00:03:06 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_005adv_CONE.kmz": {
+     "etag": "\"3666-65d465249823b\"",
+     "expires": "2026-10-07T23:55:25Z",
+     "lastModified": "Wed, 07 Oct 2026 20:54:29 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_005adv_TRACK.kmz": {
+     "etag": "\"1f94-65d46524addf9\"",
+     "expires": "2026-10-07T23:55:33Z",
+     "lastModified": "Wed, 07 Oct 2026 20:54:29 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_006Aadv_TRACK.kmz": {
+     "etag": "\"1f51-65d4dbfaca992\"",
+     "expires": "2026-10-08T08:55:30Z",
+     "lastModified": "Thu, 08 Oct 2026 05:46:09 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_006adv_CONE.kmz": {
+     "etag": "\"2c0c-65d4b712aa486\"",
+     "expires": "2026-10-08T05:36:45Z",
+     "lastModified": "Thu, 08 Oct 2026 03:01:02 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_006adv_TRACK.kmz": {
+     "etag": "\"1f66-65d4b719ed68b\"",
+     "expires": "2026-10-08T05:36:45Z",
+     "lastModified": "Thu, 08 Oct 2026 03:01:10 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_007Aadv_TRACK.kmz": {
+     "etag": "\"1f50-65d52f20072be\"",
+     "expires": "2026-10-08T14:55:46Z",
+     "lastModified": "Thu, 08 Oct 2026 11:58:09 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_007adv_CONE.kmz": {
+     "etag": "\"2da3-65d507926d197\"",
+     "expires": "2026-10-08T11:55:44Z",
+     "lastModified": "Thu, 08 Oct 2026 09:01:11 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_007adv_TRACK.kmz": {
+     "etag": "\"1f59-65d5079a4fa22\"",
+     "expires": "2026-10-08T11:55:53Z",
+     "lastModified": "Thu, 08 Oct 2026 09:01:19 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_008Aadv_TRACK.kmz": {
+     "etag": "\"1f4b-65d580b1fad3d\"",
+     "expires": "2026-10-08T20:55:39Z",
+     "lastModified": "Thu, 08 Oct 2026 18:03:05 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_008adv_CONE.kmz": {
+     "etag": "\"29bd-65d55adad55aa\"",
+     "expires": "2026-10-08T17:55:47Z",
+     "lastModified": "Thu, 08 Oct 2026 15:13:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_008adv_TRACK.kmz": {
+     "etag": "\"1f55-65d55b59c0530\"",
+     "expires": "2026-10-08T17:55:47Z",
+     "lastModified": "Thu, 08 Oct 2026 15:16:00 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_009Aadv_TRACK.kmz": {
+     "etag": "\"1f46-65d5d011002c2\"",
+     "expires": "2026-10-09T02:55:37Z",
+     "lastModified": "Thu, 08 Oct 2026 23:58:11 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_009adv_CONE.kmz": {
+     "etag": "\"2eaa-65d5a8d2deccf\"",
+     "expires": "2026-10-08T23:55:27Z",
+     "lastModified": "Thu, 08 Oct 2026 21:02:37 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_009adv_TRACK.kmz": {
+     "etag": "\"1f44-65d5a8d35d057\"",
+     "expires": "2026-10-08T23:55:28Z",
+     "lastModified": "Thu, 08 Oct 2026 21:02:37 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_010Aadv_TRACK.kmz": {
+     "etag": "\"1f51-65d621c7c8126\"",
+     "expires": "2026-10-09T08:56:45Z",
+     "lastModified": "Fri, 09 Oct 2026 06:03:46 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_010adv_CONE.kmz": {
+     "etag": "\"2e7c-65d5f872c38b0\"",
+     "expires": "2026-10-09T05:55:49Z",
+     "lastModified": "Fri, 09 Oct 2026 02:58:51 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_010adv_TRACK.kmz": {
+     "etag": "\"1f55-65d5f87832e31\"",
+     "expires": "2026-10-09T05:55:49Z",
+     "lastModified": "Fri, 09 Oct 2026 02:58:57 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_011Aadv_TRACK.kmz": {
+     "etag": "\"1f30-65d670f29c8a4\"",
+     "expires": "2026-10-09T14:55:31Z",
+     "lastModified": "Fri, 09 Oct 2026 11:57:57 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_011adv_CONE.kmz": {
+     "etag": "\"2c09-65d65b8f74b9a\"",
+     "expires": "2026-10-09T11:55:39Z",
+     "lastModified": "Fri, 09 Oct 2026 10:22:16 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_011adv_TRACK.kmz": {
+     "etag": "\"1f30-65d65b8f80eb2\"",
+     "expires": "2026-10-09T11:55:39Z",
+     "lastModified": "Fri, 09 Oct 2026 10:22:16 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_012Aadv_TRACK.kmz": {
+     "etag": "\"1f2c-65d6c2c7d7252\"",
+     "expires": "2026-10-09T20:55:30Z",
+     "lastModified": "Fri, 09 Oct 2026 18:04:04 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_012adv_CONE.kmz": {
+     "etag": "\"2eb2-65d699cfd4a4a\"",
+     "expires": "2026-10-09T17:55:44Z",
+     "lastModified": "Fri, 09 Oct 2026 15:00:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_012adv_TRACK.kmz": {
+     "etag": "\"1f28-65d699d67b82b\"",
+     "expires": "2026-10-09T17:55:47Z",
+     "lastModified": "Fri, 09 Oct 2026 15:00:54 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_013Aadv_TRACK.kmz": {
+     "etag": "\"1efd-65d7116064c93\"",
+     "expires": "2026-10-10T02:45:22Z",
+     "lastModified": "Fri, 09 Oct 2026 23:55:42 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_013adv_CONE.kmz": {
+     "etag": "\"2837-65d6ea487f3d3\"",
+     "expires": "2026-10-09T23:45:31Z",
+     "lastModified": "Fri, 09 Oct 2026 21:00:48 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_013adv_TRACK.kmz": {
+     "etag": "\"1f01-65d6ea48b9176\"",
+     "expires": "2026-10-09T23:45:31Z",
+     "lastModified": "Fri, 09 Oct 2026 21:00:48 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_014Aadv_TRACK.kmz": {
+     "etag": "\"1ee5-65d764834b48d\"",
+     "expires": "2026-10-10T08:45:23Z",
+     "lastModified": "Sat, 10 Oct 2026 06:07:39 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_014adv_CONE.kmz": {
+     "etag": "\"294a-65d7396abeb63\"",
+     "expires": "2026-10-10T05:45:08Z",
+     "lastModified": "Sat, 10 Oct 2026 02:54:50 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_014adv_TRACK.kmz": {
+     "etag": "\"1ee8-65d7396b03105\"",
+     "expires": "2026-10-10T06:05:25Z",
+     "lastModified": "Sat, 10 Oct 2026 02:54:51 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_015adv_CONE.kmz": {
+     "etag": "\"21ae-65d78953be979\"",
+     "expires": "2026-10-10T14:45:27Z",
+     "lastModified": "Sat, 10 Oct 2026 08:52:21 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/AL092026_015adv_TRACK.kmz": {
+     "etag": "\"1ebf-65d78953e3f16\"",
+     "expires": "2026-10-10T17:05:17Z",
+     "lastModified": "Sat, 10 Oct 2026 08:52:21 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_032adv_CONE.kmz": {
+     "etag": "\"34f7-65d0ebd32f7bc\"",
+     "expires": "2026-10-05T08:36:38Z",
+     "lastModified": "Mon, 05 Oct 2026 02:35:45 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_032adv_TRACK.kmz": {
+     "etag": "\"1f8c-65d0ebdc97a9f\"",
+     "expires": "2026-10-05T08:36:33Z",
+     "lastModified": "Mon, 05 Oct 2026 02:35:55 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_033adv_CONE.kmz": {
+     "etag": "\"33bb-65d13d43bb5b7\"",
+     "expires": "2026-10-05T14:45:35Z",
+     "lastModified": "Mon, 05 Oct 2026 08:40:06 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_033adv_TRACK.kmz": {
+     "etag": "\"1f79-65d13d43cee7d\"",
+     "expires": "2026-10-05T14:45:35Z",
+     "lastModified": "Mon, 05 Oct 2026 08:40:06 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_034adv_CONE.kmz": {
+     "etag": "\"2f4f-65d18f7a7082a\"",
+     "expires": "2026-10-05T19:56:02Z",
+     "lastModified": "Mon, 05 Oct 2026 14:47:55 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_034adv_TRACK.kmz": {
+     "etag": "\"1f91-65d18f81f0835\"",
+     "expires": "2026-10-05T19:56:12Z",
+     "lastModified": "Mon, 05 Oct 2026 14:48:03 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_035adv_CONE.kmz": {
+     "etag": "\"2eb8-65d1dd1749316\"",
+     "expires": "2026-10-06T02:25:31Z",
+     "lastModified": "Mon, 05 Oct 2026 20:35:09 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_035adv_TRACK.kmz": {
+     "etag": "\"1f9f-65d1dd22ac8d9\"",
+     "expires": "2026-10-06T02:25:32Z",
+     "lastModified": "Mon, 05 Oct 2026 20:35:21 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_036adv_CONE.kmz": {
+     "etag": "\"2eb7-65d22e0a4d2ee\"",
+     "expires": "2026-10-06T08:45:24Z",
+     "lastModified": "Tue, 06 Oct 2026 02:37:19 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_036adv_TRACK.kmz": {
+     "etag": "\"1fa3-65d22e141e184\"",
+     "expires": "2026-10-06T08:45:24Z",
+     "lastModified": "Tue, 06 Oct 2026 02:37:29 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_037adv_CONE.kmz": {
+     "etag": "\"388b-65d27facce284\"",
+     "expires": "2026-10-06T14:45:59Z",
+     "lastModified": "Tue, 06 Oct 2026 08:42:33 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_037adv_TRACK.kmz": {
+     "etag": "\"1f9f-65d27fb34c7e2\"",
+     "expires": "2026-10-06T14:46:10Z",
+     "lastModified": "Tue, 06 Oct 2026 08:42:39 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_038adv_CONE.kmz": {
+     "etag": "\"39b2-65d2d17d155e5\"",
+     "expires": "2026-10-06T20:25:35Z",
+     "lastModified": "Tue, 06 Oct 2026 14:48:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_038adv_TRACK.kmz": {
+     "etag": "\"1f9f-65d2d17d27aca\"",
+     "expires": "2026-10-06T20:25:41Z",
+     "lastModified": "Tue, 06 Oct 2026 14:48:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_039adv_CONE.kmz": {
+     "etag": "\"3b39-65d31e7669397\"",
+     "expires": "2026-10-07T02:25:43Z",
+     "lastModified": "Tue, 06 Oct 2026 20:32:57 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_039adv_TRACK.kmz": {
+     "etag": "\"1f9a-65d31e8178fb4\"",
+     "expires": "2026-10-07T02:25:43Z",
+     "lastModified": "Tue, 06 Oct 2026 20:33:08 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_040adv_CONE.kmz": {
+     "etag": "\"3c0d-65d36fc6ef9da\"",
+     "expires": "2026-10-07T08:41:38Z",
+     "lastModified": "Wed, 07 Oct 2026 02:36:45 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_040adv_TRACK.kmz": {
+     "etag": "\"1fa0-65d36fcd387a1\"",
+     "expires": "2026-10-07T09:05:47Z",
+     "lastModified": "Wed, 07 Oct 2026 02:36:51 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_041adv_CONE.kmz": {
+     "etag": "\"362b-65d3c5e3ae077\"",
+     "expires": "2026-10-07T14:45:55Z",
+     "lastModified": "Wed, 07 Oct 2026 09:02:00 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_041adv_TRACK.kmz": {
+     "etag": "\"1f6e-65d3c5f2043f7\"",
+     "expires": "2026-10-07T14:45:55Z",
+     "lastModified": "Wed, 07 Oct 2026 09:02:15 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_042adv_CONE.kmz": {
+     "etag": "\"3e14-65d414be22901\"",
+     "expires": "2026-10-07T20:35:34Z",
+     "lastModified": "Wed, 07 Oct 2026 14:54:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_042adv_TRACK.kmz": {
+     "etag": "\"1fae-65d414be72640\"",
+     "expires": "2026-10-07T20:35:44Z",
+     "lastModified": "Wed, 07 Oct 2026 14:54:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_043adv_CONE.kmz": {
+     "etag": "\"3fb9-65d463560e04c\"",
+     "expires": "2026-10-08T02:55:33Z",
+     "lastModified": "Wed, 07 Oct 2026 20:46:24 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_043adv_TRACK.kmz": {
+     "etag": "\"1fa1-65d463561e9e1\"",
+     "expires": "2026-10-08T02:55:35Z",
+     "lastModified": "Wed, 07 Oct 2026 20:46:24 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_044adv_CONE.kmz": {
+     "etag": "\"3b07-65d4b6b7825d3\"",
+     "expires": "2026-10-08T08:35:48Z",
+     "lastModified": "Thu, 08 Oct 2026 02:59:27 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_044adv_TRACK.kmz": {
+     "etag": "\"1f6e-65d4b6b799ccc\"",
+     "expires": "2026-10-08T08:35:47Z",
+     "lastModified": "Thu, 08 Oct 2026 02:59:27 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_045adv_CONE.kmz": {
+     "etag": "\"3b2f-65d5039e188e4\"",
+     "expires": "2026-10-08T14:35:47Z",
+     "lastModified": "Thu, 08 Oct 2026 08:43:30 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_045adv_TRACK.kmz": {
+     "etag": "\"1f74-65d503a5a2545\"",
+     "expires": "2026-10-08T14:35:49Z",
+     "lastModified": "Thu, 08 Oct 2026 08:43:38 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_046adv_CONE.kmz": {
+     "etag": "\"3c88-65d55518d8ddc\"",
+     "expires": "2026-10-08T20:55:40Z",
+     "lastModified": "Thu, 08 Oct 2026 14:48:02 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_046adv_TRACK.kmz": {
+     "etag": "\"1f70-65d5551908779\"",
+     "expires": "2026-10-08T20:55:41Z",
+     "lastModified": "Thu, 08 Oct 2026 14:48:02 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_047adv_CONE.kmz": {
+     "etag": "\"354e-65d5a6d9e1efb\"",
+     "expires": "2026-10-09T02:35:46Z",
+     "lastModified": "Thu, 08 Oct 2026 20:53:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_047adv_TRACK.kmz": {
+     "etag": "\"1f35-65d5a6da5104b\"",
+     "expires": "2026-10-09T02:35:46Z",
+     "lastModified": "Thu, 08 Oct 2026 20:53:48 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_048adv_CONE.kmz": {
+     "etag": "\"3862-65d5f5d195874\"",
+     "expires": "2026-10-09T08:56:46Z",
+     "lastModified": "Fri, 09 Oct 2026 02:47:05 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_048adv_TRACK.kmz": {
+     "etag": "\"1f38-65d5f5d6ecb21\"",
+     "expires": "2026-10-09T08:56:46Z",
+     "lastModified": "Fri, 09 Oct 2026 02:47:11 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_049adv_CONE.kmz": {
+     "etag": "\"3411-65d6490ea93d6\"",
+     "expires": "2026-10-09T14:55:31Z",
+     "lastModified": "Fri, 09 Oct 2026 08:59:29 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_049adv_TRACK.kmz": {
+     "etag": "\"1f16-65d6490ed4b47\"",
+     "expires": "2026-10-09T14:55:39Z",
+     "lastModified": "Fri, 09 Oct 2026 08:59:29 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_050Aadv_TRACK.kmz": {
+     "etag": "\"1f12-65d6bec34906a\"",
+     "expires": "2026-10-09T20:36:09Z",
+     "lastModified": "Fri, 09 Oct 2026 17:46:06 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_050adv_CONE.kmz": {
+     "etag": "\"34db-65d69a11c477d\"",
+     "expires": "2026-10-09T17:36:02Z",
+     "lastModified": "Fri, 09 Oct 2026 15:01:56 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_050adv_TRACK.kmz": {
+     "etag": "\"1f11-65d69a19800b4\"",
+     "expires": "2026-10-09T17:36:10Z",
+     "lastModified": "Fri, 09 Oct 2026 15:02:04 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_051Aadv_TRACK.kmz": {
+     "etag": "\"1ef7-65d70fef78356\"",
+     "expires": "2026-10-10T02:45:23Z",
+     "lastModified": "Fri, 09 Oct 2026 23:49:15 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_051adv_CONE.kmz": {
+     "etag": "\"316e-65d6e7c6ca618\"",
+     "expires": "2026-10-09T23:45:32Z",
+     "lastModified": "Fri, 09 Oct 2026 20:49:35 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_051adv_TRACK.kmz": {
+     "etag": "\"1ef0-65d6e7c70f381\"",
+     "expires": "2026-10-09T23:45:32Z",
+     "lastModified": "Fri, 09 Oct 2026 20:49:35 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_052Aadv_TRACK.kmz": {
+     "etag": "\"1ec2-65d76cc59b1ed\"",
+     "expires": "2026-10-10T08:45:23Z",
+     "lastModified": "Sat, 10 Oct 2026 06:44:36 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_052adv_CONE.kmz": {
+     "etag": "\"2c5d-65d739e17bfab\"",
+     "expires": "2026-10-10T06:05:24Z",
+     "lastModified": "Sat, 10 Oct 2026 02:56:55 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_052adv_TRACK.kmz": {
+     "etag": "\"1ec0-65d739e1bce61\"",
+     "expires": "2026-10-10T06:05:25Z",
+     "lastModified": "Sat, 10 Oct 2026 02:56:55 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_053Aadv_TRACK.kmz": {
+     "etag": "\"1eb2-65d7b41670646\"",
+     "expires": "2026-10-10T14:45:24Z",
+     "lastModified": "Sat, 10 Oct 2026 12:03:39 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_053adv_CONE.kmz": {
+     "etag": "\"2db6-65d78a5bde492\"",
+     "expires": "2026-10-10T11:45:21Z",
+     "lastModified": "Sat, 10 Oct 2026 08:56:58 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_053adv_TRACK.kmz": {
+     "etag": "\"1eb3-65d78a5c22a3a\"",
+     "expires": "2026-10-10T11:45:21Z",
+     "lastModified": "Sat, 10 Oct 2026 08:56:58 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_054Aadv_TRACK.kmz": {
+     "etag": "\"1ec6-65d8006ebd5c7\"",
+     "expires": "2026-10-10T20:46:00Z",
+     "lastModified": "Sat, 10 Oct 2026 17:45:13 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_054adv_CONE.kmz": {
+     "etag": "\"2dce-65d7db7156804\"",
+     "expires": "2026-10-10T17:46:33Z",
+     "lastModified": "Sat, 10 Oct 2026 14:59:44 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_054adv_TRACK.kmz": {
+     "etag": "\"1ebc-65d7db7215a94\"",
+     "expires": "2026-10-10T17:46:33Z",
+     "lastModified": "Sat, 10 Oct 2026 14:59:44 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_055Aadv_TRACK.kmz": {
+     "etag": "\"1e8e-65d852ddc092b\"",
+     "expires": "2026-10-11T02:45:28Z",
+     "lastModified": "Sat, 10 Oct 2026 23:54:01 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_055adv_CONE.kmz": {
+     "etag": "\"2577-65d82b3fbc848\"",
+     "expires": "2026-10-10T23:25:33Z",
+     "lastModified": "Sat, 10 Oct 2026 20:56:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_055adv_TRACK.kmz": {
+     "etag": "\"1e8e-65d82b3fe9714\"",
+     "expires": "2026-10-10T23:45:29Z",
+     "lastModified": "Sat, 10 Oct 2026 20:56:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_056adv_CONE.kmz": {
+     "etag": "\"185b-65d87baab931c\"",
+     "expires": "2026-10-11T04:05:35Z",
+     "lastModified": "Sun, 11 Oct 2026 02:56:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP182026_056adv_TRACK.kmz": {
+     "etag": "\"1e63-65d87bab29bdf\"",
+     "expires": "2026-10-11T04:05:42Z",
+     "lastModified": "Sun, 11 Oct 2026 02:56:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_001adv_CONE.kmz": {
+     "etag": "\"2e25-65d415e257013\"",
+     "expires": "2026-10-07T20:35:29Z",
+     "lastModified": "Wed, 07 Oct 2026 14:59:54 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_001adv_TRACK.kmz": {
+     "etag": "\"1fb4-65d415e26817f\"",
+     "expires": "2026-10-07T20:35:30Z",
+     "lastModified": "Wed, 07 Oct 2026 14:59:54 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_002adv_CONE.kmz": {
+     "etag": "\"2d0f-65d46230a61b2\"",
+     "expires": "2026-10-08T02:35:41Z",
+     "lastModified": "Wed, 07 Oct 2026 20:41:17 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_002adv_TRACK.kmz": {
+     "etag": "\"1fae-65d46236c9b9f\"",
+     "expires": "2026-10-08T02:35:41Z",
+     "lastModified": "Wed, 07 Oct 2026 20:41:23 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_003adv_CONE.kmz": {
+     "etag": "\"2bdc-65d4b1675fc6e\"",
+     "expires": "2026-10-08T08:55:24Z",
+     "lastModified": "Thu, 08 Oct 2026 02:35:41 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_003adv_TRACK.kmz": {
+     "etag": "\"1f9d-65d4b16d3e724\"",
+     "expires": "2026-10-08T08:55:31Z",
+     "lastModified": "Thu, 08 Oct 2026 02:35:47 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_004Aadv_TRACK.kmz": {
+     "etag": "\"1fa7-65d52a2ebaef8\"",
+     "expires": "2026-10-08T14:35:49Z",
+     "lastModified": "Thu, 08 Oct 2026 11:36:02 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_004adv_CONE.kmz": {
+     "etag": "\"2af2-65d506c46d79c\"",
+     "expires": "2026-10-08T11:35:35Z",
+     "lastModified": "Thu, 08 Oct 2026 08:57:35 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_004adv_TRACK.kmz": {
+     "etag": "\"1f9e-65d506cdd6a23\"",
+     "expires": "2026-10-08T11:35:35Z",
+     "lastModified": "Thu, 08 Oct 2026 08:57:45 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_005Aadv_TRACK.kmz": {
+     "etag": "\"1f91-65d57abc6a31f\"",
+     "expires": "2026-10-08T20:36:01Z",
+     "lastModified": "Thu, 08 Oct 2026 17:36:25 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_005adv_CONE.kmz": {
+     "etag": "\"2ac1-65d554e1c8573\"",
+     "expires": "2026-10-08T17:35:50Z",
+     "lastModified": "Thu, 08 Oct 2026 14:47:04 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_005adv_TRACK.kmz": {
+     "etag": "\"1f94-65d554e1fec6b\"",
+     "expires": "2026-10-08T17:35:51Z",
+     "lastModified": "Thu, 08 Oct 2026 14:47:04 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_006Aadv_TRACK.kmz": {
+     "etag": "\"1f75-65d5ca903e13f\"",
+     "expires": "2026-10-09T02:35:46Z",
+     "lastModified": "Thu, 08 Oct 2026 23:33:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_006adv_CONE.kmz": {
+     "etag": "\"23e0-65d5a28167cb6\"",
+     "expires": "2026-10-08T23:36:04Z",
+     "lastModified": "Thu, 08 Oct 2026 20:34:21 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_006adv_TRACK.kmz": {
+     "etag": "\"1f78-65d5a281da0c8\"",
+     "expires": "2026-10-08T23:36:04Z",
+     "lastModified": "Thu, 08 Oct 2026 20:34:21 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_007Aadv_TRACK.kmz": {
+     "etag": "\"1f7d-65d61fafd7d6e\"",
+     "expires": "2026-10-09T08:35:46Z",
+     "lastModified": "Fri, 09 Oct 2026 05:54:24 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_007adv_CONE.kmz": {
+     "etag": "\"2353-65d5f627c4c03\"",
+     "expires": "2026-10-09T05:55:50Z",
+     "lastModified": "Fri, 09 Oct 2026 02:48:35 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_007adv_TRACK.kmz": {
+     "etag": "\"1f81-65d5f628423d8\"",
+     "expires": "2026-10-09T05:55:50Z",
+     "lastModified": "Fri, 09 Oct 2026 02:48:36 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_008Aadv_TRACK.kmz": {
+     "etag": "\"1f9c-65d66cf693a39\"",
+     "expires": "2026-10-09T14:55:39Z",
+     "lastModified": "Fri, 09 Oct 2026 11:40:08 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_008adv_CONE.kmz": {
+     "etag": "\"2738-65d6469a1d0cb\"",
+     "expires": "2026-10-09T11:35:46Z",
+     "lastModified": "Fri, 09 Oct 2026 08:48:30 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_008adv_TRACK.kmz": {
+     "etag": "\"1f9a-65d646a06d7dd\"",
+     "expires": "2026-10-09T11:35:46Z",
+     "lastModified": "Fri, 09 Oct 2026 08:48:37 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_009Aadv_TRACK.kmz": {
+     "etag": "\"1faf-65d6bd9e8e8dd\"",
+     "expires": "2026-10-09T20:36:09Z",
+     "lastModified": "Fri, 09 Oct 2026 17:40:59 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_009adv_CONE.kmz": {
+     "etag": "\"276d-65d6973e67da6\"",
+     "expires": "2026-10-09T17:36:02Z",
+     "lastModified": "Fri, 09 Oct 2026 14:49:17 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_009adv_TRACK.kmz": {
+     "etag": "\"1fab-65d6974354943\"",
+     "expires": "2026-10-09T17:36:10Z",
+     "lastModified": "Fri, 09 Oct 2026 14:49:22 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_010Aadv_TRACK.kmz": {
+     "etag": "\"1f92-65d7101a2c15c\"",
+     "expires": "2026-10-10T02:45:23Z",
+     "lastModified": "Fri, 09 Oct 2026 23:50:00 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_010adv_CONE.kmz": {
+     "etag": "\"2345-65d6e7535da16\"",
+     "expires": "2026-10-09T23:45:32Z",
+     "lastModified": "Fri, 09 Oct 2026 20:47:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_010adv_TRACK.kmz": {
+     "etag": "\"1f8d-65d6e75385ac2\"",
+     "expires": "2026-10-09T23:45:32Z",
+     "lastModified": "Fri, 09 Oct 2026 20:47:34 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_011Aadv_TRACK.kmz": {
+     "etag": "\"1f11-65d7601a3ac07\"",
+     "expires": "2026-10-10T08:45:23Z",
+     "lastModified": "Sat, 10 Oct 2026 05:47:55 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_011adv_CONE.kmz": {
+     "etag": "\"1b1e-65d735c351870\"",
+     "expires": "2026-10-10T05:45:09Z",
+     "lastModified": "Sat, 10 Oct 2026 02:38:29 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_011adv_TRACK.kmz": {
+     "etag": "\"1f1d-65d735cabb733\"",
+     "expires": "2026-10-10T05:45:22Z",
+     "lastModified": "Sat, 10 Oct 2026 02:38:37 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_012Aadv_TRACK.kmz": {
+     "etag": "\"1f19-65d7b1e5712a5\"",
+     "expires": "2026-10-10T14:45:26Z",
+     "lastModified": "Sat, 10 Oct 2026 11:53:51 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_012adv_CONE.kmz": {
+     "etag": "\"1aa9-65d78627a4d18\"",
+     "expires": "2026-10-10T11:45:29Z",
+     "lastModified": "Sat, 10 Oct 2026 08:38:09 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_012adv_TRACK.kmz": {
+     "etag": "\"1f1b-65d78627b3f6a\"",
+     "expires": "2026-10-10T11:45:21Z",
+     "lastModified": "Sat, 10 Oct 2026 08:38:09 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_013Aadv_TRACK.kmz": {
+     "etag": "\"1f24-65d80388cad73\"",
+     "expires": "2026-10-10T20:46:05Z",
+     "lastModified": "Sat, 10 Oct 2026 17:59:06 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_013adv_CONE.kmz": {
+     "etag": "\"1aae-65d7db4c54db7\"",
+     "expires": "2026-10-10T17:46:34Z",
+     "lastModified": "Sat, 10 Oct 2026 14:59:05 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_013adv_TRACK.kmz": {
+     "etag": "\"1f23-65d7db4c691ea\"",
+     "expires": "2026-10-10T17:46:33Z",
+     "lastModified": "Sat, 10 Oct 2026 14:59:05 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_014Aadv_TRACK.kmz": {
+     "etag": "\"1f17-65d84eccd69f9\"",
+     "expires": "2026-10-11T02:25:38Z",
+     "lastModified": "Sat, 10 Oct 2026 23:35:50 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_014adv_CONE.kmz": {
+     "etag": "\"1a7d-65d82bc2c10af\"",
+     "expires": "2026-10-10T23:25:32Z",
+     "lastModified": "Sat, 10 Oct 2026 20:59:04 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_014adv_TRACK.kmz": {
+     "etag": "\"1f13-65d82bc2d1646\"",
+     "expires": "2026-10-10T23:25:40Z",
+     "lastModified": "Sat, 10 Oct 2026 20:59:04 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_015adv_CONE.kmz": {
+     "etag": "\"1a19-65d8771ddf445\"",
+     "expires": "2026-10-11T04:05:40Z",
+     "lastModified": "Sun, 11 Oct 2026 02:36:12 GMT"
+    },
+    "https://www.nhc.noaa.gov/storm_graphics/api/EP202026_015adv_TRACK.kmz": {
+     "etag": "\"1f16-65d8771df676a\"",
+     "expires": "2026-10-11T04:05:42Z",
+     "lastModified": "Sun, 11 Oct 2026 02:36:12 GMT"
+    },
+    "index": {
+     "etag": "\"2fc9-65d881cd593a8\"",
+     "expires": "2026-10-11T04:05:11Z",
+     "lastModified": "Sun, 11 Oct 2026 03:24:00 GMT"
+    }
+   },
+   "count": 3,
+   "error": null,
+   "failures": 0,
+   "fetchedAt": "2026-10-11T04:00:42Z",
+   "files": {
+    "storms.json": "storms/20261011T040042Z/storms.json"
+   },
+   "lastAttempt": "2026-10-11T04:00:42Z",
+   "nextTryAt": "2026-10-11T04:14:42Z",
+   "note": "Isaias, Rachel, Simon",
+   "sizes": {
+    "storms.json": 7911
+   },
+   "sourceTime": "2026-10-11T03:00:00Z",
+   "status": "ok",
+   "version": "20261011T040042Z"
+  }
+ },
+ "halts": {},
+ "version": 1
+}
