@@ -1,0 +1,1019 @@
+{
+ "schema": 1,
+ "pages": {
+  "disasters": [
+   {
+    "dataTime": "2026-10-30T16:53:21Z",
+    "values": {
+     "alerted": 1,
+     "current": 212
+    }
+   },
+   {
+    "dataTime": "2026-10-30T17:41:16Z",
+    "values": {
+     "alerted": 1,
+     "current": 212
+    }
+   },
+   {
+    "dataTime": "2026-10-30T19:35:23Z",
+    "values": {
+     "alerted": 1,
+     "current": 212
+    }
+   },
+   {
+    "dataTime": "2026-10-30T19:40:42Z",
+    "values": {
+     "alerted": 1,
+     "current": 212
+    }
+   },
+   {
+    "dataTime": "2026-10-30T20:20:27Z",
+    "values": {
+     "alerted": 1,
+     "current": 208
+    }
+   },
+   {
+    "dataTime": "2026-10-30T20:39:45Z",
+    "values": {
+     "alerted": 1,
+     "current": 205
+    }
+   },
+   {
+    "dataTime": "2026-10-30T20:58:15Z",
+    "values": {
+     "alerted": 1,
+     "current": 203
+    }
+   },
+   {
+    "dataTime": "2026-10-30T23:16:42Z",
+    "values": {
+     "alerted": 1,
+     "current": 202
+    }
+   },
+   {
+    "dataTime": "2026-10-30T23:34:03Z",
+    "values": {
+     "alerted": 1,
+     "current": 201
+    }
+   },
+   {
+    "dataTime": "2026-10-31T00:00:33Z",
+    "values": {
+     "alerted": 1,
+     "current": 214
+    }
+   },
+   {
+    "dataTime": "2026-10-31T00:20:19Z",
+    "values": {
+     "alerted": 1,
+     "current": 185
+    }
+   },
+   {
+    "dataTime": "2026-10-31T00:39:35Z",
+    "values": {
+     "alerted": 1,
+     "current": 185
+    }
+   },
+   {
+    "dataTime": "2026-10-31T00:59:51Z",
+    "values": {
+     "alerted": 1,
+     "current": 183
+    }
+   },
+   {
+    "dataTime": "2026-10-31T01:09:08Z",
+    "values": {
+     "alerted": 1,
+     "current": 182
+    }
+   },
+   {
+    "dataTime": "2026-10-31T02:07:33Z",
+    "values": {
+     "alerted": 1,
+     "current": 182
+    }
+   },
+   {
+    "dataTime": "2026-10-31T02:47:46Z",
+    "values": {
+     "alerted": 1,
+     "current": 181
+    }
+   },
+   {
+    "dataTime": "2026-10-31T03:01:25Z",
+    "values": {
+     "alerted": 1,
+     "current": 180
+    }
+   },
+   {
+    "dataTime": "2026-10-31T03:37:22Z",
+    "values": {
+     "alerted": 1,
+     "current": 179
+    }
+   },
+   {
+    "dataTime": "2026-10-31T04:20:23Z",
+    "values": {
+     "alerted": 1,
+     "current": 178
+    }
+   },
+   {
+    "dataTime": "2026-10-31T04:40:03Z",
+    "values": {
+     "alerted": 1,
+     "current": 178
+    }
+   },
+   {
+    "dataTime": "2026-10-31T04:49:53Z",
+    "values": {
+     "alerted": 1,
+     "current": 178
+    }
+   },
+   {
+    "dataTime": "2026-10-31T05:17:38Z",
+    "values": {
+     "alerted": 1,
+     "current": 178
+    }
+   },
+   {
+    "dataTime": "2026-10-31T05:37:23Z",
+    "values": {
+     "alerted": 1,
+     "current": 178
+    }
+   },
+   {
+    "dataTime": "2026-10-31T05:57:25Z",
+    "values": {
+     "alerted": 1,
+     "current": 185
+    }
+   },
+   {
+    "dataTime": "2026-10-31T08:10:22Z",
+    "values": {
+     "alerted": 1,
+     "current": 186
+    }
+   },
+   {
+    "dataTime": "2026-10-31T08:29:51Z",
+    "values": {
+     "alerted": 1,
+     "current": 186
+    }
+   },
+   {
+    "dataTime": "2026-10-31T08:43:50Z",
+    "values": {
+     "alerted": 1,
+     "current": 179
+    }
+   },
+   {
+    "dataTime": "2026-10-31T09:44:04Z",
+    "values": {
+     "alerted": 1,
+     "current": 178
+    }
+   },
+   {
+    "dataTime": "2026-10-31T10:30:43Z",
+    "values": {
+     "alerted": 1,
+     "current": 179
+    }
+   },
+   {
+    "dataTime": "2026-10-31T10:51:42Z",
+    "values": {
+     "alerted": 1,
+     "current": 179
+    }
+   },
+   {
+    "dataTime": "2026-10-31T11:50:03Z",
+    "values": {
+     "alerted": 1,
+     "current": 179
+    }
+   },
+   {
+    "dataTime": "2026-10-31T12:10:05Z",
+    "values": {
+     "alerted": 1,
+     "current": 191
+    }
+   },
+   {
+    "dataTime": "2026-10-31T12:30:08Z",
+    "values": {
+     "alerted": 1,
+     "current": 192
+    }
+   },
+   {
+    "dataTime": "2026-10-31T12:52:29Z",
+    "values": {
+     "alerted": 1,
+     "current": 196
+    }
+   },
+   {
+    "dataTime": "2026-10-31T13:02:11Z",
+    "values": {
+     "alerted": 1,
+     "current": 193
+    }
+   },
+   {
+    "dataTime": "2026-10-31T14:07:23Z",
+    "values": {
+     "alerted": 1,
+     "current": 193
+    }
+   },
+   {
+    "dataTime": "2026-10-31T14:13:12Z",
+    "values": {
+     "alerted": 1,
+     "current": 192
+    }
+   },
+   {
+    "dataTime": "2026-10-31T16:10:19Z",
+    "values": {
+     "alerted": 1,
+     "current": 196
+    }
+   },
+   {
+    "dataTime": "2026-10-31T16:30:24Z",
+    "values": {
+     "alerted": 1,
+     "current": 202
+    }
+   },
+   {
+    "dataTime": "2026-10-31T16:50:15Z",
+    "values": {
+     "alerted": 1,
+     "current": 203
+    }
+   },
+   {
+    "dataTime": "2026-10-31T17:02:14Z",
+    "values": {
+     "alerted": 1,
+     "current": 203
+    }
+   },
+   {
+    "dataTime": "2026-10-31T17:28:18Z",
+    "values": {
+     "alerted": 1,
+     "current": 202
+    }
+   },
+   {
+    "dataTime": "2026-10-31T17:43:44Z",
+    "values": {
+     "alerted": 1,
+     "current": 200
+    }
+   },
+   {
+    "dataTime": "2026-10-31T19:12:07Z",
+    "values": {
+     "alerted": 1,
+     "current": 195
+    }
+   },
+   {
+    "dataTime": "2026-10-31T20:10:25Z",
+    "values": {
+     "alerted": 1,
+     "current": 201
+    }
+   },
+   {
+    "dataTime": "2026-10-31T20:29:33Z",
+    "values": {
+     "alerted": 1,
+     "current": 204
+    }
+   },
+   {
+    "dataTime": "2026-10-31T20:41:19Z",
+    "values": {
+     "alerted": 1,
+     "current": 204
+    }
+   },
+   {
+    "dataTime": "2026-10-31T21:38:42Z",
+    "values": {
+     "alerted": 1,
+     "current": 203
+    }
+   }
+  ],
+  "launches": [
+   {
+    "dataTime": "2026-10-29T20:20:52Z",
+    "values": {
+     "in30": 15,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-29T21:20:55Z",
+    "values": {
+     "in30": 15,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-29T22:20:42Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-29T23:20:44Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T00:20:51Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T01:20:45Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T03:30:33Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T04:30:34Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T05:30:35Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T06:30:33Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T07:30:35Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T08:30:33Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T09:30:34Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T10:41:23Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T11:40:54Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T12:45:32Z",
+    "values": {
+     "in30": 16,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T13:50:46Z",
+    "values": {
+     "in30": 17,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T14:50:39Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T15:50:40Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T16:50:40Z",
+    "values": {
+     "in30": 20,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T17:50:36Z",
+    "values": {
+     "in30": 20,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T18:50:40Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T19:50:35Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T20:51:32Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T21:50:49Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T22:50:41Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-30T23:50:38Z",
+    "values": {
+     "in30": 19,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T00:50:44Z",
+    "values": {
+     "in30": 24,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T01:50:35Z",
+    "values": {
+     "in30": 24,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T02:50:42Z",
+    "values": {
+     "in30": 24,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T03:50:36Z",
+    "values": {
+     "in30": 24,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T04:50:45Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T05:50:36Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T06:50:44Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T07:50:46Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T08:51:03Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T09:50:58Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T10:50:54Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T11:50:49Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T12:53:45Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T14:00:48Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T15:00:47Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T16:00:42Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T17:02:03Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T18:11:20Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T19:10:57Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T20:10:46Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   },
+   {
+    "dataTime": "2026-10-31T21:10:56Z",
+    "values": {
+     "in30": 23,
+     "upcoming": 30
+    }
+   }
+  ],
+  "starlink": [
+   {
+    "dataTime": "2026-10-27T14:40:36Z",
+    "values": {
+     "last30": 80,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-27T16:40:42Z",
+    "values": {
+     "last30": 80,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-27T18:40:41Z",
+    "values": {
+     "last30": 80,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-27T20:40:32Z",
+    "values": {
+     "last30": 80,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-27T22:40:24Z",
+    "values": {
+     "last30": 80,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T00:40:35Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T02:40:35Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T04:40:24Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T06:40:22Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T08:40:25Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T10:40:24Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T12:40:36Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T14:40:26Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T16:40:33Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T18:40:37Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T20:40:51Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11160
+    }
+   },
+   {
+    "dataTime": "2026-10-28T22:40:31Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T00:40:45Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T02:40:34Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T04:40:35Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T06:40:27Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T08:40:33Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T10:40:34Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T12:40:39Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T14:40:37Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T16:40:38Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T18:40:37Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T20:40:37Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11159
+    }
+   },
+   {
+    "dataTime": "2026-10-29T22:40:34Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11158
+    }
+   },
+   {
+    "dataTime": "2026-10-30T00:40:34Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11158
+    }
+   },
+   {
+    "dataTime": "2026-10-30T02:40:24Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11157
+    }
+   },
+   {
+    "dataTime": "2026-10-30T04:40:25Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11157
+    }
+   },
+   {
+    "dataTime": "2026-10-30T06:40:59Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11157
+    }
+   },
+   {
+    "dataTime": "2026-10-30T08:40:28Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11157
+    }
+   },
+   {
+    "dataTime": "2026-10-30T10:40:48Z",
+    "values": {
+     "last30": 54,
+     "starlink": 11157
+    }
+   },
+   {
+    "dataTime": "2026-10-30T12:44:54Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-30T20:51:14Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-30T22:50:24Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T00:50:29Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T02:50:26Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T04:50:28Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T06:50:28Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T08:50:36Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T10:50:28Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T12:53:12Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T15:00:28Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T19:10:31Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   },
+   {
+    "dataTime": "2026-10-31T21:10:34Z",
+    "values": {
+     "last30": 81,
+     "starlink": 11184
+    }
+   }
+  ]
+ }
+}
