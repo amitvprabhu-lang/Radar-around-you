@@ -1,0 +1,1 @@
+{"newest":"2026-11-07T14:44:00Z","cells":16487,"detections":173565,"lowConfidenceLeftOut":31721,"rows":205286,"bySatellite":{"N20":81122,"N21":92443},"cellDeg":0.25,"record":"uint16 latIndex, uint16 lonIndex, uint16 detections, float32 frpMw, uint16 minutesBeforeNewest; little endian; lat = -90 + index * cellDeg, lon = -180 + index * cellDeg (south-west corner of the cell)"}
