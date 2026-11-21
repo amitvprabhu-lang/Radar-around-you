@@ -1,0 +1,591 @@
+{
+ "schema": 1,
+ "satellitesVersion": "20261120T164236Z",
+ "siteUrl": "https://zeninnov8.com",
+ "indexnowKey": "71ea331d76053b787c5d2066cbb22ae4",
+ "noindex": false,
+ "generator": "00302f3e18ac2d8db401df26dae209f3a29468688f28f69521e1f62729ebdbd1",
+ "built": "2026-11-21T20:40:50.994Z",
+ "feeds": {
+  "aurora": "20261121T204025Z",
+  "closeapproaches": "20261121T184031Z",
+  "clouds": "20261121T203022Z",
+  "events": "20261121T204025Z",
+  "fires": "20261121T203047Z",
+  "kp": "20261121T203013Z",
+  "launches": "20261121T204046Z",
+  "planes": "20261121T204040Z",
+  "quakes": "20261121T204012Z",
+  "satcat": "20261120T001058Z",
+  "satellites": "20261120T164236Z",
+  "spaceweather": "20261121T204040Z",
+  "storms": "20261121T204041Z"
+ },
+ "pages": {
+  "how-many-satellites-in-orbit/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-by-country/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-by-country/united-states/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z",
+    "satcat": "20261120T001058Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-by-country/china/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z",
+    "satcat": "20261120T001058Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-by-country/united-kingdom/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z",
+    "satcat": "20261120T001058Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-by-country/cis-former-ussr/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z",
+    "satcat": "20261120T001058Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-by-country/japan/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z",
+    "satcat": "20261120T001058Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "earthquakes-today/index.html": {
+   "feeds": {
+    "quakes": "20261121T204012Z"
+   },
+   "dataTime": "2026-11-21T20:39:36Z"
+  },
+  "aurora-tonight/index.html": {
+   "feeds": {
+    "kp": "20261121T203013Z",
+    "spaceweather": "20261121T204040Z",
+    "aurora": "20261121T204025Z"
+   },
+   "dataTime": "2026-11-21T20:36:00Z"
+  },
+  "asteroid-close-approaches/index.html": {
+   "feeds": {
+    "closeapproaches": "20261121T184031Z"
+   },
+   "dataTime": "2026-11-21T00:00:00Z"
+  },
+  "tropical-storms-now/index.html": {
+   "feeds": {
+    "storms": "20261121T204041Z",
+    "events": "20261121T204025Z"
+   },
+   "dataTime": "2026-11-21T00:00:00Z"
+  },
+  "wildfires-today/index.html": {
+   "feeds": {
+    "fires": "20261121T203047Z"
+   },
+   "dataTime": "2026-11-21T17:13:00Z"
+  },
+  "starlink-tracker/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "natural-disasters-now/index.html": {
+   "feeds": {
+    "events": "20261121T204025Z",
+    "storms": "20261121T204041Z"
+   },
+   "dataTime": "2026-11-21T20:27:49Z"
+  },
+  "rocket-launches/index.html": {
+   "feeds": {
+    "launches": "20261121T204046Z"
+   },
+   "dataTime": "2026-11-21T20:40:41Z"
+  },
+  "tonights-sky/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:28:40Z"
+  },
+  "tonights-sky/pune/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:18:50Z"
+  },
+  "tonights-sky/newyork/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:18:50Z"
+  },
+  "tonights-sky/london/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:19:20Z"
+  },
+  "tonights-sky/tromso/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:28:40Z"
+  },
+  "tonights-sky/tokyo/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:18:50Z"
+  },
+  "tonights-sky/sydney/index.html": {
+   "feeds": {
+    "clouds": "20261121T203022Z",
+    "satellites": "20261120T164236Z",
+    "utcDate": "2026-11-21"
+   },
+   "dataTime": "2026-11-21T19:19:20Z"
+  },
+  "iss-today/index.html": {
+   "feeds": {
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z"
+  },
+  "satellites-and-debris-by-country/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "c7a3eb47de64e18f72b1a2ff2890235f"
+  },
+  "satellites-by-country/france/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "eb6fd81b0d527f940dfaa9afb3810c90"
+  },
+  "satellites-by-country/india/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "545d17f2ee30b07144174c3e27cc5f2e"
+  },
+  "satellites-by-country/intelsat/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "a1bce783f0229daa5ab47dcfbc58bf43"
+  },
+  "satellites-by-country/european-space-agency/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "9a4cc44eb05daa244d6d7e9491090051"
+  },
+  "satellites-by-country/germany/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "2b566ceabfb70ca27972d679606e26d4"
+  },
+  "satellites-by-country/italy/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "b0871e2505ad15e9028efa3d165a87d2"
+  },
+  "satellites-by-country/globalstar/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "73947d06c418f8c8a344b46d7bcc6aeb"
+  },
+  "satellites-by-country/canada/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "5c2ae27350a44069f17222ac3c2cca35"
+  },
+  "satellites-by-country/south-korea/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "8705b38ac6bbf14c70633580f180eaa8"
+  },
+  "satellites-by-country/ses/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "67702b5e0c7573968dc2c3daa7c3930b"
+  },
+  "satellites-by-country/orbcomm/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "9f74ed5530263239eb8b2a7fcea9ae46"
+  },
+  "satellites-by-country/spain/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "7ac715dc03c79d6cb924d58f88bed18f"
+  },
+  "satellites-by-country/eutelsat/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "7f1434a09fdbd015a5b89fa931da7426"
+  },
+  "satellites-by-country/turkiye/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "32f86002d607a11146e6b352b305cda3"
+  },
+  "satellites-by-country/australia/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "e3d63ec17be29da3184dee5cbe9b91b4"
+  },
+  "satellites-by-country/taiwan/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "97a28f2506402c04684c6ec541d8784c"
+  },
+  "satellites-by-country/sea-launch/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "9ffbf336d49f7f73584051e718b75999"
+  },
+  "satellites-by-country/argentina/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "ae858e5912ff961e4f0dc5ab793c0e10"
+  },
+  "satellites-by-country/o3b-networks/index.html": {
+   "feeds": {
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z"
+   },
+   "dataTime": "2026-11-20T16:42:36Z",
+   "contentKey": "75303a81f970b6f86fc6e26d63561485"
+  },
+  "right-now/index.html": {
+   "feeds": {
+    "aurora": "20261121T204025Z",
+    "closeapproaches": "20261121T184031Z",
+    "clouds": "20261121T203022Z",
+    "events": "20261121T204025Z",
+    "fires": "20261121T203047Z",
+    "kp": "20261121T203013Z",
+    "launches": "20261121T204046Z",
+    "quakes": "20261121T204012Z",
+    "satcat": "20261120T001058Z",
+    "satellites": "20261120T164236Z",
+    "spaceweather": "20261121T204040Z",
+    "storms": "20261121T204041Z"
+   },
+   "dataTime": "2026-11-21T20:40:41Z"
+  }
+ },
+ "files": {
+  "how-many-satellites-in-orbit/index.html": {
+   "sha256": "4b0f5d3c83ae75d6a9719411daa17f3064fdb609206a1ac22424c881a4ca5f11",
+   "size": 31379,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/index.html": {
+   "sha256": "993cfedcfdb4310a1115cb4c6af8fc9412ddb9e525e00b2404a94d7580653b39",
+   "size": 35288,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/united-states/index.html": {
+   "sha256": "da2460ef4e61f285a4c1a7813fdb5548a8dd0aa5ae1d8267968f8d31eaf8a726",
+   "size": 268276,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/china/index.html": {
+   "sha256": "3a1746bb2ce5a9797aabb754c8bfaac4a3cf55a90a082f8fa14ed0aef0f62ad3",
+   "size": 145660,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/united-kingdom/index.html": {
+   "sha256": "1ce0dc0eb8620f999d3761b6c68dfe32972e22470855fe75979a4be456aea823",
+   "size": 125980,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/cis-former-ussr/index.html": {
+   "sha256": "7d6002ff7e3a684b56902b17e7af550e53d9b5990dab79871b28b0443ee4c285",
+   "size": 131719,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/japan/index.html": {
+   "sha256": "1c6525dd060ac8abf81341462e00c4cf05e3ef6f9ab751359e65f433cb88ae3a",
+   "size": 128049,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "earthquakes-today/index.html": {
+   "sha256": "248ff6d8d96d5e5b73e9cef68f120c284280b8992f36ee78c8c13bb8e64cc86b",
+   "size": 100122,
+   "changed": "2026-11-21T20:40:50.994Z"
+  },
+  "aurora-tonight/index.html": {
+   "sha256": "c82d0e95e7b433a8a96d5547c4eb33d8073982e67702fba50b060297e64d919c",
+   "size": 98870,
+   "changed": "2026-11-21T20:40:50.994Z"
+  },
+  "asteroid-close-approaches/index.html": {
+   "sha256": "d8117bb1e400cf605fbde369cb104293e5bc9f61ea86d050151a060e78685aae",
+   "size": 23558,
+   "changed": "2026-11-21T18:40:38.119Z"
+  },
+  "tropical-storms-now/index.html": {
+   "sha256": "4041442029f43679bc1f9eec1b3de6153a5e66598e8c1dea06c094f58b6b867e",
+   "size": 14395,
+   "changed": "2026-11-21T20:01:03.085Z"
+  },
+  "wildfires-today/index.html": {
+   "sha256": "d54e5f0179462838cc755e722e06ed6e844411a2c8954dffbcc40b256abcfd8c",
+   "size": 134691,
+   "changed": "2026-11-21T20:30:49.253Z"
+  },
+  "starlink-tracker/index.html": {
+   "sha256": "24aed0113bb037f4548f26a16a6aa5b926fc694b43349dc6df28d0beca5898d4",
+   "size": 174714,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "natural-disasters-now/index.html": {
+   "sha256": "21c3c2955c48407d075e299c6bf05923f7eadbd03f60ee138a685b63e3c719e1",
+   "size": 179739,
+   "changed": "2026-11-21T20:40:50.994Z"
+  },
+  "rocket-launches/index.html": {
+   "sha256": "66fd14b1ed63410054e71129802d588811fefc159a487d01abec8df9282b49d4",
+   "size": 76005,
+   "changed": "2026-11-21T20:40:50.994Z"
+  },
+  "tonights-sky/index.html": {
+   "sha256": "9ffc63c42774cbd710e5b2f7ad7cfe19f5b4ad18fa14b722ebe674df1ad7dd90",
+   "size": 22096,
+   "changed": "2026-11-21T20:30:49.253Z"
+  },
+  "tonights-sky/pune/index.html": {
+   "sha256": "08c3c20351f2622e2b9723620a892523526a9342d3e696d9e8b08c07f856a607",
+   "size": 58299,
+   "changed": "2026-11-21T19:30:51.463Z"
+  },
+  "tonights-sky/newyork/index.html": {
+   "sha256": "5f669419e66e03916572cb9a665bf56181ef71358e6eee759e593da3bcff1398",
+   "size": 66769,
+   "changed": "2026-11-21T20:30:49.253Z"
+  },
+  "tonights-sky/london/index.html": {
+   "sha256": "d04c0f2e9c757502a8b2b700365a1cdd8869726796d4eb569a7741e6097c58a4",
+   "size": 63626,
+   "changed": "2026-11-21T20:30:49.253Z"
+  },
+  "tonights-sky/tromso/index.html": {
+   "sha256": "370480b788e1cb8d7fb2c5cb3be6307cdbd5379e3229ad6368c3668996676718",
+   "size": 62679,
+   "changed": "2026-11-21T20:30:49.253Z"
+  },
+  "tonights-sky/tokyo/index.html": {
+   "sha256": "36e1f07513332c4de5a78d2c313fd5cb43081fd7100e59793f658e67c9b57467",
+   "size": 54551,
+   "changed": "2026-11-21T19:30:51.463Z"
+  },
+  "tonights-sky/sydney/index.html": {
+   "sha256": "d9e0a0b5721528ecbd8e442c7cd9376430f4ad198ba37f7d839626d7a96d67aa",
+   "size": 63712,
+   "changed": "2026-11-21T19:30:51.463Z"
+  },
+  "iss-today/index.html": {
+   "sha256": "9404b4bbb0b735e2c982f9a37d58dff39ee6d27aba77b2e67f381cafa3644ba0",
+   "size": 100304,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-and-debris-by-country/index.html": {
+   "sha256": "59bd14c5d8f10b1c93794a7b64f5712fec0e25049792127127f62413cd3b9528",
+   "size": 66070,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/france/index.html": {
+   "sha256": "415aac1dbdbbafff423632674174e7069485e8b1e49f382a744d9861bfc2fbaa",
+   "size": 46511,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/india/index.html": {
+   "sha256": "ebe229f3f6528de97d70379648c65599bf08b662d86d42495d4024897a975aa4",
+   "size": 45898,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/intelsat/index.html": {
+   "sha256": "bfc02b530106bb951386291c62caf33fda99724980b34239e9241f6a8e440adf",
+   "size": 45947,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/european-space-agency/index.html": {
+   "sha256": "c207caec6d6bc7d1cac5180595c3ab25a64bc2f0c130d85ca3fd7c1a7e1f3961",
+   "size": 43327,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/germany/index.html": {
+   "sha256": "a3946a8d7deac07cff6b9e6cbca8e25e4db54fdc7652dc61dd2dd5e2cf972980",
+   "size": 43848,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/italy/index.html": {
+   "sha256": "788cbcb66c95e5d164f1845981ebe0c7202bde6149e3a60f935270e6c70d58d0",
+   "size": 38252,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/globalstar/index.html": {
+   "sha256": "9b19dc89c0258b469fd4c23d6bbe4720e64820fda280231a3634499a8d3bfb4f",
+   "size": 38996,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/canada/index.html": {
+   "sha256": "b70ae76636b1669dc0ff5651ac01c9ea1c85d619271b89abcee950b2a7a9abe5",
+   "size": 40820,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/south-korea/index.html": {
+   "sha256": "212eb33e808a86b5588ecdc1c637ece85bb34dcebb6d0295eca0c82434867802",
+   "size": 39002,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/ses/index.html": {
+   "sha256": "c2df9dbda067d0e8a3e0c294102aa087adbbe83b6444db819e7a57d8935f3fc0",
+   "size": 43437,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/orbcomm/index.html": {
+   "sha256": "b0180801559cd2ea5c76126c96c23e8881cec3683dedc991f88335bed9891f7a",
+   "size": 40622,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/spain/index.html": {
+   "sha256": "97f9aa753e5069f95346163fa3f196263c4254bbe774f27a58c464bcc6df7a98",
+   "size": 43420,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/eutelsat/index.html": {
+   "sha256": "19bec684ea4434e1a17573a7978e8cc3790ce6ef1371824fe9c0035fce7fad2c",
+   "size": 44224,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/turkiye/index.html": {
+   "sha256": "b75bb60cc4565bd933de1feded5d66d7e9f8749f873699f0b3b346d9709d739b",
+   "size": 41717,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/australia/index.html": {
+   "sha256": "90bede404923018e9691545150239e966168cedb2ee9d3aacac7a2d70a75e759",
+   "size": 42426,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/taiwan/index.html": {
+   "sha256": "07830fca6da5f8fa23c73783e935097e390010e535a296cb428d5e134d6243ed",
+   "size": 39335,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/sea-launch/index.html": {
+   "sha256": "53cfb845d4ef23518a2b75f3aceb93f7f8770483a56692c1d5733f40e15d2a48",
+   "size": 40551,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/argentina/index.html": {
+   "sha256": "180d48e9dd6434654ccbfb7942d7750a909773f9b8c9b118ebedaa0190e33ba4",
+   "size": 39914,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "satellites-by-country/o3b-networks/index.html": {
+   "sha256": "99f38dd9981f31eeba3e2c6a7b529f37eb700c50cb7796b434c94e36ab404a36",
+   "size": 38265,
+   "changed": "2026-11-20T16:42:51.846Z"
+  },
+  "right-now/index.html": {
+   "sha256": "2f911268f8d0314244e209506a411cf60f5b7bbc64e673a9a429f6fdde95566a",
+   "size": 20856,
+   "changed": "2026-11-21T20:40:50.994Z"
+  },
+  "sitemap-live.xml": {
+   "sha256": "e8a20cbf4db420c557dd76d2355b25057fc95d65c6d7929ca4441780e91a42ad",
+   "size": 5038,
+   "changed": "2026-11-21T20:40:50.994Z"
+  }
+ }
+}
